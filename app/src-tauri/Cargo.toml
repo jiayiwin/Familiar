@@ -1,0 +1,35 @@
+[package]
+name = "familiar"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Familiar desktop app: hosts petd, the pet windows and the tray."
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+familiar-petd = { path = "../../crates/petd" }
+tauri = { version = "2", features = ["tray-icon"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { version = "1", features = ["sync"] }
+serde_yaml = "0.9"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-dialog = "2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Dwm",
+  "Win32_Graphics_Gdi",
+  "Win32_System_Diagnostics_ToolHelp",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_UI_Input_KeyboardAndMouse",
+] }
+
+[features]
+# Embed app/dist into the exe. Without it Tauri runs in dev mode and loads
+# devUrl (localhost:1420), so every standalone build must enable it.
+custom-protocol = ["tauri/custom-protocol"]

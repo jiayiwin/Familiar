@@ -1,0 +1,16 @@
+# 鱼种（设计稿 §7.2）。复制到 ~/.familiar/fish.yaml 可以扩展或改名。
+# rarity: common | rare | epic | legendary
+# name_en / note_en: English name and note (optional; the Chinese ones are used when missing).
+fish:
+  - { id: semicolon,   name: 分号小鱼,         rarity: common,    note: "少了它，编译器就不认你", name_en: "Semicolon Minnow", note_en: "Forget it and the compiler ghosts you" }
+  - { id: indent,      name: 缩进沙丁鱼,       rarity: common,    note: "两格还是四格，争了一辈子", name_en: "Indent Sardine", note_en: "Two spaces or four? A lifelong feud" }
+  - { id: todo,        name: TODO 鲫鱼,        rarity: common,    note: "说好下次改的", name_en: "TODO Carp", note_en: "\"I'll fix it next time,\" it said" }
+  - { id: log,         name: 日志带鱼,         rarity: common,    note: "又长又滑，翻到底才找到线索", name_en: "Log Ribbonfish", note_en: "Long, slippery, and the clue is always at the very end" }
+  - { id: nullptr,     name: 空指针鲶鱼,       rarity: rare,      note: "摸上去什么也没有", name_en: "Null Pointer Catfish", note_en: "Reach for it and... nothing there" }
+  - { id: magic,       name: 魔法数字河豚,     rarity: rare,      note: "为什么是 42？没人知道", name_en: "Magic Number Puffer", note_en: "Why 42? Nobody knows" }
+  - { id: twins,       name: 重复代码双胞胎鱼, rarity: rare,      note: "改了一条，忘了另一条", name_en: "Copy-Paste Twinfish", note_en: "Fixed one, forgot the other" }
+  - { id: race,        name: 竞态条件章鱼,     rarity: epic,      note: "八条腿抢同一把锁", name_en: "Race Condition Octopus", note_en: "Eight arms grabbing the same lock" }
+  - { id: leak,        name: 内存泄漏水母,     rarity: epic,      note: "越游越大", name_en: "Memory Leak Jelly", note_en: "Grows bigger the longer it swims" }
+  - { id: tz,          name: 时区鳗鱼,         rarity: epic,      note: "它到底几点出生的", name_en: "Time Zone Eel", note_en: "What time was it even born?" }
+  - { id: legacy,      name: 祖传代码腔棘鱼,   rarity: legendary, note: "活化石，没人敢碰", name_en: "Legacy Code Coelacanth", note_en: "A living fossil nobody dares touch" }
+  - { id: dontouch,    name: 能跑就别动锦鲤,   rarity: legendary, note: "供起来，别问", name_en: "If-It-Runs Koi", note_en: "Put it on a shrine. Ask no questions" }

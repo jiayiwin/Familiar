@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-en="Pet Gallery">宠物图鉴</title>
+    <link rel="stylesheet" href="/src/ui.css" />
+    <style>
+      body { padding: 16px 18px 40px; }
+      header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+      header h1 { font-size: 18px; margin: 0; }
+      section { margin: 14px 0; }
+      h2 { font-size: 13px; color: var(--muted); margin: 0 0 8px; font-weight: normal; }
+      .current { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+      .current div { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+      .current b { font-weight: bold; }
+      .modes { display: flex; gap: 6px; flex-wrap: wrap; }
+      .modes button.on { border-color: var(--accent); color: var(--accent); font-weight: bold; }
+      .modehint { color: var(--muted); font-size: 12px; margin-top: 4px; }
+      .broken li { margin: 4px 0; }
+      .broken code { font-size: 12px; }
+      .projpick { display: flex; gap: 4px; }
+      .projpick input { min-width: 0; flex: 1; }
+      .projpick .proj { white-space: nowrap; flex: none; }
+      .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+      .tabs button { border: 0; border-radius: 8px 8px 0 0; background: transparent; padding: 6px 14px; }
+      .tabs button.on { background: var(--panel); border: 1px solid var(--line); border-bottom-color: var(--panel); margin-bottom: -1px; font-weight: bold; }
+      .fishgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+      .fish { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; gap: 10px; align-items: center; }
+      .fish.locked { opacity: 0.55; }
+      .fish canvas { flex: none; }
+      .fish b { display: block; }
+      .fish small { color: var(--muted); display: block; }
+      .rar { font-size: 11px; font-weight: bold; }
+      .big { font-size: 28px; font-weight: bold; }
+      .kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+      .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+      .kpi span { color: var(--muted); font-size: 12px; }
+      .meter { height: 8px; background: var(--chip); border-radius: 99px; overflow: hidden; margin-top: 6px; }
+      .meter i { display: block; height: 100%; background: var(--accent); }
+      .note { color: var(--muted); font-size: 12px; margin-top: 10px; }
+      #drop { position: fixed; inset: 0; background: rgba(217, 119, 43, 0.12); border: 3px dashed var(--accent);
+              display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: bold;
+              color: var(--accent); z-index: 10; pointer-events: none; }
+      #drop[hidden] { display: none; }
+      #import-result { margin-bottom: 12px; }
+      .okbar { padding: 8px 12px; border-radius: 8px; background: #e7f6ef; color: #17643f; border: 1px solid #b9e3cd; }
+      .askbar { padding: 8px 12px; border-radius: 8px; background: #fff6e8; color: #7a4a10; border: 1px solid #f0d3a6;
+                display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+      .card .del { position: absolute; top: 6px; right: 6px; font-size: 11px; padding: 1px 6px; }
+      .achgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+      .ach { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+      .ach.locked { opacity: 0.5; }
+      .ach b { display: block; }
+      .ach small { color: var(--muted); }
+      .ach .coin { float: right; color: #c8901a; font-weight: bold; }
+      .shopbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 10px; flex-wrap: wrap; }
+      .shopgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+      .item { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 6px; align-items: center; text-align: center; }
+      .item.worn { border: 2px solid var(--accent); padding: 9px; }
+      .item canvas { display: block; }
+      .item small { color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1 data-en="Pet Gallery">宠物图鉴</h1>
+      <div class="actions">
+        <button id="import-dir" class="primary" data-en="Import folder…">导入文件夹…</button>
+        <button id="import-zip" data-en="Import zip…">导入 zip…</button>
+        <button id="open-dir" class="ghost" data-en="Open pets folder">打开宠物目录</button>
+        <button id="open-cfg" class="ghost" data-en="Edit config.yaml">编辑 config.yaml</button>
+      </div>
+    </header>
+    <div id="import-result"></div>
+    <div id="drop" hidden data-en="Drop to import a pet pack (folder or .zip)">松开即可导入宠物包（文件夹或 .zip）</div>
+    <div class="tabs" id="tabs">
+      <button data-tab="pets" class="on" data-en="Pets">宠物</button>
+      <button data-tab="fish" data-en="Fish">鱼类图鉴</button>
+      <button data-tab="wallet" data-en="Wallet &amp; records">钱包与战绩</button>
+      <button data-tab="ach" data-en="Achievements">成就</button>
+      <button data-tab="shop" data-en="Shop">商店</button>
+    </div>
+    <div id="tab-ach" hidden>
+      <section><h2 id="ach-progress"></h2><div class="achgrid" id="achgrid"></div></section>
+    </div>
+    <div id="tab-shop" hidden>
+      <section>
+        <div class="shopbar"><span><span data-en="Coins">金币</span> <b id="shop-wallet">0</b></span>
+          <label><span data-en="Hats for">帽子给</span> <select id="shop-pack"></select> <span data-en="">戴</span></label></div>
+        <div class="shopgrid" id="shopgrid"></div>
+        <div class="note" data-en="The shop only sells looks; nothing here affects who wins. The season champ's crown covers any hat you equip, and the loser wears a paper hat. Try again next week.">商店只卖外观，不影响任何胜负。赛季冠军的皇冠会盖过你装备的帽子，输了戴纸帽，下周再拼。</div>
+      </section>
+    </div>
+    <div id="tab-fish" hidden>
+      <section><h2 id="fish-progress"></h2><div class="fishgrid" id="fishgrid"></div></section>
+    </div>
+    <div id="tab-wallet" hidden>
+      <section><div class="kpis" id="kpis"></div></section>
+      <section><h2 data-en="This week's season">本周赛季</h2><div class="kpis" id="season"></div><div id="season-history" class="note"></div></section>
+      <section><h2 data-en="Today">今日</h2><div class="kpis" id="today"></div>
+        <div class="actions" style="margin-top:10px"><button id="open-report" class="primary" data-en="Open today's report card">打开今日报告卡片</button></div>
+        <div class="note" data-en="Coins only come from finished tasks and mini games: fishing, squashing bugs, Bosses. Daily income is capped at 300, and coins only buy looks. Records are just for fun: tasks differ in difficulty, so they say nothing about model ability.">金币只来自完成任务和小游戏：钓鱼、拍虫、Boss。每日收入上限 300，金币只能买外观（商店在后续版本开放）。战绩仅供娱乐，任务难度不同，不代表模型能力。</div>
+      </section>
+    </div>
+    <div id="tab-pets">
+    <div id="error"></div>
+    <section>
+      <h2 data-en="Routing mode">路由模式</h2>
+      <div class="modes" id="modes"></div>
+      <div class="modehint" id="modehint"></div>
+    </section>
+    <section>
+      <h2 data-en="In use">正在使用</h2>
+      <div class="current" id="current"></div>
+    </section>
+    <section>
+      <div class="chips" id="tags"></div>
+    </section>
+    <section>
+      <div class="grid" id="grid"></div>
+    </section>
+    <section id="broken-wrap" hidden>
+      <h2 data-en="Packs that failed to load (other pets are fine)">加载失败的宠物包（不影响其他宠物）</h2>
+      <div class="banner"><ul class="broken" id="broken"></ul></div>
+    </section>
+    </div>
+    <script type="module" src="/src/gallery.ts"></script>
+  </body>
+</html>

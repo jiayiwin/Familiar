@@ -1,0 +1,8 @@
+{
+  "name": "familiar",
+  "version": "0.5.0",
+  "description": "Familiar 桌宠：把 Claude Code 的真实工作状态显示成桌面宠物，需要你时第一时间提醒。",
+  "author": { "name": "Familiar contributors" },
+  "license": "MIT",
+  "keywords": ["desktop-pet", "notifications", "status"]
+}

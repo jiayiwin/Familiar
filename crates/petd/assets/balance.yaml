@@ -1,0 +1,68 @@
+# Familiar 玩法数值（设计稿 §7、§8 的首版草案）。
+# 复制到 ~/.familiar/balance.yaml 修改即可覆盖，只需写要改的键。
+
+economy:
+  daily_cap: 300            # 每日金币收入上限，超出部分不发放
+
+fishing:
+  start_after_s: 5          # 会话干活多久后宠物开始钓鱼
+  min_turn_s: 5             # 短于这个时长的回合不出鱼
+  coins: { common: 1, rare: 3, epic: 8, legendary: 20 }
+  clean_bonus: 1.5          # 本轮无工具失败时金币 ×1.5
+  hourly_soft_cap: 10       # 同一小时内从第 10 条鱼起金币减半
+  # 按本轮时长（分钟）抽稀有度：普通 / 稀有 / 史诗 / 传说（百分比）
+  odds:
+    - { under_min: 1,  p: [90, 10, 0, 0] }
+    - { under_min: 5,  p: [60, 30, 10, 0] }
+    - { under_min: 30, p: [40, 35, 20, 5] }
+    - { under_min: 0,  p: [25, 35, 28, 12] }   # under_min 0 = 其余（≥ 30 分钟）
+
+bugs:
+  per_tool_fail: 1          # 每次工具失败掉 1 只虫
+  per_turn_error: 3         # 回合以出错结束时掉 3 只
+  max: 20                   # 屏幕上最多 20 只
+  ttl_min: 10               # 超过 10 分钟没拍的虫钻进地缝消失
+  boss_hp: 10               # Boss 要点 10 下
+  coins_per: 5              # 每拍死 5 只普通虫……
+  coins: 1                  # ……得 1 金币
+  boss_coins: 5
+
+tug:
+  scoring: efficiency       # efficiency（默认，与会话数无关）| workload
+  min_turns: 3              # 完成轮数少于 3 时效率分按 0 计
+
+quips:
+  enabled: true
+  min_s: 90                 # 干活时每 90–180 秒随机吐槽一句
+  max_s: 180
+  no_repeat_min: 30         # 同一句 30 分钟内不重复
+  # 变量：{file} 最近操作的文件，{n} 本会话改这个文件的次数，{tool} 最近用的工具，{project} 项目名。
+  # 用到的变量没有值时这句会被跳过。
+  lines:
+    - "又改 {file} 了，第 {n} 次"
+    - "{file} 今天被翻了好多遍"
+    - "在 {tool} 了，它是不是迷路了"
+    - "{project} 这个项目好像很难"
+    - "我在钓鱼，别告诉老板"
+    - "代码在跑，鱼在游"
+    - "要不要先喝口水？"
+    - "看起来进展不错"
+    - "它又在想事情了"
+  # English lines (used when the UI language is English; same variables).
+  lines_en:
+    - "{file} again? That's edit #{n}"
+    - "{file} is getting a real workout today"
+    - "Still on {tool}... is it lost?"
+    - "{project} looks like a tough one"
+    - "I'm fishing. Don't tell the boss"
+    - "Code's running, fish are swimming"
+    - "Water break, maybe?"
+    - "Looking good so far"
+    - "Deep in thought again"
+
+interactions:
+  per_pet_hour: 6           # 每只宠物每小时最多 6 次主动互动
+  tick_ms: 500
+
+work:
+  off_time: "18:00"         # 下班时间：到点弹每日报告

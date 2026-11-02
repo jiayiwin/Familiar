@@ -1,0 +1,16 @@
+{
+  "name": "familiar",
+  "owner": {
+    "name": "Familiar contributors"
+  },
+  "metadata": {
+    "description": "Familiar 本地桌宠系统的 Claude Code 适配器"
+  },
+  "plugins": [
+    {
+      "name": "familiar",
+      "source": "./adapters/claude-code",
+      "description": "Familiar 桌宠的 Claude Code 适配器（hooks + /pet 命令）"
+    }
+  ]
+}

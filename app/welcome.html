@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-en="Welcome to Familiar">欢迎使用 Familiar</title>
+    <link rel="stylesheet" href="/src/ui.css" />
+    <style>
+      body { padding: 20px 24px; }
+      .step { color: var(--muted); font-size: 12px; }
+      h1 { font-size: 20px; margin: 4px 0 4px; }
+      p.lead { color: var(--muted); margin: 0 0 16px; }
+      .card { cursor: pointer; align-items: center; text-align: center; }
+      .rec { position: absolute; top: 8px; right: 8px; font-size: 11px; color: var(--accent); font-weight: bold; }
+      footer { display: flex; justify-content: space-between; margin-top: 18px; }
+    </style>
+  </head>
+  <body>
+    <div class="step" id="step"></div>
+    <h1 id="title"></h1>
+    <p class="lead" id="lead"></p>
+    <div class="grid" id="grid"></div>
+    <footer>
+      <button id="skip" class="ghost" data-en="Skip, use the recommended">跳过，用推荐的</button>
+      <span>
+        <button id="back" class="ghost" data-en="Back">上一步</button>
+        <button id="next" class="primary" data-en="Next">下一步</button>
+      </span>
+    </footer>
+    <script type="module" src="/src/welcome.ts"></script>
+  </body>
+</html>

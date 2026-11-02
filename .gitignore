@@ -1,0 +1,10 @@
+target/
+node_modules/
+app/dist/
+adapters/claude-code/bin/*
+!adapters/claude-code/bin/.gitkeep
+*.log
+__pycache__/
+*.pyc
+.deck/
+app/promo/

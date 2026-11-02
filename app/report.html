@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-en="Daily report">今日报告</title>
+    <link rel="stylesheet" href="/src/ui.css" />
+    <style>
+      body { display: flex; flex-direction: column; align-items: center; padding: 14px; gap: 10px; }
+      canvas { border-radius: 14px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12); cursor: pointer; max-width: 100%; }
+      .bar { display: flex; gap: 8px; align-items: center; }
+      .hint { color: var(--muted); font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <canvas id="card" title="点一下关闭" data-en-title="Click to close"></canvas>
+    <div class="bar">
+      <button id="prev" class="ghost" data-en="‹ Previous day">‹ 前一天</button>
+      <button id="copy" class="primary" data-en="Copy as image">复制为图片</button>
+      <button id="next" class="ghost" data-en="Next day ›">后一天 ›</button>
+    </div>
+    <div class="hint" data-en="Click the card to close">点卡片关闭</div>
+    <script type="module" src="/src/report.ts"></script>
+  </body>
+</html>

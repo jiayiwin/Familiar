@@ -1,0 +1,57 @@
+# Codex hook -> Familiar 统一事件（协议 v1）。
+#
+# 核对依据：Codex 官方 hooks 文档 + 实测 codex-cli 0.162.1（2026-11-02）。
+# 这份文件在构建时编进 familiar-emit；把修改后的副本放到
+# ~/.familiar/adapters/codex.yaml 可以不重新编译直接覆盖。
+#
+# 隐私：detail 里只会出现工具名、文件 basename 和"是否读取类命令"的判断结果，
+# 命令原文、提示词、输出都不会离开 emitter。
+
+source: codex
+session: session_id          # 会话 id（Codex 桌面版每个线程各自不同）
+project: cwd
+sub_when: agent_id           # 这个字段非空时视为子 agent 事件
+file_keys: [file_path, path] # 在 tool_input 里找文件路径的键，只保留 basename
+patch_tools: [apply_patch]   # 从补丁头 "*** Update File: x" 里取文件名
+
+# Codex 在 Windows 上读文件、搜索也走 Bash 工具（PowerShell）。
+# 命令的第一个词在这个列表里时，宠物显示"看书"而不是"敲电脑"。
+read_commands:
+  - cat
+  - type
+  - get-content
+  - gc
+  - head
+  - tail
+  - less
+  - more
+  - rg
+  - grep
+  - select-string
+  - sls
+  - findstr
+  - ls
+  - dir
+  - get-childitem
+  - gci
+  - tree
+  - find
+  - fd
+  - wc
+  - git-log
+  - git-show
+  - git-diff
+  - git-status
+
+events:
+  SessionStart:      { event: session.start }
+  SessionEnd:        { event: session.end }
+  UserPromptSubmit:  { event: turn.start }
+  PreToolUse:        { event: tool.start, tool: true }
+  PostToolUse:       { event: tool.end, tool: true, ok: true }
+  PermissionRequest: { event: attention, tool: true, kind: permission }
+  Stop:              { event: turn.done, result: ok }
+  Interrupt:         { event: turn.done, result: aborted }
+  SubagentStart:     { event: turn.start, sub: true }
+  SubagentStop:      { event: turn.done, result: ok, sub: true }
+  # PreCompact / PostCompact 不产生事件。
