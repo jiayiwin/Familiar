@@ -543,12 +543,76 @@ async function renderShop() {
   }
 }
 
+// ---------------------------------------------------------------- reminders
+
+interface Reminders { kegel: string[]; kegel_reps: number; water: boolean; breathe: boolean }
+
+async function renderHealth() {
+  const box = $("tab-health");
+  let r = await getJson<Reminders>(conn, "/v1/reminders");
+  const save = async (next: Reminders) => {
+    const res = await postJson(conn, "/v1/reminders", next);
+    if (res.ok) r = next;
+    draw();
+    $("rm-msg").textContent = res.message;
+    $("rm-msg").style.color = res.ok ? "" : "#c0392b";
+  };
+  const draw = () => {
+    const mins = Math.max(1, Math.round((3 + r.kegel_reps * 6) / 60));
+    box.innerHTML = `
+      <section class="hcard">
+        <h3>🍑 ${tr("提肛提醒", "Kegel reminders")}</h3>
+        <div class="note">${tr("每天到点，宠物会转过身、屁股对着你做一组：收紧时夹紧上提、尾巴竖起，放松时松开、尾巴摇摇；头顶有「收紧 ⬆」「放松 ⬇」和倒计时，还有提示音，跟着它做就行。点一下宠物可以跳过。",
+          "At each time, your pet turns around and does a set with its bottom to you: squeezing and lifting with its tail up, then letting go with a wag. “Squeeze ⬆” / “Relax ⬇” and a countdown show above it, with a soft beep. Click the pet to skip.")}</div>
+        <div class="hrow"><span>${tr("提醒时间", "Times")}</span>
+          <span class="chips">${r.kegel.map((t) => `<span class="chip">${t}<button data-del="${t}" title="${tr("删除", "Remove")}">✕</button></span>`).join("") || `<span class="note" style="margin:0">${tr("还没设，提醒是关的", "None yet — reminders are off")}</span>`}</span>
+          <input type="time" id="kg-t" value="${r.kegel.length ? "15:30" : "10:30"}" /><button id="kg-add">${tr("添加", "Add")}</button></div>
+        <div class="hrow"><span>${tr("每次", "Each set")}</span>
+          <select id="kg-reps">${[5, 10, 15, 20].map((n) => `<option value="${n}"${n === r.kegel_reps ? " selected" : ""}>${tr(`${n} 组`, `${n} reps`)}</option>`).join("")}</select>
+          <span class="note" style="margin:0">${tr(`约 ${mins} 分钟`, `about ${mins} min`)}</span>
+          <span class="sp"></span><button id="kg-try" class="primary">${tr("现在试一组", "Try a set now")}</button></div>
+        <details class="howto" open><summary>${tr("动作要领", "How to do it")}</summary><ol>
+          <li>${tr("<b>找对肌肉：</b>就是憋尿、忍住放屁时用力的那块肌肉（盆底肌）。", "<b>Find the muscle:</b> the one you use to hold in pee or gas (the pelvic floor).")}</li>
+          <li>${tr("<b>收紧上提：</b>宠物喊「收紧 ⬆」时，把肛门和会阴往上、往里收，保持 3 秒。", "<b>Squeeze and lift:</b> on “Squeeze ⬆”, pull the area up and in, and hold for 3 s.")}</li>
+          <li>${tr("<b>完全放松：</b>喊「放松 ⬇」时彻底松开 3 秒。放松和收紧一样重要。", "<b>Let go fully:</b> on “Relax ⬇”, release completely for 3 s. Relaxing matters as much as squeezing.")}</li>
+          <li>${tr("<b>呼吸自然：</b>别憋气；肚子、屁股和大腿尽量不跟着用力。", "<b>Keep breathing:</b> don't hold your breath; keep your belly, buttocks and thighs loose.")}</li>
+          <li>${tr("坐着、站着都能做，旁边的人看不出来。", "Sitting or standing both work, and nobody can tell.")}</li>
+        </ol><div class="note">${tr("刚开始每次 5 组，习惯后 10–15 组，每天 2–3 次。如果有盆底或肛肠方面的不适，先问问医生。",
+          "Start with 5 reps, build up to 10–15, two or three times a day. If you have pelvic or rectal problems, ask a doctor first.")}</div></details>
+      </section>
+      <section class="hcard">
+        <h3>${tr("其他提醒", "Other reminders")}</h3>
+        <label class="hchk"><input type="checkbox" id="rm-water"${r.water ? " checked" : ""} /> 💧 ${tr("喝水：空闲时每小时提醒一次", "Water: once an hour while idle")}</label>
+        <label class="hchk"><input type="checkbox" id="rm-breathe"${r.breathe ? " checked" : ""} /> 🌬️ ${tr("深呼吸：10 分钟内等你超过 6 次时，一起做 30 秒深呼吸", "Breathing: 30 s of deep breaths when you're waited on 6+ times in 10 min")}</label>
+      </section>
+      <div id="rm-msg" class="note"></div>`;
+    box.querySelectorAll<HTMLButtonElement>("[data-del]").forEach((b) => (b.onclick = () => void save({ ...r, kegel: r.kegel.filter((t) => t !== b.dataset.del) })));
+    $("kg-add").onclick = () => {
+      const t = ($("kg-t") as HTMLInputElement).value;
+      if (t) void save({ ...r, kegel: [...r.kegel, t] });
+    };
+    ($("kg-reps") as HTMLSelectElement).onchange = (e) => void save({ ...r, kegel_reps: Number((e.target as HTMLSelectElement).value) });
+    ($("rm-water") as HTMLInputElement).onchange = (e) => void save({ ...r, water: (e.target as HTMLInputElement).checked });
+    ($("rm-breathe") as HTMLInputElement).onchange = (e) => void save({ ...r, breathe: (e.target as HTMLInputElement).checked });
+    $("kg-try").onclick = async () => {
+      const res = await fetch(conn.base + "/v1/cmd", {
+        method: "POST",
+        headers: { "X-Familiar-Token": conn.token, "Content-Type": "application/json" },
+        body: JSON.stringify({ cmd: "kegel" }),
+      });
+      toast(await res.text());
+    };
+  };
+  draw();
+}
+
 function setupTabs() {
   const tabs = document.querySelectorAll<HTMLButtonElement>("#tabs button");
   tabs.forEach((b) => {
     b.onclick = () => {
       tabs.forEach((x) => x.classList.toggle("on", x === b));
-      for (const id of ["pets", "fish", "wallet", "ach", "shop"]) $(`tab-${id}`).hidden = id !== b.dataset.tab;
+      for (const id of ["pets", "fish", "wallet", "ach", "shop", "health"]) $(`tab-${id}`).hidden = id !== b.dataset.tab;
+      if (b.dataset.tab === "health") void renderHealth();
       if (b.dataset.tab === "fish") void renderFish();
       if (b.dataset.tab === "wallet") void renderWallet();
       if (b.dataset.tab === "ach") void renderAchievements();

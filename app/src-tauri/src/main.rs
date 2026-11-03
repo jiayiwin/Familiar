@@ -510,6 +510,12 @@ fn on_menu(h: &AppHandle, id: &str) {
         }
         (Some("hideall"), _, _) => petd::ops::hide_all(sh),
         (Some("gallery"), _, _) => windows::open_gallery(h),
+        (Some("reminders"), _, _) => windows::open_reminders(h),
+        (Some("kegel"), pet, _) => {
+            if let Err(e) = petd::ops::kegel_now(sh, pet) {
+                app.petd.paths.log(&format!("kegel: {e}"));
+            }
+        }
         (Some("report"), _, _) => windows::open_report(h),
         (Some("shop"), _, _) => windows::open_shop(h),
         (Some("config"), _, _) => open_path(&app.petd.paths.config()),

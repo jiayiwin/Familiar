@@ -147,6 +147,7 @@ The gallery entry shows how many packs failed validation, if any.
 | `/pet wallet` | Coin balance and today's income |
 | `/pet report` | Open today's report |
 | `/pet size s/m/l` | Pet size |
+| `/pet kegel [times… / off]` | Do a kegel set with your pet now; with times, remind daily, e.g. `/pet kegel 10:30 15:30` |
 | `/pet lang auto/zh/en` | UI language |
 | `/pet next` | Next pet from your favorites |
 | `/pet tug` | Start a tug-of-war now |
@@ -214,6 +215,8 @@ None of this gets in the way of the status display. **While any session is waiti
 
 **Wellbeing** (off by default). `features.water: true` reminds you to drink water every 60 minutes when idle. `features.breathe: true`: if you are called to approve more than 6 times in 10 minutes, the pet leads 30 seconds of 4-7-8 breathing (click to skip).
 
+**Kegel reminders**: add daily times in Gallery → Reminders (or right-click a pet → Health → Reminder settings). At each time the pet turns its back to you and leads a set: squeezing and lifting with its tail up, then relaxing with a wag, with "Squeeze ⬆ / Relax ⬇", a countdown and a soft beep; the page explains how to do it. Right-click → Health → Kegel set, or `/pet kegel`, starts one any time.
+
 **Daily report.** Pops up at the end of the workday (18:00 by default): agent working time, finished turns, fish caught, bugs squashed, tug results. Copy it as an image, or open it any time from the tray or ring menu.
 
 Per-turn details are kept for 90 days, then rolled up into daily totals.
@@ -247,6 +250,8 @@ features:
   size: m                # s | m | l  (0.75 / 1 / 1.35×)
   water: false           # hourly water reminder
   breathe: false         # breathing exercise when you are called too often
+  kegel: []              # daily kegel reminder times, e.g. ["10:30", "15:30"]
+  kegel_reps: 10         # reps per set (squeeze 3s, relax 3s)
 
 # meeting:
 #   share_windows: ["Sharing"]   # extra words to detect your meeting app's sharing toolbar

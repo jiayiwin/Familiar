@@ -150,6 +150,62 @@ pub fn set_size(sh: &Shared, size: &str) -> Result<String, String> {
     Ok(crate::tr!("宠物大小改为 {}。", "Pet size set to {}.", s.to_uppercase()))
 }
 
+/// Health reminders, as the gallery edits them.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Reminders {
+    pub kegel: Vec<String>,
+    pub kegel_reps: u32,
+    pub water: bool,
+    pub breathe: bool,
+}
+
+pub fn reminders(sh: &Shared) -> Reminders {
+    let f = &sh.hub.lock().unwrap().cfg.features;
+    Reminders { kegel: f.kegel.clone(), kegel_reps: f.kegel_reps, water: f.water, breathe: f.breathe }
+}
+
+/// Clean "HH:MM" list: valid, sorted, no duplicates.
+pub fn clean_times(times: &[String]) -> Result<Vec<String>, String> {
+    let mut out: Vec<u32> = vec![];
+    for t in times {
+        let m = crate::world::parse_hm(t).ok_or_else(|| crate::tr!("时间格式不对：{t}（例：10:30）", "Bad time: {t} (e.g. 10:30)"))?;
+        if !out.contains(&m) {
+            out.push(m);
+        }
+    }
+    out.sort();
+    Ok(out.into_iter().map(|m| format!("{:02}:{:02}", m / 60, m % 60)).collect())
+}
+
+pub fn set_reminders(sh: &Shared, r: &Reminders) -> Result<String, String> {
+    let times = clean_times(&r.kegel)?;
+    let reps = r.kegel_reps.clamp(1, 30);
+    save(sh, |m| {
+        let f = config::child(m, "features");
+        f.insert("kegel".into(), Value::Sequence(times.iter().map(|t| Value::String(t.clone())).collect()));
+        f.insert("kegel_reps".into(), Value::Number(reps.into()));
+        f.insert("water".into(), Value::Bool(r.water));
+        f.insert("breathe".into(), Value::Bool(r.breathe));
+        Ok(())
+    })?;
+    Ok(if times.is_empty() {
+        crate::tr!("提醒已保存，提肛提醒关闭。", "Saved. Kegel reminders are off.")
+    } else {
+        crate::tr!("提醒已保存：每天 {} 提肛。", "Saved: kegels every day at {}.", times.join(crate::i18n::t("、", ", ")))
+    })
+}
+
+/// Start a guided kegel set now on `pet` (default: the main pet).
+pub fn kegel_now(sh: &Shared, pet: Option<&str>) -> Result<String, String> {
+    let (views, reps) = {
+        let hub = sh.hub.lock().unwrap();
+        (hub.pets(), hub.cfg.features.kegel_reps)
+    };
+    let m = crate::world::kegel_script(&views, pet, reps).ok_or_else(|| crate::tr!("现在没有显示的宠物", "No pet is showing right now"))?;
+    let _ = sh.ws_tx.send(m);
+    Ok(crate::tr!("开始提肛，跟着宠物做 {reps} 组。", "Kegel set started: {reps} reps with your pet."))
+}
+
 /// Focus mode: status and reminders only; no interactions, sounds or games.
 pub fn set_focus(sh: &Shared, on: bool) -> Result<String, String> {
     save(sh, |m| {

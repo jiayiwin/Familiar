@@ -13,6 +13,33 @@ const MIN_W = 200;
 const FOOT_H = 18;
 const GAP = 8;
 const MINI_SCALE = 0.5;
+const KEGEL_READY = 3000;
+const KEGEL_REP = 6000;
+
+interface KegelState { phase: "ready" | "squeeze" | "relax" | "done"; rep: number; left: number; k: number; repT: number }
+
+/** Blend a CSS colour with another (`t` = share of the second). */
+function mix(a: string, b: string, t: number): string {
+  const rgb = (x: string): number[] => {
+    const m = x.match(/\d+/g);
+    if (x.startsWith("#")) return [1, 3, 5].map((i) => parseInt(x.slice(i, i + 2), 16));
+    return m ? m.slice(0, 3).map(Number) : [240, 163, 94];
+  };
+  const [p, q] = [rgb(a), rgb(b)];
+  return `rgb(${p.map((v, i) => Math.round(v + (q[i] - v) * t)).join(",")})`;
+}
+
+/** Where a kegel set is at: phase, rep (1-based), seconds left, clench 0..1. */
+function kegelAt(kg: { start: number; reps: number }, now: number): KegelState {
+  const t = now - kg.start;
+  if (t < KEGEL_READY) return { phase: "ready", rep: 0, left: Math.ceil((KEGEL_READY - t) / 1000), k: 0, repT: 0 };
+  const u = t - KEGEL_READY, rep = Math.floor(u / KEGEL_REP) + 1;
+  if (rep > kg.reps) return { phase: "done", rep: kg.reps, left: 0, k: 0, repT: 1 };
+  const w = (u % KEGEL_REP) / 1000, repT = w / (KEGEL_REP / 1000);
+  const ease = (x: number) => { const y = Math.min(1, Math.max(0, x)); return y * y * (3 - 2 * y); };
+  if (w < 3) return { phase: "squeeze", rep, left: Math.ceil(3 - w), k: ease(w / 0.5), repT };
+  return { phase: "relax", rep, left: Math.ceil(6 - w), k: 1 - ease((w - 3) / 0.6), repT };
+}
 
 /** Session state -> pack action. */
 const ACTION_FOR: Record<State, string> = {
@@ -101,6 +128,8 @@ export class PetRenderer {
   private rope: string | null = null;
   /** 4-7-8 breathing: until when. */
   private breathe: { start: number; until: number } | null = null;
+  /** Guided kegel set: 3 s to get ready, then squeeze 3 s / relax 3 s per rep. */
+  private kegel: { start: number; reps: number; last: string; fur: string } | null = null;
   /** Effects around the pet (hands, fish, chips, confetti…). */
   readonly fx = new Fx();
   /** Tug of war: which side of the rope we stand on, whether we lead, until when. */
@@ -206,6 +235,11 @@ export class PetRenderer {
   /** User poked the pet: one-shot squish (random sound), then back to what it was doing. */
   poke(): void {
     this.breathe = null; // a click skips the breathing exercise
+    if (this.kegel) {
+      this.kegel = null;
+      this.say(tr("好，下次再练～", "OK, next time~"), 2500);
+      return;
+    }
     if (this.switching || !this.sprites?.action("squish") || this.view?.state === "attention") return;
     this.override("squish", 0, "poke");
     const set = this.sprites.pack.sounds?.squish ?? [];
@@ -219,6 +253,13 @@ export class PetRenderer {
    */
   override(action: string, ms: number, kind: string, bubble?: string | null): void {
     if (!this.sprites || this.switching) return;
+    if (action === "kegel") {
+      // Not a sprite: the body clenches and lets go to a coach overlay.
+      this.breathe = null;
+      this.kegel = { start: performance.now(), reps: Math.max(1, Math.round(((ms || 63_000) - KEGEL_READY) / KEGEL_REP)), last: "", fur: this.furColor() };
+      this.bubbleText = "";
+      return;
+    }
     if (action === "breathe") {
       // Not a sprite: the body swells and settles on a 4-7-8 rhythm.
       const now = performance.now();
@@ -472,7 +513,8 @@ export class PetRenderer {
     // Crown sparkle and halo bob animate on their own.
     const hatKey = v?.hat === "crown" || v?.hat === "halo" || v?.stage ? Math.floor(now / 100) : v?.hat ?? "";
     if (this.breathe && now >= this.breathe.until) this.breathe = null;
-    const fxKey = this.fx.busy(now) || this.breathe ? Math.floor(now / 33) : -1;
+    if (this.kegel) this.kegelTick(now);
+    const fxKey = this.fx.busy(now) || this.breathe || this.kegel ? Math.floor(now / 33) : -1;
     const key = `${fxKey}|${tugKey}|${hatKey}|${this.action}|${idx}|${this.bubbleText}|${v?.online}|${v?.waiting}|${v?.hue}|${v?.marker}|${v?.label}|${miniKey}|${v?.minis_more}|${smoke}|${moving}`;
     if (key === this.lastKey) return;
     this.lastKey = key;
@@ -545,14 +587,30 @@ export class PetRenderer {
       this.drawDuo(a, idx, cx, bottom, mainW, mainH, w, now);
     } else {
       if (this.view?.stage) this.drawAura(cx, bottom, mainW, mainH, this.view.stage, now);
-      sp.draw(c, a, idx, cx, bottom, this.sc(sp) * this.breath(now), hue);
-      if (this.view?.hat) this.drawHatOn(a, idx, cx, bottom, now);
+      if (this.kegel) {
+        // Turn around (the sprite folds away, the back view unfolds), then exercise.
+        const turn = Math.min(1, (now - this.kegel.start) / 500);
+        if (turn < 0.5) {
+          c.save();
+          c.translate(cx, bottom);
+          c.scale(1 - turn * 2, 1);
+          c.translate(-cx, -bottom);
+          sp.draw(c, a, idx, cx, bottom, this.sc(sp), hue);
+          c.restore();
+        } else {
+          this.drawRear(cx, bottom, mainW, mainH, kegelAt(this.kegel, now), now, (turn - 0.5) * 2, this.kegel.fur);
+        }
+      } else {
+        sp.draw(c, a, idx, cx, bottom, this.sc(sp) * this.breath(now), hue);
+        if (this.view?.hat) this.drawHatOn(a, idx, cx, bottom, now);
+      }
     }
     hits.push({ x: cx - mainW / 2, y: bottom - mainH, w: mainW, h: mainH, kind: "main" });
 
     // Effects on top of the pet, under the bubble.
     this.fx.draw(c, this.anchor(a, idx, cx, bottom, w), now);
-    if (this.bubbleText) this.drawBubble(this.bubbleText, w, bottom - mainH);
+    if (this.kegel) this.drawKegel(kegelAt(this.kegel, now), cx, w, bottom, mainW, mainH, now);
+    else if (this.bubbleText) this.drawBubble(this.bubbleText, w, bottom - mainH);
     // Badge at the main pet's top-left: clear of the minis and the pack's own "!".
     this.drawBadge(cx - mainW / 2, bottom - mainH + 4);
     // Camp tag (and project / rule label) under the feet.
@@ -563,6 +621,299 @@ export class PetRenderer {
     if (hk !== this.lastHits) {
       this.lastHits = hk;
       this.onHits(hits);
+    }
+  }
+
+  /** Phase changes: a soft beep, and the closing cheer. */
+  private kegelTick(now: number): void {
+    const kg = this.kegel!;
+    const st = kegelAt(kg, now);
+    const mark = `${st.phase}${st.rep}`;
+    if (mark === kg.last) return;
+    kg.last = mark;
+    if (st.phase === "squeeze") this.beep(660);
+    else if (st.phase === "relax") this.beep(440);
+    else if (st.phase === "done") {
+      this.kegel = null;
+      this.beep(880);
+      this.override("cheer", 2600, "script", tr(`完成 ${kg.reps} 组！今天也很棒 💪`, `${kg.reps} reps done! Nice work 💪`));
+    }
+  }
+
+  /** The pet's main fur colour, from its idle frame (warm orange if unreadable). */
+  private furColor(): string {
+    const fallback = "#f0a35e";
+    try {
+      const sp = this.sprites!, a = sp.action("idle")!, f = sp.pack.frame;
+      const cv = document.createElement("canvas");
+      cv.width = f.w; cv.height = f.h;
+      const g = cv.getContext("2d", { willReadFrequently: true })!;
+      sp.draw(g, a, 0, f.w / 2, f.h, 1, this.view?.hue ?? 0);
+      const d = g.getImageData(0, 0, f.w, f.h).data;
+      const bins = new Map<number, [number, number, number, number]>();
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] < 200) continue;
+        const [r, gg, b] = [d[i], d[i + 1], d[i + 2]];
+        const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b);
+        if (mx < 70 || mn > 235) continue; // outlines and highlights
+        const key = ((r >> 5) << 6) | ((gg >> 5) << 3) | (b >> 5);
+        const e = bins.get(key) ?? [0, 0, 0, 0];
+        e[0] += r; e[1] += gg; e[2] += b; e[3]++;
+        bins.set(key, e);
+      }
+      let best: [number, number, number, number] | null = null;
+      for (const e of bins.values()) if (!best || e[3] > best[3]) best = e;
+      if (!best || best[3] < 20) return fallback;
+      return `rgb(${Math.round(best[0] / best[3])},${Math.round(best[1] / best[3])},${Math.round(best[2] / best[3])})`;
+    } catch {
+      return fallback; // cross-origin frames can't be read
+    }
+  }
+
+  /**
+   * The pet seen from behind, doing kegels: cheeks squeeze, the little
+   * pucker tightens and lifts, the tail goes stiff; on relax it all lets go.
+   */
+  private drawRear(cx: number, bottom: number, mainW: number, mainH: number, st: KegelState, now: number, open: number, fur: string): void {
+    const c = this.ctx;
+    const H = mainH * 0.9, W = Math.min(mainW * 0.95, H);
+    const k = st.k;
+    const ink = "#4a2c20", dark = mix(fur, "#000000", 0.3), light = mix(fur, "#ffffff", 0.45);
+    const pink = "#f0a0ae", deep = "#b8465f";
+    const TAU = Math.PI * 2;
+    const lw = Math.max(1.5, H / 55);
+    c.save();
+    c.translate(cx, bottom);
+    c.scale(open * (1 + 0.05 * k), 1 - 0.06 * k);
+    c.lineJoin = "round";
+    c.lineCap = "round";
+    c.lineWidth = lw;
+    c.strokeStyle = ink;
+    const blob = (draw: () => void, fill: string) => { c.beginPath(); draw(); c.fillStyle = fill; c.fill(); c.stroke(); };
+    const wag = st.phase === "squeeze" ? 0 : Math.sin(now / 240);
+
+    // Body (the back), with tabby stripes down the spine.
+    const by = -H * 0.38;
+    blob(() => c.ellipse(0, by, W * 0.36, H * 0.33, 0, 0, TAU), fur);
+    c.strokeStyle = dark;
+    for (let i = 0; i < 3; i++) {
+      const y = by - H * 0.2 + i * H * 0.09, hw = W * (0.12 - i * 0.015);
+      c.beginPath();
+      c.moveTo(-hw, y);
+      c.quadraticCurveTo(0, y + H * 0.04, hw, y);
+      c.stroke();
+    }
+    c.strokeStyle = ink;
+
+    // Head from behind: ears, round back of the head.
+    const hr = H * 0.2, hy = -H * 0.79;
+    for (const sd of [-1, 1]) {
+      blob(() => { c.moveTo(sd * hr * 0.2, hy - hr * 0.75); c.lineTo(sd * hr * 0.95, hy - hr * 1.4); c.lineTo(sd * hr * 1.0, hy - hr * 0.15); c.closePath(); }, fur);
+    }
+    blob(() => c.arc(0, hy, hr, 0, TAU), fur);
+    c.strokeStyle = dark;
+    for (const dx of [-0.35, 0, 0.35]) {
+      c.beginPath();
+      c.moveTo(dx * hr, hy - hr * 0.9);
+      c.lineTo(dx * hr * 0.8, hy - hr * 0.45);
+      c.stroke();
+    }
+    c.strokeStyle = ink;
+
+    // Hind paws, soles to us: pink beans.
+    for (const sd of [-1, 1]) {
+      const px = sd * W * 0.21, py = -H * 0.05;
+      blob(() => c.ellipse(px, py, W * 0.11, H * 0.055, 0, 0, TAU), fur);
+      c.fillStyle = pink;
+      c.beginPath();
+      c.ellipse(px, py + H * 0.012, W * 0.04, H * 0.022, 0, 0, TAU);
+      c.fill();
+      for (const t of [-1, 0, 1]) {
+        c.beginPath();
+        c.arc(px + t * W * 0.042, py - H * 0.026, W * 0.014, 0, TAU);
+        c.fill();
+      }
+    }
+
+    // Cheeks: they press together while squeezing.
+    const cy = -H * 0.22, cr = W * 0.19, sep = W * 0.15 - k * W * 0.035;
+    for (const sd of [-1, 1]) {
+      c.beginPath();
+      c.arc(sd * sep, cy, cr, 0, TAU);
+      c.fillStyle = fur;
+      c.fill();
+      const hl = c.createRadialGradient(sd * (sep + cr * 0.25), cy - cr * 0.35, 0, sd * (sep + cr * 0.25), cy - cr * 0.35, cr * 0.7);
+      hl.addColorStop(0, light);
+      hl.addColorStop(1, "rgba(255,255,255,0)");
+      c.fillStyle = hl;
+      c.fill();
+    }
+    for (const sd of [-1, 1]) {
+      c.beginPath();
+      if (sd > 0) c.arc(sep, cy, cr, -0.3 * Math.PI, 0.82 * Math.PI);
+      else c.arc(-sep, cy, cr, 0.18 * Math.PI, 1.3 * Math.PI);
+      c.stroke();
+    }
+    // The crease.
+    c.beginPath();
+    c.moveTo(0, cy - cr * 0.95);
+    c.quadraticCurveTo(lw * 0.6 * (1 - k), cy, 0, cy + cr * 0.85);
+    c.stroke();
+
+    // Tail: limp and wagging when relaxed, straight up when squeezing.
+    const tx = 0, ty = cy - cr * 0.9;
+    const ex = (1 - k) * (W * 0.36 + wag * W * 0.06), ey = ty - H * (0.32 + 0.2 * k);
+    const qx = (1 - k) * (W * 0.3 + wag * W * 0.04), qy = ty - H * (0.06 + 0.18 * k);
+    c.lineWidth = W * 0.1;
+    c.beginPath();
+    c.moveTo(tx, ty);
+    c.quadraticCurveTo(qx, qy, ex, ey);
+    c.stroke();
+    c.strokeStyle = fur;
+    c.lineWidth = W * 0.1 - lw * 2;
+    c.stroke();
+    c.strokeStyle = dark;
+    c.lineWidth = W * 0.1 - lw * 2;
+    c.beginPath();
+    c.moveTo(ex + (qx - ex) * 0.18, ey + (qy - ey) * 0.18);
+    c.lineTo(ex, ey);
+    c.stroke();
+    c.strokeStyle = ink;
+    c.lineWidth = lw;
+
+    // The pucker: a soft pink dot that tightens into a little star and lifts.
+    const px = 0, py = cy - k * H * 0.03, pr = H * 0.045 * (1 - 0.5 * k);
+    c.fillStyle = k > 0.5 ? deep : pink;
+    c.beginPath();
+    c.arc(px, py, pr, 0, TAU);
+    c.fill();
+    c.strokeStyle = deep;
+    c.lineWidth = Math.max(1, lw * 0.7);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * TAU + Math.PI / 6;
+      c.beginPath();
+      c.moveTo(px + Math.cos(a) * pr * 0.7, py + Math.sin(a) * pr * 0.7);
+      c.lineTo(px + Math.cos(a) * pr * (1.5 + 0.9 * k), py + Math.sin(a) * pr * (1.5 + 0.9 * k));
+      c.stroke();
+    }
+
+    // Effort: squeeze lines by the cheeks and a sweat drop.
+    if (k > 0.4) {
+      c.globalAlpha = Math.min(1, (k - 0.4) * 2.5);
+      c.strokeStyle = ink;
+      c.lineWidth = lw;
+      for (const sd of [-1, 1]) {
+        for (let i = 0; i < 3; i++) {
+          const x0 = sd * (sep + cr + W * 0.05), y0 = cy - cr * 0.5 + i * cr * 0.45;
+          c.beginPath();
+          c.moveTo(x0, y0);
+          c.lineTo(x0 + sd * W * 0.06, y0 - H * 0.01);
+          c.stroke();
+        }
+      }
+      c.fillStyle = "#7cc7f2";
+      const dx = hr * 1.05, dy = hy - hr * 0.2 + ((now / 30) % 10) * 0.4;
+      c.beginPath();
+      c.moveTo(dx, dy - H * 0.04);
+      c.quadraticCurveTo(dx + H * 0.025, dy, dx, dy + H * 0.015);
+      c.quadraticCurveTo(dx - H * 0.025, dy, dx, dy - H * 0.04);
+      c.fill();
+      c.globalAlpha = 1;
+    }
+    c.restore();
+  }
+
+  private audio: AudioContext | null = null;
+  /** A short soft tone, so the set can be followed without looking. */
+  private beep(freq: number): void {
+    if (this.muted) return;
+    try {
+      this.audio ??= new AudioContext();
+      const a = this.audio, o = a.createOscillator(), g = a.createGain();
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, a.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.12, a.currentTime + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + 0.25);
+      o.connect(g).connect(a.destination);
+      o.start();
+      o.stop(a.currentTime + 0.3);
+    } catch {
+      /* no audio: the overlay is enough */
+    }
+  }
+
+  /** Coach overlay above the pet: what to do, a countdown, and progress dots. */
+  private drawKegel(st: KegelState, cx: number, w: number, bottom: number, mainW: number, mainH: number, now: number): void {
+    const c = this.ctx;
+    const reps = this.kegel?.reps ?? 0;
+    const [label, color] =
+      st.phase === "ready" ? [tr(`提肛时间！准备 ${st.left}`, `Kegel time! Ready ${st.left}`), "#7b6cf6"]
+      : st.phase === "squeeze" ? [tr(`收紧 ⬆ ${st.left}`, `Squeeze ⬆ ${st.left}`), "#e76f51"]
+      : [tr(`放松 ⬇ ${st.left}`, `Relax ⬇ ${st.left}`), "#2ec27e"];
+    const count = st.phase === "ready" ? tr(`${reps} 组`, `${reps} reps`) : `${st.rep}/${reps}`;
+    const big = "bold 14px 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif";
+    const small = "12px 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif";
+    c.font = big;
+    const lw = c.measureText(label).width;
+    c.font = small;
+    const cw = c.measureText(count).width;
+    const pw = Math.min(w - 8, lw + cw + 30), ph = 24;
+    const petTop = bottom - mainH;
+    const px = Math.round((w - pw) / 2), py = Math.max(2, Math.min(BUBBLE_H - ph - 12, petTop - ph - 12));
+    c.fillStyle = color;
+    c.beginPath();
+    c.roundRect(px, py, pw, ph, 12);
+    c.fill();
+    c.fillStyle = "#fff";
+    c.textBaseline = "middle";
+    c.textAlign = "left";
+    c.font = big;
+    c.fillText(label, px + 12, py + ph / 2 + 1);
+    c.textAlign = "right";
+    c.font = small;
+    c.globalAlpha = 0.9;
+    c.fillText(count, px + pw - 10, py + ph / 2 + 1);
+    c.globalAlpha = 1;
+    // Progress: one dot per rep; a ring fills around the current one.
+    const dots = Math.min(reps, 20), gap = Math.min(10, (pw - 16) / Math.max(1, dots));
+    const dy = py + ph + 6, dx0 = w / 2 - (gap * (dots - 1)) / 2;
+    for (let i = 0; i < dots; i++) {
+      const done = st.phase !== "ready" && i < st.rep - 1;
+      const cur = st.phase !== "ready" && i === st.rep - 1;
+      c.fillStyle = done ? "#4a2c20" : "rgba(74,44,32,0.25)";
+      c.beginPath();
+      c.arc(dx0 + i * gap, dy, cur ? 3.2 : 2.4, 0, Math.PI * 2);
+      c.fill();
+      if (cur) {
+        c.strokeStyle = color;
+        c.lineWidth = 2;
+        c.beginPath();
+        c.arc(dx0 + i * gap, dy, 4.5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * st.repT);
+        c.stroke();
+      }
+    }
+    // Arrows beside the body: rising while squeezing, sinking while relaxing.
+    if (st.phase === "squeeze" || st.phase === "relax") {
+      const up = st.phase === "squeeze";
+      const t = ((now - this.kegel!.start) / 900) % 1;
+      c.strokeStyle = color;
+      c.lineWidth = 2.5;
+      c.lineCap = "round";
+      for (const side of [-1, 1]) {
+        const x = cx + side * (mainW / 2 + 6);
+        for (let j = 0; j < 2; j++) {
+          const f = (t + j * 0.5) % 1;
+          const y = up ? bottom - 8 - f * mainH * 0.45 : bottom - 8 - mainH * 0.45 + f * mainH * 0.45;
+          c.globalAlpha = Math.sin(Math.PI * f);
+          c.beginPath();
+          c.moveTo(x - 5, y + (up ? 4 : -4));
+          c.lineTo(x, y);
+          c.lineTo(x + 5, y + (up ? 4 : -4));
+          c.stroke();
+        }
+      }
+      c.globalAlpha = 1;
+      c.lineCap = "butt";
     }
   }
 

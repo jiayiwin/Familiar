@@ -54,12 +54,12 @@ pub struct Model {
 }
 
 pub fn build(app: &App, pet: &str) -> Option<Model> {
-    let (view, packs, favs, mode, focus, size) = {
+    let (view, packs, favs, mode, focus, size, kegel) = {
         let hub = app.petd.hub.lock().unwrap();
         let view = hub.pets().into_iter().find(|v| v.id == pet)?;
         let mut packs: Vec<(String, String)> = hub.lib.packs.values().map(|p| (p.id.clone(), p.name.clone())).collect();
         packs.sort();
-        (view, packs, hub.cfg.selection.favorites.clone(), hub.cfg.mode, hub.cfg.features.focus_mode, hub.cfg.features.size.to_lowercase())
+        (view, packs, hub.cfg.selection.favorites.clone(), hub.cfg.mode, hub.cfg.features.focus_mode, hub.cfg.features.size.to_lowercase(), hub.cfg.features.kegel.clone())
     };
     let lang = current_language(app);
     let pack_name = |id: &str| packs.iter().find(|p| p.0 == id).map(|p| p.1.clone()).unwrap_or_else(|| id.into());
@@ -156,7 +156,16 @@ pub fn build(app: &App, pet: &str) -> Option<Model> {
     }
     settings.push(item("config", "📝", t("编辑配置…", "Edit config…")));
 
-    let mut items = vec![group("🎮", t("游戏", "Games"), games), item(format!("feed|{pet}"), "🐟", t("投喂", "Feed")), group("🎨", t("换装", "Outfits"), switch)];
+    // ---- health
+    let health = vec![
+        with_hint(item(format!("kegel|{pet}"), "🍑", t("提肛一组", "Kegel set")), t("收紧 3 秒、放松 3 秒", "Squeeze 3s, relax 3s")),
+        with_hint(
+            item("reminders", "⏰", t("提醒设置…", "Reminder settings…")),
+            if kegel.is_empty() { t("还没设提肛时间", "No kegel times yet").to_string() } else { kegel.join(" ") },
+        ),
+    ];
+
+    let mut items = vec![group("🎮", t("游戏", "Games"), games), item(format!("feed|{pet}"), "🐟", t("投喂", "Feed")), group("🎨", t("换装", "Outfits"), switch), group("🍑", t("健康", "Health"), health)];
     if view.camp.as_deref() == Some("codex") {
         items.push(group("🎫", t("重置卡", "Reset card"), reset_card(pet)));
     }

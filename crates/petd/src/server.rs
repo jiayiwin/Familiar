@@ -83,6 +83,7 @@ pub fn router(sh: Shared) -> Router {
         .route("/v1/unselect", post(unselect))
         .route("/v1/favorite", post(favorite))
         .route("/v1/mode", post(mode))
+        .route("/v1/reminders", get(get_reminders).post(set_reminders))
         .route("/v1/world", get(world_state))
         .route("/v1/world/squash", post(squash))
         .route("/v1/stats", get(stats))
@@ -233,6 +234,15 @@ async fn cmd(Ax(sh): Ax<Shared>, Json(c): Json<Cmd>) -> String {
             Some(s) => crate::ops::set_size(&sh, s).unwrap_or_else(|e| e),
             None => crate::tr!("当前大小：{}。可选 s、m、l", "Current size: {}. Options: s, m, l", sh.hub.lock().unwrap().cfg.features.size.to_uppercase()),
         },
+        // /pet kegel: a set now; /pet kegel 10:30 15:30: daily times; /pet kegel off.
+        "kegel" => match c.args.first().map(String::as_str) {
+            None => crate::ops::kegel_now(&sh, None).unwrap_or_else(|e| e),
+            Some(a) => {
+                let mut r = crate::ops::reminders(&sh);
+                r.kegel = if a == "off" { vec![] } else { c.args.clone() };
+                crate::ops::set_reminders(&sh, &r).unwrap_or_else(|e| e)
+            }
+        },
         "menu" => {
             let pet = c.args.first().cloned().unwrap_or_else(|| "claude-code".into());
             let _ = sh.control.send(crate::Control::Menu { pet: pet.clone() });
@@ -330,6 +340,14 @@ async fn favorite(Ax(sh): Ax<Shared>, Json(b): Json<Fav>) -> Response {
 #[derive(Deserialize)]
 struct ModeBody {
     mode: String,
+}
+
+async fn get_reminders(Ax(sh): Ax<Shared>) -> Json<crate::ops::Reminders> {
+    Json(crate::ops::reminders(&sh))
+}
+
+async fn set_reminders(Ax(sh): Ax<Shared>, Json(b): Json<crate::ops::Reminders>) -> Response {
+    reply(crate::ops::set_reminders(&sh, &b))
 }
 
 async fn mode(Ax(sh): Ax<Shared>, Json(b): Json<ModeBody>) -> Response {

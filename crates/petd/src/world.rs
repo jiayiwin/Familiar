@@ -933,7 +933,12 @@ impl World {
 
     /// Monday morning grumble, water and breathing reminders (once a minute).
     fn reminders(&mut self, now: u64, views: &[PetView], hub: &Hub, db: &Db, out: &mut Vec<Out>) {
-        if self.focus || self.frozen {
+        if self.frozen {
+            return;
+        }
+        // Kegel: the user picked these times, so they ring even in focus mode.
+        Self::kegel_due(now, views, hub, db, out);
+        if self.focus {
             return;
         }
         let today = day_of(now);
@@ -960,6 +965,32 @@ impl World {
                 for v in views {
                     out.push(Out::Ws(crate::msg("pet.script", &json!({ "pet": v.id, "rule": "breathe", "action": "breathe", "bubble": crate::i18n::t("一起深呼吸：吸气 4 秒…屏住 7 秒…呼气 8 秒", "Breathe with me: in 4s… hold 7s… out 8s"), "ms": 30_000 }))));
                 }
+            }
+        }
+    }
+
+    /// Kegel reminder: once a day per time, any time in the hour after it
+    /// (so a reminder missed while a session waited still comes).
+    fn kegel_due(now: u64, views: &[PetView], hub: &Hub, db: &Db, out: &mut Vec<Out>) {
+        let (h, m) = local_hm(now);
+        let mins = h * 60 + m;
+        let today = day_of(now);
+        let mut due = false;
+        for t in &hub.cfg.features.kegel {
+            let Some(at) = parse_hm(t) else { continue };
+            if mins < at || mins >= at + 60 {
+                continue;
+            }
+            let key = format!("kegel:{:02}:{:02}", at / 60, at % 60);
+            if db.kv_get(&key).as_deref() == Some(today.as_str()) {
+                continue;
+            }
+            db.kv_set(&key, &today);
+            due = true;
+        }
+        if due {
+            if let Some(m) = kegel_script(views, None, hub.cfg.features.kegel_reps) {
+                out.push(Out::Ws(m));
             }
         }
     }
@@ -1039,6 +1070,31 @@ impl World {
     }
 }
 
+
+/// "HH:MM" (or "H:MM") to minutes after midnight.
+pub fn parse_hm(t: &str) -> Option<u32> {
+    let (h, m) = t.trim().split_once(':')?;
+    let (h, m): (u32, u32) = (h.trim().parse().ok()?, m.trim().parse().ok()?);
+    (h < 24 && m < 60).then_some(h * 60 + m)
+}
+
+/// A guided kegel set on `pet` (default: the Claude Code pet, else any).
+pub fn kegel_script(views: &[PetView], pet: Option<&str>, reps: u32) -> Option<String> {
+    let reps = reps.clamp(1, 30);
+    let v = match pet {
+        Some(id) => views.iter().find(|v| v.id == id),
+        None => World::camp_pet(views, "claude-code").or_else(|| views.first()),
+    }?;
+    Some(crate::msg(
+        "pet.script",
+        &json!({
+            "pet": v.id, "rule": "kegel", "action": "kegel", "reps": reps,
+            "bubble": crate::tr!("提肛时间到！跟着我做 {reps} 组 🍑", "Kegel time! Follow me for {reps} reps 🍑"),
+            "ms": 3000 + reps as u64 * 6000,
+        }),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1076,6 +1132,30 @@ mod tests {
             })
             .map(|v| v["data"].clone())
             .collect()
+    }
+
+    #[test]
+    fn kegel_rings_once_per_time_within_the_hour() {
+        use chrono::TimeZone;
+        let (_, mut h, db) = setup();
+        let at = |hh: u32, mm: u32| chrono::Local.with_ymd_and_hms(2026, 11, 3, hh, mm, 0).unwrap().timestamp_millis() as u64;
+        h.cfg.features.kegel = vec!["10:30".into(), "bad".into()];
+        h.cfg.features.kegel_reps = 5;
+        h.apply(&ev("claude-code", "a", EventKind::TurnStart, at(10, 0)), at(10, 0));
+        let views = h.pets();
+        let run = |ts: u64| {
+            let mut out = vec![];
+            World::kegel_due(ts, &views, &h, &db, &mut out);
+            msgs(&out, "pet.script")
+        };
+        assert!(run(at(10, 29)).is_empty(), "too early");
+        let m = run(at(10, 45));
+        assert_eq!(m.len(), 1, "late but within the hour");
+        assert_eq!(m[0]["action"], "kegel");
+        assert_eq!(m[0]["ms"], 3000 + 5 * 6000);
+        assert!(run(at(10, 46)).is_empty(), "once a day");
+        assert_eq!(parse_hm("9:05"), Some(545));
+        assert_eq!(parse_hm("24:00"), None);
     }
 
     #[test]

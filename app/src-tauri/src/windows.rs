@@ -276,6 +276,11 @@ pub fn open_shop(h: &AppHandle) {
     open_page(h, "gallery", "gallery.html?tab=shop", petd::i18n::t("宠物图鉴 · Familiar", "Gallery · Familiar"), 880.0, 680.0);
 }
 
+/// The gallery on its reminders tab.
+pub fn open_reminders(h: &AppHandle) {
+    open_page(h, "gallery", "gallery.html?tab=health", petd::i18n::t("宠物图鉴 · Familiar", "Gallery · Familiar"), 880.0, 680.0);
+}
+
 pub fn open_welcome(h: &AppHandle) {
     open_page(h, "welcome", "welcome.html", petd::i18n::t("欢迎使用 Familiar", "Welcome to Familiar"), 760.0, 560.0);
 }

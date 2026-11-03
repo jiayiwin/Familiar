@@ -87,11 +87,15 @@ pub struct Features {
     pub water: bool,
     /// 4-7-8 breathing when more than 6 waits pile up in 10 minutes.
     pub breathe: bool,
+    /// Daily kegel reminders at these local times ("HH:MM"); empty = off.
+    pub kegel: Vec<String>,
+    /// Reps per kegel set: squeeze 3 s, relax 3 s.
+    pub kegel_reps: u32,
 }
 
 impl Default for Features {
     fn default() -> Self {
-        Features { focus_mode: false, sounds: true, arena: true, size: "m".into(), water: false, breathe: false }
+        Features { focus_mode: false, sounds: true, arena: true, size: "m".into(), water: false, breathe: false, kegel: vec![], kegel_reps: 10 }
     }
 }
 
@@ -265,6 +269,8 @@ features:
   size: m                # 宠物大小 / pet size: s | m | l
   water: false           # 每小时空闲时提醒喝水 / hourly water reminder when idle
   breathe: false         # 10 分钟内等你超过 6 次时，一起做 30 秒深呼吸 / 30s breathing when you are waited on 6+ times in 10 min
+  kegel: []              # 每天几点提醒提肛，如 ["10:30", "15:30"] / daily kegel reminders, e.g. ["10:30", "15:30"]
+  kegel_reps: 10         # 每次做几组（收紧 3 秒、放松 3 秒）/ reps per set (squeeze 3s, relax 3s)
 
 # 开会共享屏幕时隐藏宠物。内置名单认不出你的会议软件时， / Pets hide while you share your screen in a meeting.
 # 在这里加"正在共享"工具条的窗口标题或类名关键词 / If your meeting app is not recognized, add words from its
