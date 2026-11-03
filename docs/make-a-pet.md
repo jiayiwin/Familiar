@@ -18,6 +18,7 @@ Not happy? Click **Cancel** or **Another picture**; nothing gets installed.
 
 | Option | What it does |
 |---|---|
+| Style | **Big-head chibi**: bigger head, shorter body, and the head wobbles like a bobblehead; **As is**: the original proportions. Photos and posters start as big-head chibi, drawings as is; switch any time and the preview updates |
 | Name | Required; shown in the gallery and on the card |
 | English name | Optional; used when the UI is in English |
 | Size | Small / Medium / Large, the pet's default size on the desktop |

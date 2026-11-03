@@ -5,7 +5,7 @@
 
 export class CutoutError extends Error {}
 
-const MAX_SIDE = 720;
+const MAX_SIDE = 1024;
 
 /** How the character was separated from the background. */
 export type CutMethod = "alpha" | "flat" | "ai";
@@ -80,13 +80,8 @@ async function segment(cv: HTMLCanvasElement): Promise<Uint8ClampedArray> {
   const raw = out[s.outputNames[0]].data as Float32Array;
   let lo = Infinity, hi = -Infinity;
   for (let i = 0; i < SEG * SEG; i++) { if (raw[i] < lo) lo = raw[i]; if (raw[i] > hi) hi = raw[i]; }
-  // Normalise, then a soft threshold that drops the faint haze around the subject.
   const mask = sg.createImageData(SEG, SEG);
-  for (let i = 0; i < SEG * SEG; i++) {
-    const v = (raw[i] - lo) / Math.max(hi - lo, 1e-6);
-    const a = Math.min(1, Math.max(0, (v - 0.15) / 0.5));
-    mask.data[i * 4 + 3] = Math.round(a * a * (3 - 2 * a) * 255);
-  }
+  for (let i = 0; i < SEG * SEG; i++) mask.data[i * 4 + 3] = Math.round(((raw[i] - lo) / Math.max(hi - lo, 1e-6)) * 255);
   sg.putImageData(mask, 0, 0);
   const big = document.createElement("canvas");
   big.width = cv.width; big.height = cv.height;
@@ -95,7 +90,11 @@ async function segment(cv: HTMLCanvasElement): Promise<Uint8ClampedArray> {
   bg.drawImage(small, 0, 0, cv.width, cv.height);
   const up = bg.getImageData(0, 0, cv.width, cv.height).data;
   const res = new Uint8ClampedArray(cv.width * cv.height);
-  for (let i = 0; i < res.length; i++) res[i] = up[i * 4 + 3];
+  // A narrow soft threshold at full resolution: crisp edges, no haze.
+  for (let i = 0; i < res.length; i++) {
+    const a = Math.min(1, Math.max(0, (up[i * 4 + 3] / 255 - 0.28) / 0.3));
+    res[i] = Math.round(a * a * (3 - 2 * a) * 255);
+  }
   return res;
 }
 
@@ -191,12 +190,12 @@ export const PLAN: Record<string, [number, number, boolean]> = {
 };
 
 type Fx = "dots" | "spark" | "bang" | "sweat" | "zzz" | "hearts" | "vein" | "stars" | "confetti" | null;
-interface Pose { sx: number; sy: number; rot: number; dx: number; lift: number; dark: number; fx: Fx; k: number }
+interface Pose { sx: number; sy: number; rot: number; dx: number; lift: number; dark: number; fx: Fx; k: number; bob: number }
 const TAU = Math.PI * 2;
 
 function pose(action: string, i: number, n: number): Pose {
   const p = i / n, s = Math.sin(TAU * p);
-  const P: Pose = { sx: 1, sy: 1, rot: 0, dx: 0, lift: 0, dark: 0, fx: null, k: p };
+  const P: Pose = { sx: 1, sy: 1, rot: 0, dx: 0, lift: 0, dark: 0, fx: null, k: p, bob: 0 };
   const set = (o: Partial<Pose>) => Object.assign(P, o);
   switch (action) {
     case "idle": set({ sy: 1 + 0.03 * s, sx: 1 - 0.015 * s }); break;
@@ -221,6 +220,15 @@ function pose(action: string, i: number, n: number): Pose {
     case "cheer": { const h = Math.abs(s); set({ lift: 0.08 * h, sy: 1 + 0.04 * h - 0.04 * (1 - h), sx: 1 - 0.02 * h + 0.03 * (1 - h), rot: 4 * Math.sin(2 * TAU * p), fx: "confetti" }); break; }
     case "sulk": set({ sy: 0.95, rot: -4 + 1.5 * s, dark: 0.08 }); break;
   }
+  // Head wobble (degrees), used only when the head is a separate part.
+  const s2 = Math.sin(2 * TAU * p);
+  const BOB: Record<string, number> = {
+    idle: 3 * Math.sin(TAU * p - 0.8), thinking: 7 * s, tool: 4 * s2, attention: 7 * s2,
+    done: [0, 0, -6, -4, 0, 4, 6, 0, -3, 0][i] ?? 0, error: -8 + 2 * s2, sleep: -14 + 2 * s, wake: -14 * (1 - (i + 1) / n),
+    squish: [0, 0, 4, -2][i] ?? 0, petted: 8 * s, annoyed: [6, -6, 4, 0][i] ?? 0, walk: 6 * Math.sin(TAU * p + 0.5),
+    fall: i ? -6 : 6, dizzy: 15 * s, cheer: 7 * s2, sulk: -9 + 2 * s,
+  };
+  P.bob = BOB[action] ?? 0;
   return P;
 }
 
@@ -318,12 +326,57 @@ function drawFx(g: CanvasRenderingContext2D, P: Pose, hx: number, top: number, h
   g.restore();
 }
 
+// ---------------------------------------------------------------- big-head style
+
+/** A big-head version of a cut-out; rows above `neck` wobble as the head. */
+export interface Parts { sprite: HTMLCanvasElement; neck: number }
+
+const smooth = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+/**
+ * Big head, short body, without cutting anything: every row is scaled
+ * smoothly, large near the top (head) and squat lower down (body).
+ */
+export function chibify(sp: HTMLCanvasElement): Parts {
+  const W = sp.width, H = sp.height;
+  const aspect = H / W;
+  // Where the head roughly ends, and how strong the effect is, by shape:
+  // tall full figures get the full treatment, busts and portraits a light one.
+  const [hb, A, B, HX] = aspect >= 1.8 ? [0.2, 1.7, 0.55, 0.88] : aspect >= 1.3 ? [0.3, 1.6, 0.62, 0.9] : [0.55, 1.18, 0.85, 1];
+  const scaleAt = (y: number) => B + (A - B) * (1 - smooth(hb - 0.06, hb + 0.1, y / H));
+  // Head centre: centre of mass of the opaque pixels in the head band.
+  const d = sp.getContext("2d", { willReadFrequently: true })!.getImageData(0, 0, W, H).data;
+  let sx = 0, cnt = 0;
+  for (let y = 0; y < Math.round(H * hb); y++) for (let x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3] > 128) { sx += x; cnt++; }
+  const cx = cnt ? sx / cnt : W / 2;
+  // Output row of every source row.
+  const outY = new Float32Array(H + 1);
+  for (let y = 0; y < H; y++) outY[y + 1] = outY[y] + scaleAt(y + 0.5);
+  const outH = Math.ceil(outY[H]);
+  const outW = Math.ceil(W * A);
+  const c = document.createElement("canvas");
+  c.width = outW; c.height = outH;
+  const g = c.getContext("2d")!;
+  g.imageSmoothingQuality = "high";
+  for (let y = 0; y < H; y++) {
+    const sc = scaleAt(y + 0.5), hsc = sc >= 1 ? sc : sc + (HX - sc) * 0.6; // body: narrower, but not as squashed as it is short
+    const y0 = outY[y], h = Math.max(1, outY[y + 1] - y0 + 0.6);
+    g.drawImage(sp, 0, y, W, 1, outW / 2 - cx * hsc, y0, W * hsc, h);
+  }
+  return { sprite: c, neck: outY[Math.round(H * (hb + 0.04))] };
+}
+
 // ---------------------------------------------------------------- render
 
 export interface Built { strips: Record<string, HTMLCanvasElement>; size: number }
 
-/** Frames for every action in PLAN, as one horizontal strip per action. */
-export function render(sprite: HTMLCanvasElement, size = 128): Built {
+/**
+ * Frames for every action in PLAN, as one horizontal strip per action.
+ * `input` is a plain cut-out, or body + head parts for the big-head style.
+ */
+export function render(input: HTMLCanvasElement | Parts, size = 256): Built {
+  const parts = input instanceof HTMLCanvasElement ? null : input;
+  const sprite = parts ? parts.sprite : (input as HTMLCanvasElement);
   const M = size * 4;
   const k = Math.min((0.76 * M) / sprite.height, (0.8 * M) / sprite.width);
   const sw = sprite.width * k, sh = sprite.height * k;
@@ -345,7 +398,18 @@ export function render(sprite: HTMLCanvasElement, size = 128): Built {
       g.imageSmoothingQuality = "high";
       g.filter = P.dark ? `brightness(${1 - P.dark})` : "none";
       g.translate(tx, ty); g.rotate((P.rot * Math.PI) / 180); g.scale(P.sx, P.sy);
-      g.drawImage(sprite, -sw / 2, -sh, sw, sh);
+      if (parts && P.bob) {
+        // Bobblehead: rows above the neck lean sideways, more towards the top.
+        const lean = Math.tan((P.bob * Math.PI) / 180) * parts.neck;
+        const step = 2;
+        for (let y = 0; y < sprite.height; y += step) {
+          const t = Math.max(0, (parts.neck - y) / parts.neck);
+          const off = lean * Math.pow(t, 1.4) * k;
+          g.drawImage(sprite, 0, y, sprite.width, step, -sw / 2 + off, -sh + y * k, sw, step * k + 0.5);
+        }
+      } else {
+        g.drawImage(sprite, -sw / 2, -sh, sw, sh);
+      }
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.filter = "none";
       if (P.fx) drawFx(g, P, tx, ty - sh * P.sy, sw * P.sx, M);
@@ -380,7 +444,7 @@ export function manifest(b: Built, m: PackMeta, sounds: string[]): object {
   const out: Record<string, unknown> = {
     schema: 1, id: m.id, name: m.name, version: "0.1.0", author: "Familiar",
     description: "用一张图片在图鉴里做的宠物", description_en: "Made from one picture in the gallery",
-    frame: { w: b.size, h: b.size, scale: m.scale }, actions, bubbles: m.bubbles,
+    frame: { w: b.size, h: b.size, scale: Math.round(m.scale * (150 / b.size) * 1000) / 1000 }, actions, bubbles: m.bubbles,
     sounds: { squish: sounds.filter((s) => s.startsWith("squish")).map((s) => `sounds/${s}`) },
     tags: ["自制"],
   };

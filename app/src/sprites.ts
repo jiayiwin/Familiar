@@ -103,7 +103,11 @@ export class Sprites {
     const dw = f.w * scale;
     const dh = f.h * scale;
     c.save();
-    c.imageSmoothingEnabled = false;
+    // Pixel art (small frames) stays crisp and blocky; drawn or photo-like
+    // packs (big frames) are scaled smoothly, or they look jagged and blurry.
+    const smooth = f.w >= 96 || f.h >= 96;
+    c.imageSmoothingEnabled = smooth;
+    if (smooth) c.imageSmoothingQuality = "high";
     c.globalAlpha = alpha;
     if (hue) c.filter = `hue-rotate(${hue}deg)`;
     c.drawImage(src, idx * f.w, 0, f.w, f.h, Math.round(cx - dw / 2), Math.round(bottom - dh), dw, dh);

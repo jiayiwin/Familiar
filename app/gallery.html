@@ -77,7 +77,9 @@
       #mk-preview { width: 256px; height: 256px; border-radius: 12px; border: 1px solid var(--line);
         background: repeating-conic-gradient(var(--chip) 0 25%, var(--panel) 0 50%) 0 0 / 20px 20px; }
       #mk-acts { justify-content: center; }
-      #mk-acts[hidden], #mk-preview[hidden], .mkdrop[hidden] { display: none; }
+      #mk-acts[hidden], #mk-preview[hidden], .mkdrop[hidden], #mk-style[hidden] { display: none; }
+      #mk-style .chip { font-size: 13px; color: var(--ink); }
+      #mk-style .chip.on { color: var(--accent); }
       #mk-acts .chip { font-size: 12px; }
       .mkmsg { font-size: 12px; color: var(--muted); }
       .mkmsg.err { color: var(--red); }
@@ -110,6 +112,7 @@
             <div id="mk-acts" class="chips" hidden></div>
           </div>
           <div class="mright">
+            <label id="mk-style" hidden><span data-en="Style">风格</span><span class="chips"><span class="chip" data-s="chibi" data-en="Big-head chibi">大头 Q 版</span><span class="chip" data-s="plain" data-en="As is">原样</span></span></label>
             <label><span data-en="Name">名字</span><input id="mk-name" maxlength="24" placeholder="比如：小灵" data-en-placeholder="e.g. Ling" /></label>
             <label><span data-en="English name (optional)">英文名（可选）</span><input id="mk-name-en" maxlength="24" placeholder="Ling" /></label>
             <label><span data-en="Size">大小</span><select id="mk-scale"><option value="0.8" data-en="Small">小</option><option value="1" selected data-en="Medium">中</option><option value="1.25" data-en="Large">大</option></select></label>

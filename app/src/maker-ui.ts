@@ -2,7 +2,7 @@
 // optionally give it lines, watch the preview, then install (or cancel).
 
 import { fileUrl, inTauri, type Conn } from "./api";
-import { canvasPng, CutoutError, cutout, manifest, PLAN, render, type Built } from "./petmaker";
+import { canvasPng, chibify, CutoutError, cutout, manifest, PLAN, render, type Built } from "./petmaker";
 import { EN, t as tr } from "./i18n";
 
 type Outcome =
@@ -55,6 +55,18 @@ export interface MakerDeps {
 export function setupMaker(deps: MakerDeps): { open: (path?: string) => void } {
   let built: Built | null = null;
   let bitmap: ImageBitmap | null = null;
+  let cut: HTMLCanvasElement | null = null; // the cut-out, before styling
+  let style: "chibi" | "plain" = "plain";
+  const rebuild = () => {
+    if (!cut) return;
+    built = render(style === "chibi" ? chibify(cut) : cut);
+    document.querySelectorAll<HTMLElement>("#mk-style .chip").forEach((c) => c.classList.toggle("on", c.dataset.s === style));
+  };
+  $("mk-style").onclick = (e) => {
+    const st = (e.target as HTMLElement).dataset.s as typeof style | undefined;
+    if (!st || st === style || !cut) return;
+    style = st; rebuild(); shownAt = performance.now();
+  };
   let act = "idle";
   let auto = true;
   let shownAt = performance.now();
@@ -100,6 +112,7 @@ export function setupMaker(deps: MakerDeps): { open: (path?: string) => void } {
     prev.hidden = false;
     $("mk-acts").hidden = false;
     $("mk-change").hidden = false;
+    $("mk-style").hidden = false;
     act = "idle"; auto = true; shownAt = performance.now();
     update();
   };
@@ -116,13 +129,16 @@ export function setupMaker(deps: MakerDeps): { open: (path?: string) => void } {
     msg(tr("正在抠图…", "Cutting out the character…"));
     try {
       const { canvas, method } = await cutout(bitmap);
-      built = render(canvas);
+      cut = canvas;
+      // Photo-like pictures look best as a big-head chibi; drawings stay as they are.
+      style = method === "ai" ? "chibi" : "plain";
+      rebuild();
       if (method === "ai") {
         msg(tr(
           `背景比较复杂，已自动抠出人物。效果不理想？<br><button id="mk-sticker">保留背景，做成贴纸</button>`,
           `The background is busy, so the character was cut out automatically. Not happy with it?<br><button id="mk-sticker">Keep the background as a sticker</button>`,
         ));
-        $("mk-sticker").onclick = () => { built = render(sticker(bitmap!)); msg(tr("已做成贴纸。", "Made into a sticker.")); showBuilt(); };
+        $("mk-sticker").onclick = () => { cut = sticker(bitmap!); style = "plain"; rebuild(); msg(tr("已做成贴纸。", "Made into a sticker.")); showBuilt(); };
       } else {
         msg(tr("预览会自动轮播所有动作，也可以点下面的动作单独看。", "The preview cycles through every action; click one to see it alone."));
       }
@@ -133,7 +149,7 @@ export function setupMaker(deps: MakerDeps): { open: (path?: string) => void } {
       } else {
         msg(tr(`自动抠图失败：${esc(String(e))}<br><button id="mk-sticker">直接用整张图，做成贴纸</button>`, `Automatic cut-out failed: ${esc(String(e))}<br><button id="mk-sticker">Use the whole picture as a sticker</button>`), "err");
       }
-      $("mk-sticker").onclick = () => { built = render(sticker(bitmap!)); msg(""); showBuilt(); };
+      $("mk-sticker").onclick = () => { cut = sticker(bitmap!); style = "plain"; rebuild(); msg(""); showBuilt(); };
       return;
     } finally {
       busy = false; update();
@@ -208,8 +224,8 @@ export function setupMaker(deps: MakerDeps): { open: (path?: string) => void } {
   };
 
   const reset = () => {
-    built = null; bitmap = null;
-    $("mk-drop").hidden = false; prev.hidden = true; $("mk-acts").hidden = true; $("mk-change").hidden = true;
+    built = null; bitmap = null; cut = null;
+    $("mk-drop").hidden = false; prev.hidden = true; $("mk-acts").hidden = true; $("mk-change").hidden = true; $("mk-style").hidden = true;
     for (const id of ["mk-name", "mk-name-en", "mk-b-attention", "mk-b-done", "mk-b-error"]) $<HTMLInputElement>(id).value = "";
     $<HTMLSelectElement>("mk-scale").value = "1";
     msg("");
