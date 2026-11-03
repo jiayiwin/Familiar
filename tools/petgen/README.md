@@ -4,7 +4,7 @@
 
 Turn one character picture into a Familiar pet pack. Two ways:
 
-- **One picture, no AI** (`--image`): the character is cut out and every action is animated from it: squash, tilt, hop, plus small drawn effects. Takes a second. Most people should use the gallery's **Make a pet from a picture…** button, which does the same inside the app ([tutorial](../../docs/make-a-pet.md)); this is the command-line version.
+- **One picture** (`--image`): the character is cut out (busy backgrounds need `pip install onnxruntime`) and every action is animated from it: squash, tilt, hop, plus small drawn effects. Takes a second. Most people should use the gallery's **Make a pet from a picture…** button, which does the same inside the app ([tutorial](../../docs/make-a-pet.md)); this is the command-line version.
   ```bash
   python tools/petgen/build_pack.py work/xiaoling --image tools/petgen/examples/xiaoling.jpg --id xiaoling --name 小灵 --name-en Ling
   ```
@@ -60,7 +60,7 @@ Sounds reuse the built-in pets' chimes, which are synthesized in code.
 
 把一张角色图做成 Familiar 宠物包，两种方式：
 
-- **一张图、不用 AI**（`--image`）：自动抠出人物，用压扁、歪头、蹦跳加小特效做出全部动作，一秒完成。普通用户直接用图鉴里的 **用图片做宠物…** 按钮就行，效果一样（[教程](../../docs/make-a-pet.zh-CN.md)）；这里是命令行版本。
+- **一张图**（`--image`）：自动抠出人物（杂乱背景需要 `pip install onnxruntime`），用压扁、歪头、蹦跳加小特效做出全部动作，一秒完成。普通用户直接用图鉴里的 **用图片做宠物…** 按钮就行，效果一样（[教程](../../docs/make-a-pet.zh-CN.md)）；这里是命令行版本。
 - **AI 视频**（下文）：先生成 Q 版立绘，再用图生视频做出每个动作，最后自动抽帧、抠绿幕、打包。
 
 生成环节**用你自己的模型**：能参考图片出图的图片模型、能以首帧生成视频的图生视频模型都可以。这个目录只放通用的部分：[`build_pack.py`](build_pack.py) 和好用的提示词（[`prompts.md`](prompts.md)）。这些都不在 App 里运行，产物是标准宠物包，用图鉴导入。

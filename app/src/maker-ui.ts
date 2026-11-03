@@ -112,22 +112,31 @@ export function setupMaker(deps: MakerDeps): { open: (path?: string) => void } {
       msg(tr("这张图片打不开，换一张 PNG 或 JPG 试试。", "Couldn't open that picture. Try a PNG or JPG."), "err");
       return;
     }
+    busy = true; update();
+    msg(tr("正在抠图…", "Cutting out the character…"));
     try {
-      built = render(cutout(bitmap));
-      msg(tr("预览会自动轮播所有动作，也可以点下面的动作单独看。", "The preview cycles through every action; click one to see it alone."));
+      const { canvas, method } = await cutout(bitmap);
+      built = render(canvas);
+      if (method === "ai") {
+        msg(tr(
+          `背景比较复杂，已自动抠出人物。效果不理想？<br><button id="mk-sticker">保留背景，做成贴纸</button>`,
+          `The background is busy, so the character was cut out automatically. Not happy with it?<br><button id="mk-sticker">Keep the background as a sticker</button>`,
+        ));
+        $("mk-sticker").onclick = () => { built = render(sticker(bitmap!)); msg(tr("已做成贴纸。", "Made into a sticker.")); showBuilt(); };
+      } else {
+        msg(tr("预览会自动轮播所有动作，也可以点下面的动作单独看。", "The preview cycles through every action; click one to see it alone."));
+      }
     } catch (e) {
       built = null;
-      if (e instanceof CutoutError && e.message === "busy") {
-        msg(tr(
-          `背景不是纯色，抠不干净。<br>可以换一张<b>透明或纯色背景</b>的图；或者先用 Windows「画图」/「照片」的<b>删除背景</b>、Mac 访达右键的<b>移除背景</b>处理一下。<br><button id="mk-sticker">保留背景，做成贴纸</button>`,
-          `The background isn't one flat colour, so it can't be cut out cleanly.<br>Use a picture with a <b>transparent or plain</b> background, or remove it first (Paint or Photos on Windows: <b>Remove background</b>; Finder on a Mac: <b>Remove Background</b>).<br><button id="mk-sticker">Keep the background as a sticker</button>`,
-        ), "err");
-        $("mk-sticker").onclick = () => { built = render(sticker(bitmap!)); msg(""); showBuilt(); };
+      if (e instanceof CutoutError) {
+        msg(tr(`图片里没找到人物。<br><button id="mk-sticker">直接用整张图，做成贴纸</button>`, `Couldn't find a character in the picture.<br><button id="mk-sticker">Use the whole picture as a sticker</button>`), "err");
       } else {
-        msg(tr("图片里没找到人物。", "Couldn't find a character in the picture."), "err");
+        msg(tr(`自动抠图失败：${esc(String(e))}<br><button id="mk-sticker">直接用整张图，做成贴纸</button>`, `Automatic cut-out failed: ${esc(String(e))}<br><button id="mk-sticker">Use the whole picture as a sticker</button>`), "err");
       }
-      update();
+      $("mk-sticker").onclick = () => { built = render(sticker(bitmap!)); msg(""); showBuilt(); };
       return;
+    } finally {
+      busy = false; update();
     }
     showBuilt();
   };

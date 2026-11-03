@@ -860,7 +860,7 @@ checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
 
 [[package]]
 name = "familiar"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "familiar-petd",
  "serde",
@@ -876,7 +876,7 @@ dependencies = [
 
 [[package]]
 name = "familiar-emit"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -886,7 +886,7 @@ dependencies = [
 
 [[package]]
 name = "familiar-petd"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "axum",
  "chrono",

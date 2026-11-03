@@ -42,12 +42,38 @@ def _connected_to_border(cand: np.ndarray) -> np.ndarray:
     return seed
 
 
+MODEL = Path(__file__).resolve().parents[2] / "app" / "public" / "models" / "u2netp.onnx"
+
+
+def _segment(rgb: np.ndarray) -> np.ndarray:
+    """Foreground alpha (0..1) from U-2-Net (u2netp, Apache-2.0) via onnxruntime."""
+    try:
+        import onnxruntime as ort
+    except ImportError:
+        raise CutoutError(
+            "The background is busy. Install onnxruntime to cut it out automatically (pip install onnxruntime), "
+            "or use the gallery's Make a pet from a picture button.\n"
+            "背景比较复杂。安装 onnxruntime 后可以自动抠图（pip install onnxruntime），或者直接用图鉴里的「用图片做宠物」。"
+        )
+    h, w = rgb.shape[:2]
+    small = np.asarray(Image.fromarray((rgb * 255).astype(np.uint8)).resize((320, 320), Image.LANCZOS)).astype(np.float32)
+    x = small / max(small.max(), 1.0)
+    x = (x - np.array([0.485, 0.456, 0.406])) / np.array([0.229, 0.224, 0.225])
+    sess = ort.InferenceSession(str(MODEL), providers=["CPUExecutionProvider"])
+    out = sess.run(None, {sess.get_inputs()[0].name: x.transpose(2, 0, 1)[None].astype(np.float32)})[0][0, 0]
+    v = (out - out.min()) / max(float(out.max() - out.min()), 1e-6)
+    a = np.clip((v - 0.15) / 0.5, 0, 1)
+    a = a * a * (3 - 2 * a)
+    return np.asarray(Image.fromarray((a * 255).astype(np.uint8)).resize((w, h), Image.LANCZOS)).astype(np.float32) / 255.0
+
+
 def cutout(path: Path, max_side: int = 720) -> np.ndarray:
     """The character as float RGBA (0..1), trimmed to its bounding box.
 
-    A PNG with transparency is used as is. Otherwise the background must be
-    one flat colour (green screen, white, ...): it is keyed out from the
-    edges inwards, so the same colour inside the character is kept.
+    A PNG with transparency is used as is. A flat one-colour background
+    (green screen, white, ...) is keyed out from the edges inwards, so the
+    same colour inside the character is kept. Anything else goes through a
+    small segmentation model (needs onnxruntime).
     """
     im = ImageOps.exif_transpose(Image.open(path)).convert("RGBA")
     im.thumbnail((max_side, max_side), Image.LANCZOS)
@@ -63,11 +89,9 @@ def cutout(path: Path, max_side: int = 720) -> np.ndarray:
         bg = np.median(border, axis=0)
         spread = np.percentile(np.linalg.norm(border - bg, axis=1), 85)
         if spread > 0.12:
-            raise CutoutError(
-                "The background is not one flat colour. Remove it first (Windows Paint / Photos, macOS Preview, "
-                "remove.bg, ...) and save a transparent PNG, or use a picture on a plain background.\n"
-                "背景不是纯色。请先去掉背景（Windows 画图/照片、macOS 预览、remove.bg 等）另存为透明 PNG，或换一张纯色背景的图。"
-            )
+            # Busy background: the same local segmentation model as the app.
+            rgba = np.dstack([rgb, _segment(rgb)])
+            return _trim(rgba)
         if bg[1] - max(bg[0], bg[2]) > 0.3:
             # Green screen: key by "greenness" everywhere, so gaps between
             # arms, hair and body go too (same keyer as the video route).

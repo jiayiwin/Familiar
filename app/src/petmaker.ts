@@ -7,8 +7,15 @@ export class CutoutError extends Error {}
 
 const MAX_SIDE = 720;
 
-/** The character cut out of `img`, trimmed to its bounding box. */
-export function cutout(img: CanvasImageSource & { width: number; height: number }): HTMLCanvasElement {
+/** How the character was separated from the background. */
+export type CutMethod = "alpha" | "flat" | "ai";
+
+/**
+ * The character cut out of `img`, trimmed to its bounding box.
+ * Transparent pictures are used as they are, a plain one-colour background
+ * is keyed out, anything else goes through a small local segmentation model.
+ */
+export async function cutout(img: CanvasImageSource & { width: number; height: number }): Promise<{ canvas: HTMLCanvasElement; method: CutMethod }> {
   const k = Math.min(1, MAX_SIDE / Math.max(img.width, img.height));
   const w = Math.max(1, Math.round(img.width * k)), h = Math.max(1, Math.round(img.height * k));
   const cv = document.createElement("canvas");
@@ -22,13 +29,78 @@ export function cutout(img: CanvasImageSource & { width: number; height: number 
 
   let transparent = 0;
   for (let i = 0; i < n; i++) if (d[i * 4 + 3] < 230) transparent++;
-  if (transparent / n <= 0.02) keyBackground(d, w, h);
-  else for (let i = 0; i < n; i++) if (d[i * 4 + 3] < 10) d[i * 4 + 3] = 0;
+  let method: CutMethod = "alpha";
+  if (transparent / n > 0.02) {
+    for (let i = 0; i < n; i++) if (d[i * 4 + 3] < 10) d[i * 4 + 3] = 0;
+  } else if (keyBackground(d, w, h)) {
+    method = "flat";
+  } else {
+    method = "ai";
+    const m = await segment(cv);
+    for (let i = 0; i < n; i++) d[i * 4 + 3] = m[i];
+  }
   g.putImageData(id, 0, 0);
-  return trim(cv, d, w, h);
+  return { canvas: trim(cv, d, w, h), method };
 }
 
-function keyBackground(d: Uint8ClampedArray, w: number, h: number) {
+// ---------------------------------------------------------------- AI cut-out
+
+// U-2-Net (u2netp, Apache-2.0, public/models), run locally with
+// onnxruntime-web. Loaded on first use only.
+const SEG = 320;
+let session: Promise<import("onnxruntime-web").InferenceSession> | null = null;
+async function seg() {
+  if (!session) {
+    session = (async () => {
+      const ort = await import("onnxruntime-web/wasm");
+      ort.env.wasm.numThreads = 1; // no cross-origin isolation, so no threads
+      return ort.InferenceSession.create("/models/u2netp.onnx", { executionProviders: ["wasm"] });
+    })();
+    session.catch(() => (session = null));
+  }
+  return session;
+}
+
+/** Foreground alpha (0..255) for every pixel of `cv`. */
+async function segment(cv: HTMLCanvasElement): Promise<Uint8ClampedArray> {
+  const ort = await import("onnxruntime-web/wasm");
+  const s = await seg();
+  const small = document.createElement("canvas");
+  small.width = small.height = SEG;
+  const sg = small.getContext("2d", { willReadFrequently: true })!;
+  sg.imageSmoothingQuality = "high";
+  sg.drawImage(cv, 0, 0, SEG, SEG);
+  const px = sg.getImageData(0, 0, SEG, SEG).data;
+  let max = 1;
+  for (let i = 0; i < px.length; i++) if (i % 4 !== 3 && px[i] > max) max = px[i];
+  const mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225];
+  const input = new Float32Array(3 * SEG * SEG);
+  for (let i = 0; i < SEG * SEG; i++) for (let c = 0; c < 3; c++) input[c * SEG * SEG + i] = (px[i * 4 + c] / max - mean[c]) / std[c];
+  const out = await s.run({ [s.inputNames[0]]: new ort.Tensor("float32", input, [1, 3, SEG, SEG]) });
+  const raw = out[s.outputNames[0]].data as Float32Array;
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < SEG * SEG; i++) { if (raw[i] < lo) lo = raw[i]; if (raw[i] > hi) hi = raw[i]; }
+  // Normalise, then a soft threshold that drops the faint haze around the subject.
+  const mask = sg.createImageData(SEG, SEG);
+  for (let i = 0; i < SEG * SEG; i++) {
+    const v = (raw[i] - lo) / Math.max(hi - lo, 1e-6);
+    const a = Math.min(1, Math.max(0, (v - 0.15) / 0.5));
+    mask.data[i * 4 + 3] = Math.round(a * a * (3 - 2 * a) * 255);
+  }
+  sg.putImageData(mask, 0, 0);
+  const big = document.createElement("canvas");
+  big.width = cv.width; big.height = cv.height;
+  const bg = big.getContext("2d", { willReadFrequently: true })!;
+  bg.imageSmoothingQuality = "high";
+  bg.drawImage(small, 0, 0, cv.width, cv.height);
+  const up = bg.getImageData(0, 0, cv.width, cv.height).data;
+  const res = new Uint8ClampedArray(cv.width * cv.height);
+  for (let i = 0; i < res.length; i++) res[i] = up[i * 4 + 3];
+  return res;
+}
+
+/** Key out a plain one-colour background. False when the background is busy. */
+function keyBackground(d: Uint8ClampedArray, w: number, h: number): boolean {
   // Background colour = median of a thin border.
   const border: number[][] = [];
   const add = (x: number, y: number) => { const i = (y * w + x) * 4; border.push([d[i] / 255, d[i + 1] / 255, d[i + 2] / 255]); };
@@ -39,7 +111,7 @@ function keyBackground(d: Uint8ClampedArray, w: number, h: number) {
   const med = [0, 1, 2].map((c) => { const v = border.map((p) => p[c]).sort((a, b) => a - b); return v[v.length >> 1]; });
   const dist = (r: number, g: number, b: number) => Math.hypot(r - med[0], g - med[1], b - med[2]);
   const spread = border.map((p) => dist(p[0], p[1], p[2])).sort((a, b) => a - b)[Math.floor(border.length * 0.85)];
-  if (spread > 0.12) throw new CutoutError("busy");
+  if (spread > 0.12) return false;
   const n = w * h;
 
   if (med[1] - Math.max(med[0], med[2]) > 0.3) {
@@ -51,7 +123,7 @@ function keyBackground(d: Uint8ClampedArray, w: number, h: number) {
       if (green > 0) d[i * 4 + 1] = Math.round((Math.max(r, b) + Math.min(green, 0.06)) * 255);
       d[i * 4 + 3] = a < 0.08 ? 0 : Math.round(a * 255);
     }
-    return;
+    return true;
   }
 
   // Plain colour: flood fill from the edges so the same colour inside the
@@ -93,6 +165,7 @@ function keyBackground(d: Uint8ClampedArray, w: number, h: number) {
     }
     d[i * 4 + 3] = Math.round(a * 255);
   }
+  return true;
 }
 
 function trim(cv: HTMLCanvasElement, d: Uint8ClampedArray, w: number, h: number): HTMLCanvasElement {

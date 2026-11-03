@@ -2,7 +2,7 @@
 
 [中文](make-a-pet.zh-CN.md)
 
-One character picture is enough for a Familiar pet that breathes, tilts its head while thinking, hops up when your agent needs you, throws confetti when a turn is done, sweats on errors, dozes off when idle, and reacts when you drag or pet it. It all happens in the gallery with a few clicks: nothing to install, no AI needed.
+One character picture is enough for a Familiar pet that breathes, tilts its head while thinking, hops up when your agent needs you, throws confetti when a turn is done, sweats on errors, dozes off when idle, and reacts when you drag or pet it. It all happens in the gallery with a few clicks, background removal included: nothing to install.
 
 ![Every action made from one picture](images/make-a-pet-contact.png)
 
@@ -27,11 +27,12 @@ To change it later, make it again with the same name; you'll be asked whether to
 
 ## Which pictures work best
 
-- **Full body, facing the viewer, standing**, filling most of the picture, at least 400 px tall.
-- **A clean background**: a transparent PNG is best; one flat colour (green screen, white, any single colour) works too and is removed automatically.
-- If the background is busy, the app tells you, and you have two options:
-  - Remove the background first and save a PNG: on Windows 11 use **Remove background** in Paint or Photos; on a Mac right-click the file in Finder → **Quick Actions → Remove Background**; on iPhone long-press the subject in Photos to lift it out; or use a site like remove.bg.
-  - Or click **Keep the background as a sticker** to turn the whole picture into a rounded sticker.
+- **Full body, facing the viewer** works best, filling most of the picture, at least 400 px tall. Half-body shots and portraits work too.
+- **Any background**; the app removes it:
+  - a transparent PNG is used as is;
+  - a plain colour (green screen, white, …) is keyed out, which gives the cleanest edges;
+  - a busy background (photos, posters) goes through a small built-in segmentation model. It runs on your computer inside the app; the picture is never uploaded.
+- Not happy with the automatic cut-out? Click **Keep the background as a sticker** to turn the whole picture into a rounded sticker.
 
 ## Better looking: chibi-fy it with AI first
 

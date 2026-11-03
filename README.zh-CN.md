@@ -45,7 +45,7 @@ Familiar 是一个纯本地运行的桌宠系统：把 Claude Code 和 Codex 的
 ### 自定义
 
 - 在图鉴里按阵营或按项目选宠物；收藏、每日轮换、三档大小。
-- **用任意一张图片做宠物**：图鉴里选图或拖图、起名字、预览 16 个动作、点安装，不用 AI，也不用装任何工具（[教程](docs/make-a-pet.zh-CN.md)）。
+- **用任意一张图片做宠物**：图鉴里选图或拖图、起名字、预览 16 个动作、点安装，背景自动去掉，不用装任何工具（[教程](docs/make-a-pet.zh-CN.md)）。
 - 把文件夹或 zip 拖进图鉴、或拖到任意一只宠物身上即可安装宠物包；改了文件自动热加载。
 - 自己做宠物包：一个 `pet.json` 加每个动作一张帧条，最少只要一张 `idle`。
 - 中英文界面（`language: auto | zh | en`）。
@@ -380,7 +380,7 @@ my-dog/
 
 ### 从一张图生成宠物（可选）
 
-最简单的方法在 App 里：图鉴 → **用图片做宠物…**。选一张图或直接拖进来（透明或纯色背景效果最好），起个名字、可选填台词，看一眼 16 个动作的预览，点安装就好。图文教程：[用一张图做你自己的桌宠](docs/make-a-pet.zh-CN.md)。
+最简单的方法在 App 里：图鉴 → **用图片做宠物…**。选一张图或直接拖进来（背景什么样都行，会在本机自动去掉），起个名字、可选填台词，看一眼 16 个动作的预览，点安装就好。图文教程：[用一张图做你自己的桌宠](docs/make-a-pet.zh-CN.md)。
 
 命令行也能做同样的宠物包：`python tools/petgen/build_pack.py <工作目录> --image 图片.png --id my-pet --name 我的宠物`。
 
@@ -497,5 +497,7 @@ Windows Terminal 只能切到窗口，切不到具体标签页。
 ## 许可证
 
 [MIT](LICENSE)。内置宠物（像素猫、像素机器人）及其音效都是仓库里的代码生成的，同样适用 MIT 许可证。
+
+App 自带的第三方组件：[onnxruntime-web](https://github.com/microsoft/onnxruntime)（MIT）和 [U-2-Net](https://github.com/xuebinqin/U-2-Net) 的 u2netp 模型（Apache-2.0，见 [`app/public/models/LICENSE-U2Net.txt`](app/public/models/LICENSE-U2Net.txt)），用于「用图片做宠物」时去掉杂乱背景。
 
 用别人的角色做的宠物包仅限自己使用；分享需要版权方授权。
