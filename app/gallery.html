@@ -60,20 +60,69 @@
       .item.worn { border: 2px solid var(--accent); padding: 9px; }
       .item canvas { display: block; }
       .item small { color: var(--muted); }
+      .modal { position: fixed; inset: 0; background: rgba(30, 20, 14, 0.45); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+      .modal[hidden] { display: none; }
+      .mbox { background: var(--bg); border: 1px solid var(--line); border-radius: 14px; width: min(760px, 100%); max-height: 100%; overflow: auto; padding: 16px 18px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+      .mt { font-size: 16px; color: var(--ink); font-weight: bold; margin: 0 0 12px; }
+      .mrow { display: flex; gap: 18px; flex-wrap: wrap; }
+      .mleft { width: 280px; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+      .mright { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: 8px; }
+      .mright label { display: flex; flex-direction: column; gap: 3px; color: var(--muted); font-size: 12px; }
+      .mright input, .mright select { font-size: 13px; padding: 5px 8px; }
+      .msec { color: var(--ink); font-weight: bold; margin-top: 4px; }
+      .mkdrop { width: 280px; height: 280px; border: 2px dashed var(--line); border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer; text-align: center; padding: 16px; background: var(--panel); }
+      .mkdrop:hover { border-color: var(--accent); }
+      .mkdrop b { font-size: 16px; color: var(--accent); }
+      .mkdrop small { color: var(--muted); }
+      #mk-preview { width: 256px; height: 256px; border-radius: 12px; border: 1px solid var(--line);
+        background: repeating-conic-gradient(var(--chip) 0 25%, var(--panel) 0 50%) 0 0 / 20px 20px; }
+      #mk-acts { justify-content: center; }
+      #mk-acts[hidden], #mk-preview[hidden], .mkdrop[hidden] { display: none; }
+      #mk-acts .chip { font-size: 12px; }
+      .mkmsg { font-size: 12px; color: var(--muted); }
+      .mkmsg.err { color: var(--red); }
+      .mkmsg button { margin-top: 6px; }
+      .mkmsg ul { margin: 4px 0; padding-left: 18px; }
+      .mfoot { display: flex; gap: 8px; margin-top: 14px; align-items: center; }
+      .mfoot .sp { flex: 1; }
     </style>
   </head>
   <body>
     <header>
       <h1 data-en="Pet Gallery">宠物图鉴</h1>
       <div class="actions">
-        <button id="import-dir" class="primary" data-en="Import folder…">导入文件夹…</button>
+        <button id="make-pet" class="primary" data-en="Make a pet from a picture…">用图片做宠物…</button>
+        <button id="import-dir" data-en="Import folder…">导入文件夹…</button>
         <button id="import-zip" data-en="Import zip…">导入 zip…</button>
         <button id="open-dir" class="ghost" data-en="Open pets folder">打开宠物目录</button>
         <button id="open-cfg" class="ghost" data-en="Edit config.yaml">编辑 config.yaml</button>
       </div>
     </header>
     <div id="import-result"></div>
-    <div id="drop" hidden data-en="Drop to import a pet pack (folder or .zip)">松开即可导入宠物包（文件夹或 .zip）</div>
+    <div id="drop" hidden data-en="Drop a picture to make a pet, or a pet pack (folder or .zip) to import it">松开：图片会用来做宠物，文件夹或 .zip 会作为宠物包导入</div>
+    <div id="maker" class="modal" hidden>
+      <div class="mbox">
+        <h2 class="mt" data-en="Make a pet from a picture">用一张图片做宠物</h2>
+        <div class="mrow">
+          <div class="mleft">
+            <div id="mk-drop" class="mkdrop"><b data-en="Choose a picture">选择图片</b><span data-en="or drag one into this window">或者把图片拖进这个窗口</span><small data-en="Full body, facing you, transparent or plain background works best">全身、正面，透明或纯色背景效果最好</small></div>
+            <canvas id="mk-preview" width="256" height="256" hidden></canvas>
+            <div id="mk-acts" class="chips" hidden></div>
+          </div>
+          <div class="mright">
+            <label><span data-en="Name">名字</span><input id="mk-name" maxlength="24" placeholder="比如：小灵" data-en-placeholder="e.g. Ling" /></label>
+            <label><span data-en="English name (optional)">英文名（可选）</span><input id="mk-name-en" maxlength="24" placeholder="Ling" /></label>
+            <label><span data-en="Size">大小</span><select id="mk-scale"><option value="0.8" data-en="Small">小</option><option value="1" selected data-en="Medium">中</option><option value="1.25" data-en="Large">大</option></select></label>
+            <div class="msec" data-en="Lines (optional, separate several with /)">台词（可选，多句用 / 分开）</div>
+            <label><span data-en="When you're needed">需要你确认时</span><input id="mk-b-attention" placeholder="该你啦！/ 过来看看" data-en-placeholder="Your turn! / Come take a look" /></label>
+            <label><span data-en="When done">完成时</span><input id="mk-b-done" placeholder="搞定！/ 收工～" data-en-placeholder="Done! / All wrapped up" /></label>
+            <label><span data-en="On errors">出错时</span><input id="mk-b-error" placeholder="呜，出错了…" data-en-placeholder="Oops, that failed…" /></label>
+            <div id="mk-msg" class="mkmsg"></div>
+          </div>
+        </div>
+        <div class="mfoot"><button id="mk-change" class="ghost" hidden data-en="Another picture">换一张图</button><span class="sp"></span><button id="mk-cancel" data-en="Cancel">取消</button><button id="mk-install" class="primary" disabled data-en="Install">安装</button></div>
+      </div>
+    </div>
     <div class="tabs" id="tabs">
       <button data-tab="pets" class="on" data-en="Pets">宠物</button>
       <button data-tab="fish" data-en="Fish">鱼类图鉴</button>

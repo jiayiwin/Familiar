@@ -126,6 +126,32 @@ fn import_inner(sh: &Shared, src: &Path, overwrite: bool, tmp: &Path) -> Result<
     Ok(Outcome::Installed { id: p.id, name: p.name, replaced: existing.is_some() })
 }
 
+/// Install a pack made in the app (the gallery's "make a pet from a picture"):
+/// write the files to a staging folder, then import it like any other pack,
+/// so it gets the same validation and overwrite question.
+pub fn create(sh: &Shared, files: Vec<(String, Vec<u8>)>, overwrite: bool) -> Result<Outcome, String> {
+    let tmp = staging(&sh.paths.home);
+    let dir = tmp.join("pack");
+    let result = (|| {
+        for (rel, bytes) in &files {
+            let rp = Path::new(rel);
+            let safe = !rel.is_empty()
+                && rp.components().all(|c| matches!(c, std::path::Component::Normal(_)));
+            if !safe {
+                return Err(crate::tr!("无效的文件路径：{rel}", "Invalid file path: {rel}"));
+            }
+            let dest = dir.join(rp);
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            std::fs::write(&dest, bytes).map_err(|e| e.to_string())?;
+        }
+        import_inner(sh, &dir, overwrite, &tmp.join("unzip"))
+    })();
+    let _ = std::fs::remove_dir_all(&tmp);
+    result
+}
+
 /// Remove a user-installed pack. Camps, projects and rules that used it go
 /// back to the defaults. Built-in packs cannot be removed (a user copy that
 /// overrides one can; the built-in comes back).
@@ -268,6 +294,26 @@ mod tests {
             o => panic!("{o:?}"),
         }
         assert!(!sh.paths.pets().join("bad").exists(), "invalid packs are never installed");
+    }
+
+    #[test]
+    fn create_from_files_and_bad_paths() {
+        let (_tmp, sh) = setup();
+        let json = serde_json::json!({
+            "id": "made", "name": "做的", "version": "0.1.0", "frame": { "w": 8, "h": 8 },
+            "actions": { "idle": { "sheet": "sprites/idle.png", "frames": 2, "fps": 2, "loop": true } }
+        });
+        let files = vec![("pet.json".to_string(), json.to_string().into_bytes()), ("sprites/idle.png".to_string(), png(16, 8))];
+        assert!(matches!(create(&sh, files.clone(), false).unwrap(), Outcome::Installed { .. }));
+        assert!(sh.paths.pets().join("made/sprites/idle.png").is_file());
+        assert!(matches!(create(&sh, files.clone(), false).unwrap(), Outcome::Conflict { .. }));
+        assert!(matches!(create(&sh, files, true).unwrap(), Outcome::Installed { replaced: true, .. }));
+        for bad in ["../x.png", "/abs.png", "C:/x.png", ""] {
+            let r = create(&sh, vec![(bad.to_string(), vec![1])], false);
+            assert!(r.is_err(), "{bad} should be refused");
+        }
+        assert!(!sh.paths.home.join("x.png").exists());
+        assert!(std::fs::read_dir(sh.paths.home.join("import-tmp")).map(|d| d.count()).unwrap_or(0) == 0, "staging cleaned up");
     }
 
     #[test]

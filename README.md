@@ -45,6 +45,7 @@ Windows 10/11 only for now. Built with Rust, Tauri 2 and TypeScript/Canvas.
 ### Customization
 
 - Pick a pet per team or per project in the gallery; favorites, daily rotation, three sizes.
+- **Make a pet from any picture** right in the gallery: pick or drop an image, name it, preview all 16 actions, install. No AI or tools needed ([tutorial](docs/make-a-pet.md)).
 - Install pet packs by dragging a folder or zip onto the gallery or onto any pet. Packs hot-reload when you edit them.
 - Write your own pack: a `pet.json` plus one sprite strip per action. Only `idle` is required.
 - Chinese and English UI (`language: auto | zh | en`).
@@ -379,7 +380,11 @@ Packs are checked on import; a pack that fails is not installed and the reasons 
 
 ### From a picture to a pet (optional)
 
-[`tools/petgen/`](tools/petgen/README.md) is an example pipeline that turns one character picture into a pack using an image model and an image-to-video model:
+The easiest way is in the app: gallery → **Make a pet from a picture…**. Pick or drop a picture (a transparent or plain background works best), give it a name and optional lines, watch the preview of all 16 actions, and click Install. Step-by-step: [Make your own pet from one picture](docs/make-a-pet.md).
+
+The same one-picture pack can be made from the command line with `python tools/petgen/build_pack.py <workdir> --image picture.png --id my-pet --name "My Pet"`.
+
+For real frame-by-frame animation, [`tools/petgen/`](tools/petgen/README.md) also turns AI videos into a pack, using an image model and an image-to-video model:
 
 1. Generate a chibi full-body base image on a solid green background from your picture (image model).
 2. Use the base image as the first frame of one short video per action — idle, thinking, tool, attention, done, error, sleep (image-to-video model, static camera).

@@ -124,6 +124,30 @@ async fn import_pack(app: tauri::State<'_, Arc<App>>, path: String, overwrite: b
     petd::install::import(&app.petd.shared, std::path::Path::new(&path), overwrite)
 }
 
+/// Install a pack generated in the gallery from a picture.
+#[tauri::command]
+async fn create_pack(app: tauri::State<'_, Arc<App>>, files: Vec<(String, Vec<u8>)>, overwrite: bool) -> Result<petd::install::Outcome, String> {
+    petd::install::create(&app.petd.shared, files, overwrite)
+}
+
+/// Bytes of a picture the user chose (dialog or drag and drop) for the pet maker.
+#[tauri::command]
+async fn read_image(path: String) -> Result<Vec<u8>, String> {
+    let p = std::path::Path::new(&path);
+    let ok = p
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| ["png", "jpg", "jpeg", "webp", "bmp", "gif"].contains(&e.to_ascii_lowercase().as_str()));
+    if !ok {
+        return Err(petd::i18n::t("请选择 PNG、JPG 或 WebP 图片", "Choose a PNG, JPG or WebP picture").into());
+    }
+    let len = std::fs::metadata(p).map_err(|e| e.to_string())?.len();
+    if len > 30 * 1024 * 1024 {
+        return Err(petd::i18n::t("图片太大了（超过 30 MB）", "The picture is too big (over 30 MB)").into());
+    }
+    std::fs::read(p).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn remove_pack(app: tauri::State<'_, Arc<App>>, id: String) -> Result<String, String> {
     petd::install::remove(&app.petd.shared, &id)
@@ -606,6 +630,8 @@ fn main() {
             open_config,
             open_report_window,
             import_pack,
+            create_pack,
+            read_image,
             remove_pack,
             quiet
         ])

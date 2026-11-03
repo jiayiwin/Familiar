@@ -8,6 +8,7 @@ import {
 import { Previews, toast } from "./preview";
 import { drawHat, ropeStyle } from "./decor";
 import { EN, initLang, t as tr } from "./i18n"; // `t` is a common local name here
+import { IMAGE_EXT, setupMaker } from "./maker-ui";
 
 const MODES = (): [string, string, string][] => [
   ["per-camp", tr("按阵营", "Per team"), tr("每个阵营一只主宠物，每个会话一个小分身跟在旁边（默认）", "One main pet per team, with a mini for each session beside it (default)")],
@@ -104,7 +105,11 @@ function visiblePacks(): PackInfo[] {
   return packs.filter((p) => !tagFilter || (tagFilter === "★" ? favs.includes(p.id) : p.tags.includes(tagFilter)));
 }
 
+let gridGen = 0;
 async function renderGrid() {
+  // Renders can overlap (a reload while previews are loading): only the
+  // newest one may touch the grid, or cards get added twice.
+  const gen = ++gridGen;
   previews.clear();
   const grid = $("grid");
   grid.innerHTML = "";
@@ -114,7 +119,9 @@ async function renderGrid() {
     const card = document.createElement("div");
     card.className = "card";
     card.dataset.pack = p.id;
-    card.appendChild(await previews.mount(p.id, rev));
+    const canvas = await previews.mount(p.id, rev);
+    if (gen !== gridGen) return;
+    card.appendChild(canvas);
     const body = document.createElement("div");
     body.innerHTML = `
       <div class="inuse"></div>
@@ -372,8 +379,22 @@ async function setupImport() {
   if (!inTauri) {
     ($("import-dir") as HTMLButtonElement).disabled = true;
     ($("import-zip") as HTMLButtonElement).disabled = true;
+    ($("make-pet") as HTMLButtonElement).disabled = true;
     return;
   }
+  const maker = setupMaker({
+    conn,
+    installed: async (id, name, replaced) => {
+      showResult(`<div class="okbar">${tr(`已${replaced ? "更新" : "做好"} <b>${esc(name)}</b>，让它给谁用？`, `<b>${esc(name)}</b> is ${replaced ? "updated" : "ready"}. Who gets it?`)}
+        <button class="primary" id="mk-cc">${tr("给 Claude Code", "For Claude Code")}</button> <button id="mk-cx">${tr("给 Codex", "For Codex")}</button></div>`);
+      $("mk-cc").onclick = () => { showResult(""); void pick("claude-code", id); };
+      $("mk-cx").onclick = () => { showResult(""); void pick("codex", id); };
+      toast(tr(`已安装 ${name}`, `Installed ${name}`));
+      await load();
+      document.querySelector(`.card[data-pack="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    },
+  });
+  $("make-pet").onclick = () => maker.open();
   const { open } = await import("@tauri-apps/plugin-dialog");
   $("import-dir").onclick = async () => {
     const p = await open({ directory: true, title: tr("选择宠物包文件夹（里面有 pet.json）", "Choose a pet pack folder (with pet.json inside)") });
@@ -389,7 +410,9 @@ async function setupImport() {
     const t = e.payload.type;
     $("drop").hidden = !(t === "enter" || t === "over");
     if (t === "drop") {
-      for (const p of e.payload.paths) await importPath(p);
+      const img = e.payload.paths.find((p) => IMAGE_EXT.test(p));
+      if (img) maker.open(img);
+      for (const p of e.payload.paths) if (!IMAGE_EXT.test(p)) await importPath(p);
     }
   });
 }
