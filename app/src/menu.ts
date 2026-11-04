@@ -23,7 +23,7 @@ interface Open {
   h: number;
 }
 
-const ACCENTS: Record<string, string> = { "claude-code": "#b5704f", codex: "#4f7f6f" };
+const ACCENTS: Record<string, string> = { "claude-code": "#e0794f", codex: "#2f9a8a" };
 const stage = document.getElementById("stage")!;
 const win = getCurrentWebviewWindow();
 let closing = false;
@@ -89,24 +89,26 @@ function render(o: Open) {
   closing = false;
   stage.innerHTML = "";
   stage.classList.remove("open");
-  const accent = ACCENTS[o.model.camp ?? ""] ?? "#a88454";
+  const accent = ACCENTS[o.model.camp ?? ""] ?? "#ee5b3c";
   document.documentElement.style.setProperty("--accent", accent);
   document.documentElement.style.setProperty("--accent-soft", `${accent}1f`);
 
   const { r, angles } = layout(o.model.items.length, o);
-  for (const [cls, size] of [["disc", r * 2 + 90], ["ring", r * 2]] as const) {
-    const h = el("div", `halo ${cls}`);
-    Object.assign(h.style, { left: `${o.cx}px`, top: `${o.cy}px`, width: `${size}px`, height: `${size}px` });
-    stage.append(h);
-  }
+  const halo = el("div", "halo");
+  Object.assign(halo.style, { left: `${o.cx}px`, top: `${o.cy}px`, width: `${r * 2 + 120}px`, height: `${r * 2 + 120}px` });
+  stage.append(halo);
+  stage.append(arcBand(o, r, angles));
 
   // Title above the topmost button.
   const ys = angles.map((d) => o.cy + r * Math.sin((d * Math.PI) / 180));
   const title = el("div", "title");
   title.append(el("i"), document.createTextNode(o.model.title));
-  const ty = Math.max(30, Math.min(...ys) - 34);
-  Object.assign(title.style, { left: `${Math.max(90, Math.min(o.w - 90, o.cx))}px`, top: `${ty}px` });
+  const ty = Math.max(30, Math.min(...ys) - 62);
+  title.style.top = `${ty}px`;
   stage.append(title);
+  // Keep the whole title on screen.
+  const half = title.offsetWidth / 2 + 8;
+  title.style.left = `${Math.max(half, Math.min(o.w - half, o.cx))}px`;
 
   let active: HTMLButtonElement | null = null;
   let card: HTMLDivElement | null = null;
@@ -126,7 +128,11 @@ function render(o: Open) {
     b.style.top = `${y}px`;
     b.style.setProperty("--fx", `${o.cx - x}px`);
     b.style.setProperty("--fy", `${o.cy - y}px`);
-    b.style.setProperty("--d", `${i * 28}ms`);
+    b.style.setProperty("--d", `${120 + i * 34}ms`);
+    // The label sits just outside the band, anchored on its outer side.
+    b.style.setProperty("--lx", `${Math.cos(rad) * 44}px`);
+    b.style.setProperty("--ly", `${Math.sin(rad) * 44}px`);
+    b.style.setProperty("--ax", `${Math.cos(rad).toFixed(3)}`);
     b.append(el("span", "ic", node.icon ?? "•"), el("span", "lb", node.label));
     if (node.children?.length) b.append(el("span", "more", "+"));
     b.disabled = !node.enabled;
@@ -148,6 +154,41 @@ function render(o: Open) {
     close();
   };
   requestAnimationFrame(() => requestAnimationFrame(() => stage.classList.add("open")));
+}
+
+/**
+ * The band the buttons sit on: a thick rounded arc (or a full ring) around
+ * the pet, with a thin dashed orbit outside it. It sweeps open on show.
+ */
+function arcBand(o: Open, r: number, angles: number[]): SVGSVGElement {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("class", "band");
+  svg.setAttribute("width", String(o.w));
+  svg.setAttribute("height", String(o.h));
+  const pt = (rr: number, d: number) => [o.cx + rr * Math.cos((d * Math.PI) / 180), o.cy + rr * Math.sin((d * Math.PI) / 180)];
+  const pad = ((30 / r) * 180) / Math.PI;
+  const a0 = angles[0] - pad;
+  const a1 = angles[angles.length - 1] + pad;
+  const full = a1 - a0 >= 330;
+  const arc = (rr: number) => {
+    if (full) return `M ${o.cx - rr} ${o.cy} a ${rr} ${rr} 0 1 1 ${rr * 2} 0 a ${rr} ${rr} 0 1 1 ${-rr * 2} 0`;
+    const [x0, y0] = pt(rr, a0);
+    const [x1, y1] = pt(rr, a1);
+    return `M ${x0} ${y0} A ${rr} ${rr} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1} ${y1}`;
+  };
+  const len = (rr: number) => (((full ? 360 : a1 - a0) * Math.PI) / 180) * rr;
+  const add = (cls: string, rr: number) => {
+    const p = document.createElementNS(NS, "path");
+    p.setAttribute("d", arc(rr));
+    p.setAttribute("class", cls);
+    p.style.setProperty("--len", `${len(rr) + 2}`);
+    svg.append(p);
+  };
+  add("track", r);
+  add("edge", r);
+  add("orbit", r - 46);
+  return svg;
 }
 
 /** A card beside the button at (bx, by), pushed outward from the pet. */

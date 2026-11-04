@@ -32,16 +32,19 @@ function dateLabel(ymd: string): string {
     : `${d.getFullYear()} 年 ${d.getMonth() + 1} 月 ${d.getDate()} 日 星期${WEEK_ZH[d.getDay()]}`;
 }
 
-/** Colours from the page's CSS tokens (light or dark). */
-const PAL = { ink: "#161514", muted: "#8c857b", gold: "#a88454", red: "#a8382b", panel: "#faf8f4", line: "#e2ddd4" };
-function readPalette() {
-  const cs = getComputedStyle(document.documentElement);
-  const v = (n: string, d: string) => cs.getPropertyValue(n).trim() || d;
-  Object.assign(PAL, { ink: v("--ink", PAL.ink), muted: v("--muted", PAL.muted), gold: v("--accent", PAL.gold), red: v("--red", PAL.red), panel: v("--panel", PAL.panel), line: v("--line", PAL.line) });
-}
-readPalette();
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readPalette);
-const SERIF = getComputedStyle(document.documentElement).getPropertyValue("--serif").trim() || "Georgia, serif";
+/** The festive palette: red and gold, the same in light and dark mode. */
+const PAL = {
+  ink: "#fff1d6",
+  muted: "#f0b493",
+  gold: "#f6c76a",
+  gold2: "#d98f25",
+  red: "#e3261c",
+  hi: "#ff5a3d",
+  deep: "#6e0a10",
+  line: "rgba(246,199,106,0.22)",
+};
+const SERIF = `"Palatino Linotype", Georgia, serif`;
+const KAI = `"STKaiti", "KaiTi", "楷体", "Songti SC", serif`;
 
 const STEMS = "甲乙丙丁戊己庚辛壬癸";
 const BRANCHES = "子丑寅卯辰巳午未申酉戌亥";
@@ -106,7 +109,8 @@ function renderCount() {
 // ---------------------------------------------------------------- game
 
 const canvas = $("game") as HTMLCanvasElement;
-const ctx = canvas.getContext("2d")!;
+const mainCtx = canvas.getContext("2d")!;
+let ctx = mainCtx;
 let W = 0;
 let H = 0;
 
@@ -143,15 +147,15 @@ function spawn(now: number) {
   const k = (now - roundStart) / ROUND_MS; // 0 → 1: faster and busier
   const r = Math.random();
   const kind: Kind = r < 0.06 ? "ingot" : r < 0.06 + 0.1 + 0.08 * k ? "cracker" : "packet";
-  const size = kind === "packet" ? 30 + Math.random() * 16 : kind === "ingot" ? 34 : 30;
+  const size = kind === "packet" ? 40 + Math.random() * 16 : kind === "ingot" ? 44 : 44;
   drops.push({
     kind,
-    x: 30 + Math.random() * (W - 60),
+    x: 40 + Math.random() * (W - 80),
     y: -60,
-    vy: (kind === "ingot" ? 190 : 110) + Math.random() * 60 + 120 * k,
+    vy: (kind === "ingot" ? 160 : 90) + Math.random() * 50 + 90 * k,
     phase: Math.random() * Math.PI * 2,
     size,
-    value: kind === "ingot" ? 20 : kind === "cracker" ? -10 : Math.round(size / 10) - 1, // 2–4
+    value: kind === "ingot" ? 20 : kind === "cracker" ? -10 : Math.round((size - 10) / 10) - 1, // 2–4
     spin: (Math.random() - 0.5) * 0.6,
     gone: 0,
   });
@@ -170,7 +174,7 @@ function burst(x: number, y: number, colors: string[], n: number, speed = 260, g
 function fireworks(n: number) {
   for (let i = 0; i < n; i++) {
     setTimeout(() => {
-      const palette = [[PAL.gold, PAL.gold, PAL.red], [PAL.red, PAL.gold]][Math.floor(Math.random() * 2)];
+      const palette = [[PAL.gold, "#fff3b0", PAL.hi], [PAL.hi, PAL.gold, "#ffffff"]][Math.floor(Math.random() * 2)];
       burst(W * (0.15 + Math.random() * 0.7), H * (0.15 + Math.random() * 0.4), palette, 40, 220, 90);
     }, i * 380);
   }
@@ -183,8 +187,8 @@ function grab(d: Drop, now: number) {
     combo = 0;
     shake = 14;
     bgm.boom();
-    burst(d.x, d.y, [PAL.ink, PAL.red, PAL.muted], 34, 320);
-    floats.push({ x: d.x, y: d.y, text: tr("嘭 −10", "Bang −10"), color: PAL.red, t: now });
+    burst(d.x, d.y, [PAL.ink, PAL.gold, "#ffb020"], 34, 320);
+    floats.push({ x: d.x, y: d.y, text: tr("嘭 −10", "Bang −10"), color: "#ffffff", t: now });
     return;
   }
   combo = now - lastGrab < 1200 ? combo + 1 : 1;
@@ -195,10 +199,10 @@ function grab(d: Drop, now: number) {
   grabbed++;
   if (d.kind === "ingot") {
     bgm.chime();
-    burst(d.x, d.y, [PAL.gold, PAL.gold, PAL.red], 30, 280);
+    burst(d.x, d.y, [PAL.gold, "#fff3b0", PAL.gold2], 30, 280);
   } else {
     bgm.ding(1 + Math.min(combo, 12) * 0.03);
-    burst(d.x, d.y, [PAL.gold, PAL.red], 12, 180);
+    burst(d.x, d.y, [PAL.gold, PAL.hi, "#fff3b0"], 14, 200);
   }
   floats.push({ x: d.x, y: d.y, text: `+${gain}${combo >= 5 ? ` ${tr("连击", "combo")}×${combo}` : ""}`, color: d.kind === "ingot" ? PAL.gold : PAL.ink, t: now });
 }
@@ -214,8 +218,11 @@ canvas.addEventListener("pointerdown", (ev) => {
   for (let i = drops.length - 1; i >= 0; i--) {
     const d = drops[i];
     if (d.gone) continue;
-    const pad = 10;
-    if (Math.abs(x - d.x) < d.size * 0.6 + pad && Math.abs(y - d.y) < d.size * 0.75 + pad) {
+    // Test against where it is drawn (it sways), with a generous round area.
+    const dx = x - (d.x + Math.sin(d.phase) * 14);
+    const dy = y - d.y;
+    const r = d.size * 0.8 + 16;
+    if (dx * dx + dy * dy < r * r) {
       grab(d, now);
       return;
     }
@@ -233,12 +240,14 @@ function startRound() {
   grabbed = 0;
   combo = 0;
   running = true;
+  document.body.classList.add("playing");
   roundStart = performance.now();
   nextSpawn = roundStart;
 }
 
 async function endRound() {
   running = false;
+  document.body.classList.remove("playing");
   for (const d of drops) if (!d.gone) d.gone = performance.now();
   fireworks(3);
   $("r-title").textContent = score >= 150 ? tr("红包大王！", "Red-envelope king!") : score >= 80 ? tr("手气不错！", "Nice haul!") : tr("时间到！", "Time's up!");
@@ -261,32 +270,87 @@ function rr(x: number, y: number, w: number, h: number, r: number) {
   ctx.roundRect(x, y, w, h, r);
 }
 
+/**
+ * Envelopes, ingots and crackers are drawn once per size into a small
+ * bitmap and then just copied each frame; gradients and shadows every
+ * frame made the game stutter.
+ */
+const sprites = new Map<string, HTMLCanvasElement>();
+function sprite(kind: Kind, size: number): HTMLCanvasElement {
+  const s = Math.round(size);
+  const key = `${kind}${s}`;
+  let c = sprites.get(key);
+  if (c) return c;
+  const dpr = devicePixelRatio || 1;
+  const box = Math.ceil(s * 2.2 + 24);
+  c = document.createElement("canvas");
+  c.width = Math.round(box * dpr);
+  c.height = Math.round(box * dpr);
+  const off = c.getContext("2d")!;
+  off.setTransform(dpr, 0, 0, dpr, (box / 2) * dpr, (box / 2) * dpr);
+  ctx = off;
+  if (kind === "packet") drawPacket(s);
+  else if (kind === "ingot") drawIngot(s, 0);
+  else drawCracker(s, 0, false);
+  ctx = mainCtx;
+  (c as HTMLCanvasElement & { box: number }).box = box;
+  sprites.set(key, c);
+  return c;
+}
+
+function blit(kind: Kind, size: number) {
+  const c = sprite(kind, size) as HTMLCanvasElement & { box: number };
+  ctx.drawImage(c, -c.box / 2, -c.box / 2, c.box, c.box);
+}
+
 function drawPacket(s: number) {
   const w = s;
   const h = s * 1.3;
-  ctx.fillStyle = PAL.red;
-  rr(-w / 2, -h / 2, w, h, 2);
+  const g = ctx.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
+  g.addColorStop(0, PAL.hi);
+  g.addColorStop(1, "#c8141a");
+  ctx.shadowColor = "rgba(60,0,0,0.35)";
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetY = 3;
+  ctx.fillStyle = g;
+  rr(-w / 2, -h / 2, w, h, s * 0.1);
   ctx.fill();
+  ctx.shadowColor = "transparent";
+  // gold edge, flap and a round seal with 福
   ctx.strokeStyle = PAL.gold;
-  ctx.lineWidth = 1;
-  // flap line and a small seal
-  ctx.beginPath();
-  ctx.moveTo(-w / 2, -h / 2 + s * 0.12);
-  ctx.quadraticCurveTo(0, -h / 2 + s * 0.5, w / 2, -h / 2 + s * 0.12);
+  ctx.lineWidth = Math.max(1, s * 0.04);
+  rr(-w / 2 + s * 0.07, -h / 2 + s * 0.07, w - s * 0.14, h - s * 0.14, s * 0.06);
   ctx.stroke();
+  ctx.fillStyle = "rgba(120,0,8,0.35)";
   ctx.beginPath();
-  ctx.arc(0, -h / 2 + s * 0.44, s * 0.15, 0, Math.PI * 2);
-  ctx.fillStyle = PAL.gold;
+  ctx.moveTo(-w / 2, -h / 2 + s * 0.1);
+  ctx.quadraticCurveTo(0, -h / 2 + s * 0.62, w / 2, -h / 2 + s * 0.1);
+  ctx.lineTo(w / 2, -h / 2 + s * 0.1);
+  ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = PAL.red;
-  ctx.font = `${Math.round(s * 0.2)}px ${SERIF}`;
+  const cy = -h / 2 + s * 0.5;
+  const gg = ctx.createRadialGradient(-s * 0.05, cy - s * 0.05, 1, 0, cy, s * 0.2);
+  gg.addColorStop(0, "#fff0b8");
+  gg.addColorStop(1, PAL.gold2);
+  ctx.fillStyle = gg;
+  ctx.beginPath();
+  ctx.arc(0, cy, s * 0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#a3121a";
+  ctx.font = `bold ${Math.round(s * 0.26)}px ${KAI}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("福", 0, -h / 2 + s * 0.45);
+  ctx.fillText("福", 0, cy + s * 0.01);
 }
 
 function drawIngot(s: number, now: number) {
-  ctx.fillStyle = PAL.gold;
+  const g = ctx.createLinearGradient(0, -s * 0.3, 0, s * 0.4);
+  g.addColorStop(0, "#fff2b5");
+  g.addColorStop(0.45, PAL.gold);
+  g.addColorStop(1, PAL.gold2);
+  ctx.shadowColor = "rgba(255,200,80,0.55)";
+  ctx.shadowBlur = 14;
+  ctx.fillStyle = g;
   ctx.beginPath();
   ctx.moveTo(-s * 0.7, -s * 0.12);
   ctx.quadraticCurveTo(-s * 0.5, s * 0.38, 0, s * 0.36);
@@ -295,40 +359,54 @@ function drawIngot(s: number, now: number) {
   ctx.quadraticCurveTo(-s * 0.36, s * 0.04, -s * 0.7, -s * 0.12);
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(0, -s * 0.02, s * 0.26, s * 0.2, 0, Math.PI, 0);
+  ctx.ellipse(0, -s * 0.02, s * 0.26, s * 0.22, 0, Math.PI, 0);
   ctx.fill();
-  // a slow glint
+  ctx.shadowColor = "transparent";
   const tw = (Math.sin(now / 260) + 1) / 2;
-  ctx.strokeStyle = `rgba(255,255,255,${0.25 + 0.5 * tw})`;
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = `rgba(255,255,255,${0.35 + 0.55 * tw})`;
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.moveTo(-s * 0.12, -s * 0.16);
-  ctx.quadraticCurveTo(0, -s * 0.2, s * 0.12, -s * 0.16);
+  ctx.quadraticCurveTo(0, -s * 0.21, s * 0.12, -s * 0.16);
   ctx.stroke();
 }
 
-function drawCracker(s: number, now: number) {
-  const w = s * 0.4;
+function drawCracker(s: number, now: number, spark = true) {
+  const w = s * 0.5;
   const h = s * 1.15;
-  ctx.fillStyle = PAL.ink;
-  rr(-w / 2, -h / 2, w, h, 2);
+  const g = ctx.createLinearGradient(-w / 2, 0, w / 2, 0);
+  g.addColorStop(0, "#3a3a46");
+  g.addColorStop(0.45, "#15151c");
+  g.addColorStop(1, "#2c2c36");
+  ctx.fillStyle = g;
+  rr(-w / 2, -h / 2, w, h, 3);
   ctx.fill();
-  ctx.fillStyle = PAL.red;
-  ctx.fillRect(-w / 2, -h / 2 + h * 0.2, w, 2);
-  ctx.fillRect(-w / 2, h / 2 - h * 0.24, w, 2);
-  // fuse and spark
+  ctx.fillStyle = PAL.gold;
+  ctx.fillRect(-w / 2, -h / 2 + h * 0.12, w, s * 0.07);
+  ctx.fillRect(-w / 2, h / 2 - h * 0.12 - s * 0.07, w, s * 0.07);
+  ctx.fillStyle = PAL.gold;
+  ctx.font = `bold ${Math.round(s * 0.26)}px ${KAI}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("爆", 0, 0);
   ctx.strokeStyle = PAL.muted;
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1.2;
   ctx.beginPath();
   ctx.moveTo(0, -h / 2);
   ctx.quadraticCurveTo(s * 0.22, -h / 2 - s * 0.18, s * 0.08, -h / 2 - s * 0.34);
   ctx.stroke();
+  if (!spark) return;
   const f = 0.5 + 0.5 * Math.sin(now / 45);
-  ctx.fillStyle = PAL.gold;
-  ctx.globalAlpha *= 0.5 + 0.5 * f;
+  ctx.fillStyle = "rgba(255,176,32,0.35)";
   ctx.beginPath();
-  ctx.arc(s * 0.08, -h / 2 - s * 0.34, 2 + 2 * f, 0, Math.PI * 2);
+  ctx.arc(s * 0.08, -h / 2 - s * 0.34, 5 + 4 * f, 0, Math.PI * 2);
   ctx.fill();
+  ctx.fillStyle = "#fff3b0";
+  ctx.globalAlpha *= 0.6 + 0.4 * f;
+  ctx.beginPath();
+  ctx.arc(s * 0.08, -h / 2 - s * 0.34, 2.5 + 2.5 * f, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowColor = "transparent";
 }
 
 function frame(now: number) {
@@ -364,9 +442,20 @@ function frame(now: number) {
       ctx.globalAlpha = 1 - k;
       ctx.scale(1 + k * 0.6, 1 + k * 0.6);
     }
-    if (d.kind === "packet") drawPacket(d.size);
-    else if (d.kind === "ingot") drawIngot(d.size, now);
-    else drawCracker(d.size, now);
+    blit(d.kind, d.size);
+    if (d.kind === "cracker") {
+      // only the fuse spark is live
+      const h = d.size * 1.15;
+      const f = 0.5 + 0.5 * Math.sin(now / 45);
+      ctx.fillStyle = "rgba(255,176,32,0.35)";
+      ctx.beginPath();
+      ctx.arc(d.size * 0.08, -h / 2 - d.size * 0.34, 5 + 4 * f, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#fff3b0";
+      ctx.beginPath();
+      ctx.arc(d.size * 0.08, -h / 2 - d.size * 0.34, 2.5 + 2.5 * f, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
     if (!d.gone) d.x = Math.min(W - 24, Math.max(24, d.x)); // keep inside after sway
   }
@@ -393,44 +482,47 @@ function frame(now: number) {
   for (const f of floats) {
     const k = (now - f.t) / 900;
     ctx.globalAlpha = 1 - k;
-    ctx.font = `italic 18px ${SERIF}`;
+    ctx.font = `bold 20px ${SERIF}`;
     ctx.fillStyle = f.color;
     ctx.fillText(f.text, f.x, f.y - 40 * k);
   }
   ctx.globalAlpha = 1;
   ctx.restore();
 
-  // HUD: a hairline timer, the score in serif
+  // HUD: a gold timer bar, the score and seconds in gold
   if (running) {
     const left = Math.max(0, ROUND_MS - (now - roundStart));
+    const warn = left < 5000;
     ctx.fillStyle = PAL.line;
-    ctx.fillRect(0, 0, W, 2);
-    ctx.fillStyle = left < 5000 ? PAL.red : PAL.gold;
-    ctx.fillRect(0, 0, W * (left / ROUND_MS), 2);
+    rr(16, 10, W - 32, 4, 2);
+    ctx.fill();
+    ctx.fillStyle = warn ? "#ffffff" : PAL.gold;
+    rr(16, 10, (W - 32) * (left / ROUND_MS), 4, 2);
+    ctx.fill();
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
-    ctx.fillStyle = PAL.ink;
-    ctx.font = `28px ${SERIF}`;
-    ctx.fillText(String(score), 20, 18);
+    ctx.fillStyle = PAL.gold;
+    ctx.font = `bold 30px ${SERIF}`;
+    ctx.fillText(String(score), 20, 24);
     ctx.fillStyle = PAL.muted;
-    ctx.font = "10px 'Segoe UI', sans-serif";
-    ctx.fillText(tr("得分", "SCORE"), 22, 52);
+    ctx.font = `13px ${KAI}`;
+    ctx.fillText(tr("得分", "SCORE"), 22, 58);
     ctx.textAlign = "right";
-    ctx.fillStyle = left < 5000 ? PAL.red : PAL.ink;
-    ctx.font = `28px ${SERIF}`;
-    ctx.fillText(String(Math.ceil(left / 1000)), W - 20, 18);
+    ctx.fillStyle = warn ? "#ffffff" : PAL.gold;
+    ctx.font = `bold 30px ${SERIF}`;
+    ctx.fillText(String(Math.ceil(left / 1000)), W - 20, 24);
     ctx.fillStyle = PAL.muted;
-    ctx.font = "10px 'Segoe UI', sans-serif";
-    ctx.fillText(tr("秒", "SEC"), W - 22, 52);
+    ctx.font = `13px ${KAI}`;
+    ctx.fillText(tr("秒", "SEC"), W - 22, 58);
     if (combo >= 3) {
       ctx.textAlign = "center";
-      ctx.font = `italic 18px ${SERIF}`;
-      ctx.fillStyle = PAL.gold;
-      ctx.fillText(tr(`连击 × ${combo}`, `combo × ${combo}`), W / 2, 24);
+      ctx.font = `bold 22px ${KAI}`;
+      ctx.fillStyle = "#fff3b0";
+      ctx.fillText(tr(`连击 × ${combo}`, `combo × ${combo}`), W / 2, 28);
     }
   } else if (Math.random() < dt * 0.6) {
     // idle: a slow drift of packets behind the start card
-    drops.push({ kind: "packet", x: 30 + Math.random() * (W - 60), y: -50, vy: 40 + Math.random() * 20, phase: Math.random() * 6, size: 18 + Math.random() * 8, value: 0, spin: 0.3, gone: 0 });
+    drops.push({ kind: "packet", x: 30 + Math.random() * (W - 60), y: -50, vy: 40 + Math.random() * 20, phase: Math.random() * 6, size: 22 + Math.random() * 10, value: 0, spin: 0.35, gone: 0 });
   }
   requestAnimationFrame(frame);
 }
@@ -596,6 +688,7 @@ async function refreshInfo() {
 async function main() {
   resize();
   addEventListener("resize", resize);
+  new ResizeObserver(resize).observe(canvas);
   $("start").onclick = startRound;
   $("again").onclick = startRound;
   try {

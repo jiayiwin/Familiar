@@ -259,7 +259,7 @@ function fishCanvas(color: string, locked: boolean): HTMLCanvasElement {
   c.style.height = "30px";
   const g = c.getContext("2d")!;
   g.scale(dpr, dpr);
-  g.fillStyle = locked ? "#c9c3b9" : color;
+  g.fillStyle = locked ? "#c3c1d0" : color;
   g.beginPath();
   g.ellipse(24, 15, 14, 8, 0, 0, Math.PI * 2);
   g.fill();
@@ -271,7 +271,7 @@ function fishCanvas(color: string, locked: boolean): HTMLCanvasElement {
   if (!locked) {
     g.fillStyle = "#fff";
     g.fillRect(31, 11, 3, 3);
-    g.fillStyle = "#161514";
+    g.fillStyle = "#1f2245";
     g.fillRect(32, 12, 2, 2);
   }
   return c;
@@ -478,10 +478,10 @@ function itemIcon(it: ShopItem): HTMLCanvasElement {
     // A plain round head to show the hat on.
     g.beginPath();
     g.arc(48, 52, 22, 0, Math.PI * 2);
-    g.fillStyle = "#e8dccb";
+    g.fillStyle = "#fde4d6";
     g.fill();
     g.lineWidth = 2;
-    g.strokeStyle = "#3a3733";
+    g.strokeStyle = "#1f2245";
     g.stroke();
     drawHat(g, it.id, 48, 30, 44, performance.now());
   } else if (it.kind === "rope") {

@@ -6,16 +6,17 @@
     <title data-en="Familiar sessions">Familiar 会话</title>
     <style>
       :root {
-        --bg: rgba(250, 248, 244, 0.96);
-        --ink: #161514;
-        --muted: #8c857b;
-        --line: #e2ddd4;
-        --red: #a8382b;
-        --accent: #a88454;
-        --serif: "Palatino Linotype", "Book Antiqua", Georgia, "Noto Serif SC", "Songti SC", "STSong", "SimSun", serif;
+        --bg: rgba(255, 255, 255, 0.97);
+        --ink: #1f2245;
+        --muted: #8b8ca6;
+        --line: #ece5d7;
+        --red: #e0442f;
+        --accent: #ee5b3c;
+        --indigo: #2b3275;
+        --display: "Bahnschrift", "Segoe UI Variable Display", "Segoe UI", "Microsoft YaHei UI", sans-serif;
       }
       @media (prefers-color-scheme: dark) {
-        :root { --bg: rgba(26, 25, 24, 0.96); --ink: #ece8e1; --muted: #8f887e; --line: #2b2926; --red: #c9574a; --accent: #c8a675; }
+        :root { --bg: rgba(29, 32, 64, 0.97); --ink: #f4efe6; --muted: #8f91b3; --line: #2b2f58; --red: #ff6a55; --accent: #ff6e4d; --indigo: #3a43a8; }
       }
       html, body {
         margin: 0;
@@ -29,27 +30,27 @@
       #card {
         margin: 6px;
         background: var(--bg);
-        border: 1px solid var(--line);
-        border-radius: 6px;
-        box-shadow: 0 8px 24px rgba(22, 21, 20, 0.12);
-        padding: 10px 12px;
-        backdrop-filter: blur(10px);
+        border-radius: 16px;
+        box-shadow: 0 0 0 1px rgba(31, 34, 69, 0.06), 0 10px 28px rgba(31, 34, 69, 0.18);
+        padding: 0 12px 10px;
+        overflow: hidden;
       }
-      h1 { font-family: var(--serif); font-size: 13px; font-weight: 400; letter-spacing: 0.04em; margin: 0 0 6px; display: flex; justify-content: space-between; gap: 8px; }
-      h1 small { color: var(--muted); font-family: "Segoe UI", sans-serif; font-size: 10.5px; letter-spacing: 0.06em; }
-      .row { display: grid; grid-template-columns: 8px 1fr auto; gap: 1px 10px; padding: 6px 0; border-top: 1px solid var(--line); align-items: baseline; }
+      h1 { font-family: var(--display); font-size: 13px; font-weight: 700; margin: 0 -12px 6px; padding: 8px 12px; display: flex; justify-content: space-between; gap: 8px;
+        color: #fff; background: radial-gradient(circle at calc(100% - 14px) 100%, var(--accent) 0 16px, transparent 17px), var(--indigo); }
+      h1 small { color: rgba(255, 255, 255, 0.7); font-family: "Segoe UI", sans-serif; font-weight: 400; font-size: 10.5px; margin-right: 26px; }
+      .row { display: grid; grid-template-columns: 10px 1fr auto; gap: 1px 10px; padding: 6px 0; border-top: 1px solid var(--line); align-items: baseline; }
       .row:first-of-type { border-top: 0; }
-      .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); align-self: center; }
-      .dot.attention { background: var(--red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 18%, transparent); }
-      .dot.tool, .dot.reading, .dot.thinking { background: #4f7f6f; }
-      .dot.done { background: var(--accent); }
-      .dot.error, .dot.stone, .dot.aborted { background: #8a5a3c; }
-      .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .state { color: var(--muted); white-space: nowrap; font-size: 11px; letter-spacing: 0.04em; }
-      .state.attention { color: var(--red); }
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); align-self: center; }
+      .dot.attention { background: var(--red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 22%, transparent); }
+      .dot.tool, .dot.reading, .dot.thinking { background: #2f9a8a; }
+      .dot.done { background: #f4b63f; }
+      .dot.error, .dot.stone, .dot.aborted { background: #9a5ce6; }
+      .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+      .state { color: var(--muted); white-space: nowrap; font-size: 11px; }
+      .state.attention { color: var(--red); font-weight: 700; }
       .meta { grid-column: 2 / 4; color: var(--muted); font-size: 10.5px; }
       .empty { color: var(--muted); padding: 4px 0; }
-      .hint { color: var(--muted); font-size: 10.5px; margin-top: 6px; border-top: 1px solid var(--line); padding-top: 6px; letter-spacing: 0.04em; }
+      .hint { color: var(--muted); font-size: 10.5px; margin-top: 6px; border-top: 1px solid var(--line); padding-top: 6px; }
     </style>
   </head>
   <body>
