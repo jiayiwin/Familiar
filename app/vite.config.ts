@@ -17,6 +17,7 @@ export default defineConfig({
         overlay: resolve(__dirname, "overlay.html"),
         report: resolve(__dirname, "report.html"),
         menu: resolve(__dirname, "menu.html"),
+        spring: resolve(__dirname, "spring.html"),
       },
     },
   },

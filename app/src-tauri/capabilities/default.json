@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Pet windows, the hover card, the gallery and the first-run chooser",
-  "windows": ["pet-*", "card", "gallery", "welcome", "overlay-*", "report", "menu"],
+  "windows": ["pet-*", "card", "gallery", "welcome", "overlay-*", "report", "menu", "spring"],
   "permissions": [
     "core:default",
     "core:window:allow-set-size",

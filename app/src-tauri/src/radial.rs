@@ -70,6 +70,7 @@ pub fn build(app: &App, pet: &str) -> Option<Model> {
 
     // ---- games
     let mut games = vec![
+        with_hint(item("spring", "🧧", t("春节倒计时", "Spring Festival")), t("抢红包小游戏", "Red-envelope game")),
         with_hint(item("tug", "🤼", t("拔河", "Tug-of-war")), t("比今天的效率分", "Today's productivity score")),
         item(format!("duo|{pet}|badminton"), "🏸", t("羽毛球", "Badminton")),
         item(format!("duo|{pet}|pingpong"), "🏓", t("乒乓球", "Ping-pong")),

@@ -147,6 +147,7 @@ The gallery entry shows how many packs failed validation, if any.
 | `/pet wallet` | Coin balance and today's income |
 | `/pet report` | Open today's report |
 | `/pet size s/m/l` | Pet size |
+| `/pet spring` | Open the Spring Festival countdown and the red-envelope game |
 | `/pet kegel [times… / off]` | Do a kegel set with your pet now; with times, remind daily, e.g. `/pet kegel 10:30 15:30` |
 | `/pet lang auto/zh/en` | UI language |
 | `/pet next` | Next pet from your favorites |
@@ -214,6 +215,8 @@ None of this gets in the way of the status display. **While any session is waiti
 **Codex reset card** (Codex pet only). Ring menu → **Reset card** shows how much of the 5-hour and weekly quota is used and when each resets. **Use reset card…** opens a terminal running `codex` where you type `/usage` to choose to use it (desktop app: Settings → Usage). Using a card is an action on your account; Familiar never does it for you. When a quota is cleared before its reset time (a card was used), a golden card flies in and the pet cheers.
 
 **Wellbeing** (off by default). `features.water: true` reminds you to drink water every 60 minutes when idle. `features.breathe: true`: if you are called to approve more than 6 times in 10 minutes, the pet leads 30 seconds of 4-7-8 breathing (click to skip).
+
+**Spring Festival**: right-click a pet → Games → Spring Festival (or `/pet spring`) opens a countdown to Lunar New Year with background music: put your own copy of Andy Lau's "恭喜发财" (or any song) in `~/.familiar/music/` ("Music folder" on the page opens it) or use "Pick a song…". An `.lrc` file with the same name shows the lyrics in time with the song. The song is copyrighted, so it is not bundled; without one, an original gong-and-drum tune plays. Below it is a 30-second red-envelope rain: click envelopes and gold ingots, avoid the firecrackers. The first 3 rounds a day pay up to 15 coins each. On New Year's Eve evening and New Year's Day the pet wishes you a happy new year.
 
 **Kegel reminders**: add daily times in Gallery → Reminders (or right-click a pet → Health → Reminder settings). At each time the pet turns its back to you and leads a set: squeezing and lifting with its tail up, then relaxing with a wag, with "Squeeze ⬆ / Relax ⬇", a countdown and a soft beep; the page explains how to do it. Right-click → Health → Kegel set, or `/pet kegel`, starts one any time.
 

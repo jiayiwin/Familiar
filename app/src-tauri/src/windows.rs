@@ -285,6 +285,10 @@ pub fn open_welcome(h: &AppHandle) {
     open_page(h, "welcome", "welcome.html", petd::i18n::t("欢迎使用 Familiar", "Welcome to Familiar"), 760.0, 560.0);
 }
 
+pub fn open_spring(h: &AppHandle) {
+    open_page(h, "spring", "spring.html", petd::i18n::t("春节倒计时 · Familiar", "Spring Festival · Familiar"), 760.0, 620.0);
+}
+
 pub fn open_report(h: &AppHandle) {
     open_page(h, "report", "report.html", petd::i18n::t("今日报告 · Familiar", "Today's report · Familiar"), 460.0, 640.0);
 }

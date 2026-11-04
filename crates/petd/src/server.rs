@@ -68,7 +68,7 @@ pub fn router(sh: Shared) -> Router {
             HeaderValue::from_static("https://tauri.localhost"),
             HeaderValue::from_static("http://localhost:1420"),
         ])
-        .allow_methods([Method::GET, Method::POST])
+        .allow_methods([Method::GET, Method::POST, Method::DELETE])
         .allow_headers([header::CONTENT_TYPE, header::HeaderName::from_static("x-familiar-token")]);
 
     Router::new()
@@ -96,6 +96,10 @@ pub fn router(sh: Shared) -> Router {
         .route("/v1/bet", post(bet))
         .route("/v1/world/toss", post(toss))
         .route("/v1/world/catch", post(catch_ball))
+        .route("/v1/spring", get(spring_info))
+        .route("/v1/spring/hongbao", post(hongbao))
+        .route("/v1/spring/lyrics", get(spring_lyrics))
+        .route("/v1/spring/music", get(spring_music).post(save_spring_music).delete(remove_spring_music).layer(axum::extract::DefaultBodyLimit::max(60 << 20)))
         .route("/v1/ws", get(ws))
         .route("/v1/packs", get(packs))
         .route("/v1/packs/{id}", get(pack))
@@ -247,6 +251,10 @@ async fn cmd(Ax(sh): Ax<Shared>, Json(c): Json<Cmd>) -> String {
             let pet = c.args.first().cloned().unwrap_or_else(|| "claude-code".into());
             let _ = sh.control.send(crate::Control::Menu { pet: pet.clone() });
             crate::tr!("在 {pet} 上打开了菜单", "Opened the menu on {pet}")
+        }
+        "spring" => {
+            let _ = sh.control.send(crate::Control::Spring);
+            crate::tr!("已打开春节倒计时。", "Opened the Spring Festival countdown.")
         }
         "report" => {
             let _ = sh.control.send(crate::Control::Report);
@@ -538,6 +546,80 @@ async fn toss(Ax(sh): Ax<Shared>, Json(t): Json<TossBody>) -> StatusCode {
         }
     }
     StatusCode::NO_CONTENT
+}
+
+async fn spring_info(Ax(sh): Ax<Shared>) -> Json<serde_json::Value> {
+    Json(crate::spring::info(&sh.db, crate::now_ms(), &sh.paths.home))
+}
+
+/// The user's song for the Spring Festival page (`?token=` so <audio> can load it).
+async fn spring_music(Ax(sh): Ax<Shared>) -> Response {
+    let Some(f) = crate::spring::music_file(&sh.paths.home) else { return StatusCode::NOT_FOUND.into_response() };
+    match tokio::fs::read(&f).await {
+        Ok(bytes) => ([(header::CONTENT_TYPE, crate::spring::content_type(&f)), (header::CACHE_CONTROL, "no-cache")], bytes).into_response(),
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+/// Save a song picked on the page: raw bytes, `?name=…&ext=mp3`.
+async fn save_spring_music(Ax(sh): Ax<Shared>, Query(q): Query<HashMap<String, String>>, body: axum::body::Bytes) -> Response {
+    let name = q.get("name").cloned().unwrap_or_default();
+    let ext = q.get("ext").cloned().unwrap_or_default();
+    match crate::spring::save_music(&sh.paths.home, &name, &ext, &body) {
+        Ok(()) => Json(serde_json::json!({ "ok": true })).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "message": e }))).into_response(),
+    }
+}
+
+async fn spring_lyrics(Ax(sh): Ax<Shared>) -> Response {
+    let home = &sh.paths.home;
+    let Some(f) = crate::spring::music_file(home).and_then(|s| crate::spring::lyrics_file(home, &s)) else { return StatusCode::NOT_FOUND.into_response() };
+    match tokio::fs::read(&f).await {
+        Ok(bytes) => ([(header::CONTENT_TYPE, "text/plain; charset=utf-8")], String::from_utf8_lossy(&bytes).into_owned()).into_response(),
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+async fn remove_spring_music(Ax(sh): Ax<Shared>) -> Json<serde_json::Value> {
+    crate::spring::remove_music(&sh.paths.home);
+    Json(serde_json::json!({ "ok": true }))
+}
+
+#[derive(Deserialize)]
+struct HongbaoBody {
+    score: u32,
+    #[serde(default)]
+    grabbed: u32,
+}
+
+/// A finished round of 抢红包: pay out, and the main pet cheers on the desktop.
+async fn hongbao(Ax(sh): Ax<Shared>, Json(b): Json<HongbaoBody>) -> Response {
+    let now = crate::now_ms();
+    let cap = sh.world.lock().unwrap().t.balance.economy.daily_cap;
+    match crate::spring::payout(&sh.db, now, b.score, cap) {
+        Ok(p) => {
+            let pet = {
+                let hub = sh.hub.lock().unwrap();
+                let views = hub.pets();
+                crate::world::World::camp_pet(&views, "claude-code").or_else(|| views.first()).map(|v| v.id.clone())
+            };
+            if let Some(pet) = pet {
+                let n = b.grabbed;
+                let coins = p.coins;
+                let bubble = if coins > 0 {
+                    crate::tr!("抢到 {n} 个红包 +{coins} 🧧", "{n} red envelopes! +{coins} 🧧")
+                } else {
+                    crate::tr!("抢到 {n} 个红包 🧧", "{n} red envelopes! 🧧")
+                };
+                let _ = sh.ws_tx.send(crate::msg(
+                    "pet.script",
+                    &serde_json::json!({ "pet": pet, "rule": "spring", "action": "cheer", "bubble": bubble, "ms": 3500, "burst": if coins > 0 { "coins" } else { "confetti" }, "burst_text": if coins > 0 { format!("+{coins}") } else { String::new() } }),
+                ));
+            }
+            Json(serde_json::json!({ "ok": true, "coins": p.coins, "left": p.left })).into_response()
+        }
+        Err(e) => (StatusCode::CONFLICT, Json(serde_json::json!({ "ok": false, "message": e }))).into_response(),
+    }
 }
 
 async fn catch_ball(Ax(sh): Ax<Shared>) -> Response {

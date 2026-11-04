@@ -18,6 +18,7 @@ pub mod progress;
 pub mod protocol;
 pub mod server;
 pub mod session;
+pub mod spring;
 pub mod world;
 
 use fs4::fs_std::FileExt;
@@ -52,6 +53,8 @@ pub enum Control {
     Duo { mover: String, anchor: String, gap: f64 },
     /// Show today's report card.
     Report,
+    /// Open the Spring Festival countdown (`/pet spring`).
+    Spring,
     /// Open the ring menu on a pet (`/pet menu`).
     Menu { pet: String },
     /// Throw a pet (tests and `/pet fling`): logical px/s.

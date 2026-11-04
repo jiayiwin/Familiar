@@ -517,9 +517,15 @@ fn on_menu(h: &AppHandle, id: &str) {
             }
         }
         (Some("report"), _, _) => windows::open_report(h),
+        (Some("spring"), _, _) => windows::open_spring(h),
         (Some("shop"), _, _) => windows::open_shop(h),
         (Some("config"), _, _) => open_path(&app.petd.paths.config()),
         (Some("folder"), _, _) => open_path(&app.petd.paths.home),
+        (Some("musicdir"), _, _) => {
+            let dir = petd::spring::music_dir(&app.petd.paths.home);
+            let _ = std::fs::create_dir_all(&dir);
+            open_path(&dir)
+        }
         (Some("autostart"), _, _) => {
             let want = !setup::autostart_on();
             if let Err(e) = setup::set_autostart(want) {
@@ -723,6 +729,7 @@ fn main() {
                             Control::Tug { mover, anchor } => physics::walk_tug(st.clone(), &h2, &mover, &anchor),
                             Control::Duo { mover, anchor, gap } => physics::walk_pair(st.clone(), &h2, &mover, &anchor, gap, "duo"),
                             Control::Report => windows::open_report(&h2),
+                            Control::Spring => windows::open_spring(&h2),
                             Control::Menu { pet } => {
                                 if let (Some(w), Some(model)) = (h2.get_webview_window(&format!("pet-{pet}")), radial::build(&st, &pet)) {
                                     let _ = radial::open(&h2, &w, model);

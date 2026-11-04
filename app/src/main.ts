@@ -36,6 +36,9 @@ interface Script {
   ms: number;
   delay?: number;
   tug?: { lead: boolean | null; offset: number };
+  /** Particles with the script (Spring Festival greetings, 抢红包 payouts). */
+  burst?: "hearts" | "confetti" | "coins";
+  burst_text?: string;
 }
 
 /** A two-pet game announced over WS, waiting for the walk to finish. */
@@ -90,6 +93,7 @@ async function main() {
     const run = () => {
       if (s.action) pet.override(s.action, s.ms, "script", s.bubble);
       else if (s.bubble) pet.say(s.bubble, s.ms);
+      if (s.burst) pet.fx.burst(s.burst, s.burst_text || undefined, 200);
     };
     // Walk over first when the script moves the pet.
     if (s.delay) scriptTimer = window.setTimeout(run, s.delay);

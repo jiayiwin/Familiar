@@ -944,6 +944,14 @@ impl World {
         let today = day_of(now);
         let (h, _) = local_hm(now);
         let Some(main) = Self::camp_pet(views, "claude-code").or_else(|| views.first()).cloned() else { return };
+        // Spring Festival: wish a happy new year on 除夕 evening and on 初一.
+        if let Some(which) = crate::spring::festive_day(crate::spring::today(now)) {
+            if (which == "day" || h >= 18) && db.kv_get("spring_said").as_deref() != Some(today.as_str()) && matches!(main.state, State::Idle | State::Done) {
+                db.kv_set("spring_said", &today);
+                let bubble = if which == "eve" { crate::i18n::t("除夕快乐！恭喜发财，红包拿来 🧧", "Happy New Year's Eve! 🧧") } else { crate::i18n::t("新年快乐！恭喜发财 🧧🎆", "Happy Lunar New Year! 🧧🎆") };
+                out.push(Out::Ws(crate::msg("pet.script", &json!({ "pet": main.id, "rule": "spring", "action": "cheer", "bubble": bubble, "ms": 5000, "burst": "confetti" }))));
+            }
+        }
         if crate::db::weekday(now) == 0 && h < 10 && db.kv_get("monday_said").as_deref() != Some(today.as_str()) && matches!(main.state, State::Idle | State::Done) {
             db.kv_set("monday_said", &today);
             out.push(Out::Ws(crate::msg("pet.script", &json!({ "pet": main.id, "rule": "rhythm", "action": "sulk", "bubble": crate::i18n::t("周一……好困", "Monday…… so sleepy"), "ms": 3500 }))));
