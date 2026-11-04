@@ -32,6 +32,21 @@ function dateLabel(ymd: string): string {
     : `${d.getFullYear()} 年 ${d.getMonth() + 1} 月 ${d.getDate()} 日 星期${WEEK_ZH[d.getDay()]}`;
 }
 
+/** Colours from the page's CSS tokens (light or dark). */
+const PAL = { ink: "#161514", muted: "#8c857b", gold: "#a88454", red: "#a8382b", panel: "#faf8f4", line: "#e2ddd4" };
+function readPalette() {
+  const cs = getComputedStyle(document.documentElement);
+  const v = (n: string, d: string) => cs.getPropertyValue(n).trim() || d;
+  Object.assign(PAL, { ink: v("--ink", PAL.ink), muted: v("--muted", PAL.muted), gold: v("--accent", PAL.gold), red: v("--red", PAL.red), panel: v("--panel", PAL.panel), line: v("--line", PAL.line) });
+}
+readPalette();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readPalette);
+const SERIF = getComputedStyle(document.documentElement).getPropertyValue("--serif").trim() || "Georgia, serif";
+
+const STEMS = "甲乙丙丁戊己庚辛壬癸";
+const BRANCHES = "子丑寅卯辰巳午未申酉戌亥";
+const ganzhi = (y: number) => STEMS[(y - 4) % 10] + BRANCHES[(y - 4) % 12];
+
 let lastSec = -1;
 let celebrated = false;
 
@@ -50,8 +65,9 @@ function renderCount() {
     const day = Math.floor((now.getTime() - midnight(ny.date).getTime()) / 86_400_000);
     if (el.dataset.mode !== `fest${day}`) {
       el.dataset.mode = `fest${day}`;
-      el.innerHTML = `<div class="greet">${tr("新年快乐 · 恭喜发财", "Happy Lunar New Year")}</div>
-        <div class="sub">${EN ? `${zodiac} · day ${day + 1} of the new year` : `${ny.year} ${zodiac} · 今天是正月<b>${DAY_ZH[day] ?? ""}</b>`}</div>`;
+      el.innerHTML = `<div class="kicker">${EN ? `${ny.year} · ${zodiac}` : `${ny.year} · ${ganzhi(ny.year)}${zodiac}`}</div>
+        <div class="greet">${tr("新年快乐", "Happy Lunar New Year")}</div>
+        <div class="eve">${EN ? `Day ${day + 1} of the new year` : `正月${DAY_ZH[day] ?? ""} · 恭喜发财`}</div>`;
     }
     if (!celebrated) {
       celebrated = true;
@@ -66,15 +82,12 @@ function renderCount() {
   if (el.dataset.mode !== "count") {
     el.dataset.mode = "count";
     const eveToday = new Date().toDateString() === midnight(ny.eve).toDateString();
+    const cell = (i: number, label: string) => `<div class="cell"><span class="num" id="c${i}"></span><span class="unit">${label}</span></div>`;
     el.innerHTML = `
-      <div class="sub">${eveToday ? tr("今天就是除夕！距离正月初一还有", "It's New Year's Eve! The new year starts in") : EN ? `Lunar New Year (${zodiac}) in` : `距离 <b>${ny.year} ${zodiac}</b>春节还有`}</div>
-      <div class="digits">
-        <span class="cell big" id="c0"></span><span class="unit">${tr("天", "days")}</span>
-        <span class="cell" id="c1"></span><span class="unit">${tr("时", "h")}</span>
-        <span class="cell" id="c2"></span><span class="unit">${tr("分", "m")}</span>
-        <span class="cell" id="c3"></span><span class="unit">${tr("秒", "s")}</span>
-      </div>
-      <div class="eve">${tr("除夕", "New Year's Eve")}：${dateLabel(ny.eve)} · ${tr("正月初一", "New Year's Day")}：${dateLabel(ny.date)}</div>`;
+      <div class="kicker">${EN ? `${ny.year} · Year of the ${ny.zodiac_en}` : `${ny.year} · ${ganzhi(ny.year)}${zodiac}`}</div>
+      <div class="sub">${eveToday ? tr("今夜除夕，距离正月初一", "New Year's Eve — the new year begins in") : tr("距离春节还有", "Lunar New Year begins in")}</div>
+      <div class="digits">${cell(0, tr("天", "Days"))}${cell(1, tr("时", "Hours"))}${cell(2, tr("分", "Minutes"))}${cell(3, tr("秒", "Seconds"))}</div>
+      <div class="eve"><span>${tr("除夕", "Eve")} · ${dateLabel(ny.eve)}</span><i></i><span>${tr("正月初一", "New Year's Day")} · ${dateLabel(ny.date)}</span></div>`;
   }
   parts.forEach((v, i) => {
     const c = $(`c${i}`);
@@ -157,8 +170,8 @@ function burst(x: number, y: number, colors: string[], n: number, speed = 260, g
 function fireworks(n: number) {
   for (let i = 0; i < n; i++) {
     setTimeout(() => {
-      const palette = [["#ffd36b", "#fff1b8"], ["#ff5a3c", "#ffd36b"], ["#ff9de2", "#fff"], ["#7ee8fa", "#fff"]][Math.floor(Math.random() * 4)];
-      burst(W * (0.15 + Math.random() * 0.7), H * (0.15 + Math.random() * 0.4), palette, 46, 240, 120);
+      const palette = [[PAL.gold, PAL.gold, PAL.red], [PAL.red, PAL.gold]][Math.floor(Math.random() * 2)];
+      burst(W * (0.15 + Math.random() * 0.7), H * (0.15 + Math.random() * 0.4), palette, 40, 220, 90);
     }, i * 380);
   }
 }
@@ -170,8 +183,8 @@ function grab(d: Drop, now: number) {
     combo = 0;
     shake = 14;
     bgm.boom();
-    burst(d.x, d.y, ["#ffcc33", "#ff5a1f", "#fff", "#888"], 40, 340);
-    floats.push({ x: d.x, y: d.y, text: tr("嘭！-10", "Bang! -10"), color: "#ffe1a0", t: now });
+    burst(d.x, d.y, [PAL.ink, PAL.red, PAL.muted], 34, 320);
+    floats.push({ x: d.x, y: d.y, text: tr("嘭 −10", "Bang −10"), color: PAL.red, t: now });
     return;
   }
   combo = now - lastGrab < 1200 ? combo + 1 : 1;
@@ -182,12 +195,12 @@ function grab(d: Drop, now: number) {
   grabbed++;
   if (d.kind === "ingot") {
     bgm.chime();
-    burst(d.x, d.y, ["#ffd36b", "#fff1b8", "#f5a623"], 34, 300);
+    burst(d.x, d.y, [PAL.gold, PAL.gold, PAL.red], 30, 280);
   } else {
     bgm.ding(1 + Math.min(combo, 12) * 0.03);
-    burst(d.x, d.y, ["#ffd36b", "#f5a623", "#ff5a3c"], 16, 200);
+    burst(d.x, d.y, [PAL.gold, PAL.red], 12, 180);
   }
-  floats.push({ x: d.x, y: d.y, text: `+${gain}${combo >= 5 ? ` ${tr("连击", "combo")}×${combo}` : ""}`, color: d.kind === "ingot" ? "#fff1b8" : "#ffd36b", t: now });
+  floats.push({ x: d.x, y: d.y, text: `+${gain}${combo >= 5 ? ` ${tr("连击", "combo")}×${combo}` : ""}`, color: d.kind === "ingot" ? PAL.gold : PAL.ink, t: now });
 }
 
 canvas.addEventListener("pointerdown", (ev) => {
@@ -251,84 +264,70 @@ function rr(x: number, y: number, w: number, h: number, r: number) {
 function drawPacket(s: number) {
   const w = s;
   const h = s * 1.3;
-  const g = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
-  g.addColorStop(0, "#f2433a");
-  g.addColorStop(1, "#b8121a");
-  ctx.fillStyle = g;
-  rr(-w / 2, -h / 2, w, h, s * 0.12);
+  ctx.fillStyle = PAL.red;
+  rr(-w / 2, -h / 2, w, h, 2);
   ctx.fill();
-  ctx.strokeStyle = "#ffd36b";
-  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = PAL.gold;
+  ctx.lineWidth = 1;
+  // flap line and a small seal
+  ctx.beginPath();
+  ctx.moveTo(-w / 2, -h / 2 + s * 0.12);
+  ctx.quadraticCurveTo(0, -h / 2 + s * 0.5, w / 2, -h / 2 + s * 0.12);
   ctx.stroke();
-  // flap
-  ctx.fillStyle = "#d42a24";
   ctx.beginPath();
-  ctx.moveTo(-w / 2, -h / 2 + s * 0.1);
-  ctx.quadraticCurveTo(0, -h / 2 + s * 0.55, w / 2, -h / 2 + s * 0.1);
-  ctx.lineTo(w / 2, -h / 2 + s * 0.05);
-  ctx.lineTo(-w / 2, -h / 2 + s * 0.05);
+  ctx.arc(0, -h / 2 + s * 0.44, s * 0.15, 0, Math.PI * 2);
+  ctx.fillStyle = PAL.gold;
   ctx.fill();
-  // gold seal with 福
-  ctx.fillStyle = "#ffd36b";
-  ctx.beginPath();
-  ctx.arc(0, -h / 2 + s * 0.42, s * 0.2, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#b8121a";
-  ctx.font = `bold ${Math.round(s * 0.26)}px 'Microsoft YaHei', sans-serif`;
+  ctx.fillStyle = PAL.red;
+  ctx.font = `${Math.round(s * 0.2)}px ${SERIF}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("福", 0, -h / 2 + s * 0.43);
+  ctx.fillText("福", 0, -h / 2 + s * 0.45);
 }
 
 function drawIngot(s: number, now: number) {
-  const g = ctx.createLinearGradient(0, -s / 2, 0, s / 2);
-  g.addColorStop(0, "#fff1b8");
-  g.addColorStop(0.5, "#ffc93c");
-  g.addColorStop(1, "#c98a00");
-  ctx.fillStyle = g;
+  ctx.fillStyle = PAL.gold;
   ctx.beginPath();
-  ctx.moveTo(-s * 0.75, -s * 0.15);
-  ctx.quadraticCurveTo(-s * 0.55, s * 0.45, 0, s * 0.42);
-  ctx.quadraticCurveTo(s * 0.55, s * 0.45, s * 0.75, -s * 0.15);
-  ctx.quadraticCurveTo(s * 0.4, s * 0.02, 0, s * 0.02);
-  ctx.quadraticCurveTo(-s * 0.4, s * 0.02, -s * 0.75, -s * 0.15);
+  ctx.moveTo(-s * 0.7, -s * 0.12);
+  ctx.quadraticCurveTo(-s * 0.5, s * 0.38, 0, s * 0.36);
+  ctx.quadraticCurveTo(s * 0.5, s * 0.38, s * 0.7, -s * 0.12);
+  ctx.quadraticCurveTo(s * 0.36, s * 0.04, 0, s * 0.04);
+  ctx.quadraticCurveTo(-s * 0.36, s * 0.04, -s * 0.7, -s * 0.12);
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(0, -s * 0.05, s * 0.3, s * 0.24, 0, Math.PI, 0);
+  ctx.ellipse(0, -s * 0.02, s * 0.26, s * 0.2, 0, Math.PI, 0);
   ctx.fill();
-  // twinkle
-  const tw = (Math.sin(now / 120) + 1) / 2;
-  ctx.fillStyle = `rgba(255,255,255,${0.4 + 0.6 * tw})`;
-  ctx.font = `${Math.round(s * 0.4)}px sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("✦", s * 0.45, -s * 0.35);
+  // a slow glint
+  const tw = (Math.sin(now / 260) + 1) / 2;
+  ctx.strokeStyle = `rgba(255,255,255,${0.25 + 0.5 * tw})`;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.12, -s * 0.16);
+  ctx.quadraticCurveTo(0, -s * 0.2, s * 0.12, -s * 0.16);
+  ctx.stroke();
 }
 
 function drawCracker(s: number, now: number) {
-  const w = s * 0.5;
-  const h = s * 1.2;
-  const g = ctx.createLinearGradient(-w / 2, 0, w / 2, 0);
-  g.addColorStop(0, "#8c0d12");
-  g.addColorStop(0.45, "#e8322a");
-  g.addColorStop(1, "#8c0d12");
-  ctx.fillStyle = g;
-  rr(-w / 2, -h / 2, w, h, 4);
+  const w = s * 0.4;
+  const h = s * 1.15;
+  ctx.fillStyle = PAL.ink;
+  rr(-w / 2, -h / 2, w, h, 2);
   ctx.fill();
-  ctx.fillStyle = "#ffd36b";
-  ctx.fillRect(-w / 2, -h / 2 + h * 0.18, w, 3);
-  ctx.fillRect(-w / 2, h / 2 - h * 0.22, w, 3);
-  // fuse with a fizzing spark
-  ctx.strokeStyle = "#5a3b1a";
-  ctx.lineWidth = 2;
+  ctx.fillStyle = PAL.red;
+  ctx.fillRect(-w / 2, -h / 2 + h * 0.2, w, 2);
+  ctx.fillRect(-w / 2, h / 2 - h * 0.24, w, 2);
+  // fuse and spark
+  ctx.strokeStyle = PAL.muted;
+  ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(0, -h / 2);
-  ctx.quadraticCurveTo(s * 0.25, -h / 2 - s * 0.2, s * 0.1, -h / 2 - s * 0.38);
+  ctx.quadraticCurveTo(s * 0.22, -h / 2 - s * 0.18, s * 0.08, -h / 2 - s * 0.34);
   ctx.stroke();
-  const f = 0.6 + 0.4 * Math.sin(now / 40);
-  ctx.fillStyle = `rgba(255,${180 + 60 * f},60,${f})`;
+  const f = 0.5 + 0.5 * Math.sin(now / 45);
+  ctx.fillStyle = PAL.gold;
+  ctx.globalAlpha *= 0.5 + 0.5 * f;
   ctx.beginPath();
-  ctx.arc(s * 0.1, -h / 2 - s * 0.38, 3 + 3 * f, 0, Math.PI * 2);
+  ctx.arc(s * 0.08, -h / 2 - s * 0.34, 2 + 2 * f, 0, Math.PI * 2);
   ctx.fill();
 }
 
@@ -394,42 +393,44 @@ function frame(now: number) {
   for (const f of floats) {
     const k = (now - f.t) / 900;
     ctx.globalAlpha = 1 - k;
-    ctx.font = "bold 20px 'Microsoft YaHei', sans-serif";
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = "rgba(90,0,0,0.7)";
-    ctx.strokeText(f.text, f.x, f.y - 40 * k);
+    ctx.font = `italic 18px ${SERIF}`;
     ctx.fillStyle = f.color;
     ctx.fillText(f.text, f.x, f.y - 40 * k);
   }
   ctx.globalAlpha = 1;
   ctx.restore();
 
-  // HUD
+  // HUD: a hairline timer, the score in serif
   if (running) {
     const left = Math.max(0, ROUND_MS - (now - roundStart));
-    ctx.fillStyle = "rgba(0,0,0,0.25)";
-    rr(14, 12, W - 28, 8, 4);
-    ctx.fill();
-    ctx.fillStyle = left < 5000 ? "#ff7a59" : "#ffd36b";
-    rr(14, 12, (W - 28) * (left / ROUND_MS), 8, 4);
-    ctx.fill();
-    ctx.font = "bold 22px 'Microsoft YaHei', sans-serif";
-    ctx.textAlign = "left";
+    ctx.fillStyle = PAL.line;
+    ctx.fillRect(0, 0, W, 2);
+    ctx.fillStyle = left < 5000 ? PAL.red : PAL.gold;
+    ctx.fillRect(0, 0, W * (left / ROUND_MS), 2);
     ctx.textBaseline = "top";
-    ctx.fillStyle = "#ffd36b";
-    ctx.fillText(`🧧 ${score}`, 16, 28);
+    ctx.textAlign = "left";
+    ctx.fillStyle = PAL.ink;
+    ctx.font = `28px ${SERIF}`;
+    ctx.fillText(String(score), 20, 18);
+    ctx.fillStyle = PAL.muted;
+    ctx.font = "10px 'Segoe UI', sans-serif";
+    ctx.fillText(tr("得分", "SCORE"), 22, 52);
     ctx.textAlign = "right";
-    ctx.fillStyle = left < 5000 ? "#ffb199" : "#fff4dc";
-    ctx.fillText(`${Math.ceil(left / 1000)}s`, W - 16, 28);
+    ctx.fillStyle = left < 5000 ? PAL.red : PAL.ink;
+    ctx.font = `28px ${SERIF}`;
+    ctx.fillText(String(Math.ceil(left / 1000)), W - 20, 18);
+    ctx.fillStyle = PAL.muted;
+    ctx.font = "10px 'Segoe UI', sans-serif";
+    ctx.fillText(tr("秒", "SEC"), W - 22, 52);
     if (combo >= 3) {
       ctx.textAlign = "center";
-      ctx.font = "bold 18px 'Microsoft YaHei', sans-serif";
-      ctx.fillStyle = "#fff1b8";
-      ctx.fillText(tr(`连击 ×${combo}`, `Combo ×${combo}`), W / 2, 28);
+      ctx.font = `italic 18px ${SERIF}`;
+      ctx.fillStyle = PAL.gold;
+      ctx.fillText(tr(`连击 × ${combo}`, `combo × ${combo}`), W / 2, 24);
     }
   } else if (Math.random() < dt * 0.6) {
     // idle: a slow drift of packets behind the start card
-    drops.push({ kind: "packet", x: 30 + Math.random() * (W - 60), y: -50, vy: 60 + Math.random() * 30, phase: Math.random() * 6, size: 26 + Math.random() * 10, value: 0, spin: 0.4, gone: 0 });
+    drops.push({ kind: "packet", x: 30 + Math.random() * (W - 60), y: -50, vy: 40 + Math.random() * 20, phase: Math.random() * 6, size: 18 + Math.random() * 8, value: 0, spin: 0.3, gone: 0 });
   }
   requestAnimationFrame(frame);
 }
@@ -463,13 +464,13 @@ function songUrl(): string | null {
 }
 
 function songLabel() {
-  const note = bgm.on ? `<span class="note">🎵</span> ` : "🎵 ";
+  const note = `<span class="eq${bgm.on ? " on" : ""}"><i></i><i></i><i></i></span>`;
   const m = info?.music;
   $("song").innerHTML = m
     ? `${note}<b>${m.name.replace(/[<>&]/g, "")}</b>`
     : `${note}<b>${tr("锣鼓小调", "Gong & drum tune")}</b> ${tr("· 把《恭喜发财》放进音乐文件夹就会播放它", "· put your own song in the music folder to play it")}`;
   $("reset").hidden = !m?.picked;
-  $("mute").textContent = bgm.on ? "🔊" : "🔇";
+  $("mute").textContent = bgm.on ? tr("音乐 开", "Music on") : tr("音乐 关", "Music off");
 }
 
 function play() {

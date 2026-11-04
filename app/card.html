@@ -6,44 +6,50 @@
     <title data-en="Familiar sessions">Familiar 会话</title>
     <style>
       :root {
-        --bg: #fffaf3;
-        --ink: #2b1d16;
-        --muted: #7a6a5f;
-        --line: #eadfd2;
-        --red: #e63946;
-        --frame: #4a2c20;
+        --bg: rgba(250, 248, 244, 0.96);
+        --ink: #161514;
+        --muted: #8c857b;
+        --line: #e2ddd4;
+        --red: #a8382b;
+        --accent: #a88454;
+        --serif: "Palatino Linotype", "Book Antiqua", Georgia, "Noto Serif SC", "Songti SC", "STSong", "SimSun", serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg: rgba(26, 25, 24, 0.96); --ink: #ece8e1; --muted: #8f887e; --line: #2b2926; --red: #c9574a; --accent: #c8a675; }
       }
       html, body {
         margin: 0;
         background: transparent;
         overflow: hidden;
-        font: 12px/1.45 "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+        font: 12px/1.5 "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
         color: var(--ink);
         user-select: none;
+        -webkit-font-smoothing: antialiased;
       }
       #card {
-        margin: 4px;
+        margin: 6px;
         background: var(--bg);
-        border: 2px solid var(--frame);
-        border-radius: 10px;
-        box-shadow: 0 3px 0 rgba(74, 44, 32, 0.25);
-        padding: 8px 10px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        box-shadow: 0 8px 24px rgba(22, 21, 20, 0.12);
+        padding: 10px 12px;
+        backdrop-filter: blur(10px);
       }
-      h1 { font-size: 12px; margin: 0 0 6px; display: flex; justify-content: space-between; gap: 8px; }
-      h1 small { color: var(--muted); font-weight: normal; }
-      .row { display: grid; grid-template-columns: 10px 1fr auto; gap: 2px 8px; padding: 5px 0; border-top: 1px solid var(--line); align-items: baseline; }
+      h1 { font-family: var(--serif); font-size: 13px; font-weight: 400; letter-spacing: 0.04em; margin: 0 0 6px; display: flex; justify-content: space-between; gap: 8px; }
+      h1 small { color: var(--muted); font-family: "Segoe UI", sans-serif; font-size: 10.5px; letter-spacing: 0.06em; }
+      .row { display: grid; grid-template-columns: 8px 1fr auto; gap: 1px 10px; padding: 6px 0; border-top: 1px solid var(--line); align-items: baseline; }
       .row:first-of-type { border-top: 0; }
-      .dot { width: 8px; height: 8px; border-radius: 50%; background: #9aa0a6; align-self: center; }
-      .dot.attention { background: var(--red); box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.2); }
-      .dot.tool, .dot.reading, .dot.thinking { background: #2a9d8f; }
-      .dot.done { background: #e9c46a; }
-      .dot.error, .dot.stone, .dot.aborted { background: #b5651d; }
-      .name { font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .state { color: var(--muted); white-space: nowrap; }
-      .state.attention { color: var(--red); font-weight: bold; }
-      .meta { grid-column: 2 / 4; color: var(--muted); font-size: 11px; }
+      .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); align-self: center; }
+      .dot.attention { background: var(--red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 18%, transparent); }
+      .dot.tool, .dot.reading, .dot.thinking { background: #4f7f6f; }
+      .dot.done { background: var(--accent); }
+      .dot.error, .dot.stone, .dot.aborted { background: #8a5a3c; }
+      .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .state { color: var(--muted); white-space: nowrap; font-size: 11px; letter-spacing: 0.04em; }
+      .state.attention { color: var(--red); }
+      .meta { grid-column: 2 / 4; color: var(--muted); font-size: 10.5px; }
       .empty { color: var(--muted); padding: 4px 0; }
-      .hint { color: var(--muted); font-size: 11px; margin-top: 4px; border-top: 1px dashed var(--line); padding-top: 4px; }
+      .hint { color: var(--muted); font-size: 10.5px; margin-top: 6px; border-top: 1px solid var(--line); padding-top: 6px; letter-spacing: 0.04em; }
     </style>
   </head>
   <body>

@@ -557,11 +557,11 @@ export class PetRenderer {
       if (m.view.state === "attention" && !m.leaving) {
         // Packs usually draw their own "!"; add one only for packs that fall back.
         if (ma.from !== "attention") {
-          c.fillStyle = "#e63946";
+          c.fillStyle = "#a8382b";
           c.fillRect(Math.round(m.x + mw / 4), bottom - mh - 2, 3, 8);
           c.fillRect(Math.round(m.x + mw / 4), bottom - mh + 8, 3, 3);
         }
-        this.footText(m.view.project, m.x, bottom, mw + GAP, "#e63946", true);
+        this.footText(m.view.project, m.x, bottom, mw + GAP, "#a8382b", true);
       }
     }
     if (this.view?.minis_more) {
@@ -615,7 +615,7 @@ export class PetRenderer {
     this.drawBadge(cx - mainW / 2, bottom - mainH + 4);
     // Camp tag (and project / rule label) under the feet.
     if (this.view?.marker) this.drawMarker(this.view.marker, this.view.label, cx, bottom);
-    else if (this.view?.label) this.footText(this.view.label, cx, bottom, mainW, "#4a2c20", false);
+    else if (this.view?.label) this.footText(this.view.label, cx, bottom, mainW, "#3a3733", false);
 
     const hk = JSON.stringify(hits.map((r) => [Math.round(r.x), Math.round(r.y), Math.round(r.w), Math.round(r.h), r.key ?? ""]));
     if (hk !== this.lastHits) {
@@ -847,12 +847,12 @@ export class PetRenderer {
     const c = this.ctx;
     const reps = this.kegel?.reps ?? 0;
     const [label, color] =
-      st.phase === "ready" ? [tr(`提肛时间！准备 ${st.left}`, `Kegel time! Ready ${st.left}`), "#7b6cf6"]
-      : st.phase === "squeeze" ? [tr(`收紧 ⬆ ${st.left}`, `Squeeze ⬆ ${st.left}`), "#e76f51"]
-      : [tr(`放松 ⬇ ${st.left}`, `Relax ⬇ ${st.left}`), "#2ec27e"];
+      st.phase === "ready" ? [tr(`提肛时间！准备 ${st.left}`, `Kegel time! Ready ${st.left}`), "#3a3733"]
+      : st.phase === "squeeze" ? [tr(`收紧 ⬆ ${st.left}`, `Squeeze ⬆ ${st.left}`), "#a8382b"]
+      : [tr(`放松 ⬇ ${st.left}`, `Relax ⬇ ${st.left}`), "#5b7a62"];
     const count = st.phase === "ready" ? tr(`${reps} 组`, `${reps} reps`) : `${st.rep}/${reps}`;
-    const big = "bold 14px 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif";
-    const small = "12px 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif";
+    const big = "13px 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', system-ui, sans-serif";
+    const small = "11px 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', system-ui, sans-serif";
     c.font = big;
     const lw = c.measureText(label).width;
     c.font = small;
@@ -862,7 +862,7 @@ export class PetRenderer {
     const px = Math.round((w - pw) / 2), py = Math.max(2, Math.min(BUBBLE_H - ph - 12, petTop - ph - 12));
     c.fillStyle = color;
     c.beginPath();
-    c.roundRect(px, py, pw, ph, 12);
+    c.roundRect(px, py, pw, ph, 3);
     c.fill();
     c.fillStyle = "#fff";
     c.textBaseline = "middle";
@@ -880,7 +880,7 @@ export class PetRenderer {
     for (let i = 0; i < dots; i++) {
       const done = st.phase !== "ready" && i < st.rep - 1;
       const cur = st.phase !== "ready" && i === st.rep - 1;
-      c.fillStyle = done ? "#4a2c20" : "rgba(74,44,32,0.25)";
+      c.fillStyle = done ? "#161514" : "rgba(22,21,20,0.2)";
       c.beginPath();
       c.arc(dx0 + i * gap, dy, cur ? 3.2 : 2.4, 0, Math.PI * 2);
       c.fill();
@@ -998,7 +998,7 @@ export class PetRenderer {
     // The pet on the left carries the flag at the joint.
     if (t.side === "left") {
       const fx = w - 3;
-      c.fillStyle = "#e63946";
+      c.fillStyle = "#a8382b";
       c.fillRect(fx - 1, handY, 2, 12);
       c.beginPath();
       c.moveTo(fx - 1, handY + 1);
@@ -1150,7 +1150,7 @@ export class PetRenderer {
 
   private footText(text: string, cx: number, bottom: number, maxW: number, color: string, bold: boolean): void {
     const c = this.ctx;
-    c.font = `${bold ? "bold " : ""}11px 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif`;
+    c.font = `${bold ? "600 " : ""}10.5px 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', system-ui, sans-serif`;
     let t = text;
     while (c.measureText(t).width > maxW && t.length > 1) t = t.slice(0, -2) + "…";
     c.textAlign = "center";
@@ -1182,31 +1182,47 @@ export class PetRenderer {
 
   private drawBubble(text: string, w: number, petTop: number): void {
     const c = this.ctx;
-    c.font = "13px 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif";
+    c.font = "12.5px 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', system-ui, sans-serif";
     const maxW = Math.min(w - 16, 260);
     let t = text;
     while (c.measureText(t).width > maxW - 16 && t.length > 1) t = t.slice(0, -2) + "…";
-    const tw = Math.min(maxW, c.measureText(t).width + 16);
+    const tw = Math.min(maxW, c.measureText(t).width + (this.view?.state === "attention" ? 30 : 22));
     const bh = 26;
     const bx = Math.round((w - tw) / 2);
     const by = Math.max(2, Math.min(BUBBLE_H - bh - 8, petTop - bh - 8));
     const attention = this.view?.state === "attention";
-    c.fillStyle = attention ? "#fff4f4" : "#ffffff";
-    c.strokeStyle = attention ? "#e63946" : "#4a2c20";
-    c.lineWidth = 2;
+    // Quiet paper label with a hairline edge and a small tail.
+    c.save();
+    c.shadowColor = "rgba(22,21,20,0.14)";
+    c.shadowBlur = 8;
+    c.shadowOffsetY = 2;
+    c.fillStyle = "rgba(250,248,244,0.97)";
     c.beginPath();
-    c.roundRect(bx, by, tw, bh, 8);
-    c.moveTo(w / 2 - 6, by + bh);
-    c.lineTo(w / 2, by + bh + 7);
-    c.lineTo(w / 2 + 6, by + bh);
+    c.roundRect(bx, by, tw, bh, 3);
+    c.moveTo(w / 2 - 5, by + bh);
+    c.lineTo(w / 2, by + bh + 5);
+    c.lineTo(w / 2 + 5, by + bh);
     c.fill();
+    c.restore();
+    c.strokeStyle = attention ? "#a8382b" : "rgba(22,21,20,0.16)";
+    c.lineWidth = 1;
+    c.beginPath();
+    c.roundRect(bx + 0.5, by + 0.5, tw - 1, bh - 1, 3);
     c.stroke();
-    // Cover the stroke where the tail meets the box.
-    c.fillRect(w / 2 - 5, by + bh - 2, 10, 3);
-    c.fillStyle = "#2b1d16";
+    c.fillStyle = "rgba(250,248,244,0.97)";
+    c.fillRect(w / 2 - 4, by + bh - 1.5, 8, 2);
+    let tx = w / 2;
+    if (attention) {
+      c.fillStyle = "#a8382b";
+      c.beginPath();
+      c.arc(bx + 11, by + bh / 2, 2.5, 0, Math.PI * 2);
+      c.fill();
+      tx += 5;
+    }
+    c.fillStyle = "#161514";
     c.textBaseline = "middle";
     c.textAlign = "center";
-    c.fillText(t, w / 2, by + bh / 2 + 1);
+    c.fillText(t, tx, by + bh / 2 + 1);
   }
 
   private drawBadge(left: number, top: number): void {
@@ -1214,12 +1230,12 @@ export class PetRenderer {
     if (!v || v.online <= 1) return;
     const c = this.ctx;
     const text = v.waiting > 0 ? `!${v.waiting}` : `×${v.online}`;
-    c.font = "bold 12px system-ui, sans-serif";
+    c.font = "11px 'Segoe UI', system-ui, sans-serif";
     const tw = c.measureText(text).width + 10;
     const x = Math.round(left + 2), y = Math.round(top);
-    c.fillStyle = v.waiting > 0 ? "#e63946" : "rgba(43,29,22,0.8)";
+    c.fillStyle = v.waiting > 0 ? "#a8382b" : "rgba(22,21,20,0.82)";
     c.beginPath();
-    c.roundRect(x, y, tw, 16, 8);
+    c.roundRect(x, y, tw, 16, 3);
     c.fill();
     c.fillStyle = "#fff";
     c.textAlign = "center";
@@ -1231,18 +1247,29 @@ export class PetRenderer {
   private drawMarker(camp: string, label: string | undefined, cx: number, bottom: number): void {
     const c = this.ctx;
     const text = label ? `${camp} · ${label}` : camp;
-    c.font = "bold 10px 'Microsoft YaHei', system-ui, sans-serif";
+    c.font = "10px 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif";
     let t = text;
     while (c.measureText(t).width > 150 && t.length > 4) t = t.slice(0, -2) + "…";
-    const tw = c.measureText(t).width + 10;
-    c.fillStyle = camp === "Codex" ? "#1f9d8f" : "#d9772b";
+    const tw = c.measureText(t).width + 18;
+    const x = Math.round(cx - tw / 2);
+    // Paper tag with a dot in the camp colour.
+    c.fillStyle = "rgba(250,248,244,0.94)";
     c.beginPath();
-    c.roundRect(Math.round(cx - tw / 2), bottom + 2, tw, 14, 7);
+    c.roundRect(x, bottom + 2, tw, 14, 2);
     c.fill();
-    c.fillStyle = "#fff";
+    c.strokeStyle = "rgba(22,21,20,0.14)";
+    c.lineWidth = 1;
+    c.beginPath();
+    c.roundRect(x + 0.5, bottom + 2.5, tw - 1, 13, 2);
+    c.stroke();
+    c.fillStyle = camp === "Codex" ? "#4f7f6f" : "#b5704f";
+    c.beginPath();
+    c.arc(x + 6, bottom + 9, 2, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = "#161514";
     c.textAlign = "center";
     c.textBaseline = "middle";
-    c.fillText(t, cx, bottom + 9.5);
+    c.fillText(t, cx + 4, bottom + 9.5);
   }
 }
 

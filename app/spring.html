@@ -4,89 +4,72 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title data-en="Spring Festival">春节倒计时</title>
+    <link rel="stylesheet" href="/src/ui.css" />
     <style>
-      :root {
-        --red: #b3141c;
-        --red2: #d7261e;
-        --deep: #6e0b10;
-        --gold: #ffd36b;
-        --gold2: #f5a623;
-        --ink: #fff4dc;
-        --muted: #f6c9a8;
-        color-scheme: dark;
-      }
-      * { box-sizing: border-box; }
-      html, body { margin: 0; height: 100%; }
-      body {
-        background: radial-gradient(ellipse at 50% 0%, #e0352a 0%, var(--red) 38%, var(--deep) 100%);
-        color: var(--ink);
-        font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
-        display: flex; flex-direction: column; overflow: hidden; user-select: none;
-      }
-      /* faint lattice pattern */
-      body::before {
-        content: ""; position: fixed; inset: 0; pointer-events: none; opacity: 0.07;
-        background-image: radial-gradient(circle at 50% 50%, transparent 9px, var(--gold) 10px, transparent 11px);
-        background-size: 34px 34px;
-      }
-      header { display: flex; align-items: center; justify-content: center; position: relative; padding: 10px 16px 0; min-height: 50px; }
-      h1 { margin: 0; font-size: 22px; letter-spacing: 4px; color: var(--gold); text-shadow: 0 2px 0 var(--deep), 0 0 12px rgba(255, 200, 80, 0.45); }
-      .lantern { position: absolute; top: -6px; width: 44px; transform-origin: 50% 0; animation: sway 3.2s ease-in-out infinite; }
-      .lantern.l { left: 22px; } .lantern.r { right: 22px; animation-delay: -1.6s; }
-      .lantern i { display: block; width: 2px; height: 14px; margin: 0 auto; background: var(--gold2); }
-      .lantern b { display: block; height: 40px; border-radius: 45%; background: radial-gradient(circle at 50% 40%, #ff5a3c, #c4161c 70%); box-shadow: 0 0 18px rgba(255, 90, 40, 0.7); border-top: 4px solid var(--gold2); border-bottom: 4px solid var(--gold2); position: relative; }
-      .lantern b::after { content: "福"; position: absolute; inset: 0; display: grid; place-items: center; color: var(--gold); font-size: 17px; font-weight: bold; }
-      .lantern s { display: block; width: 3px; height: 16px; margin: 0 auto; background: linear-gradient(var(--gold2), transparent); }
-      @keyframes sway { 0%, 100% { transform: rotate(-7deg); } 50% { transform: rotate(7deg); } }
+      html, body { height: 100%; }
+      body { display: flex; flex-direction: column; overflow: hidden; user-select: none; }
+      /* faint paper grain */
+      body::before { content: ""; position: fixed; inset: 0; pointer-events: none; opacity: 0.35; mix-blend-mode: multiply;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.45 0 0 0 0 0.4 0 0 0 0 0.33 0 0 0 0.09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+      @media (prefers-color-scheme: dark) { body::before { mix-blend-mode: screen; opacity: 0.25; } }
 
-      #count { text-align: center; padding: 4px 16px 8px; }
-      .sub { font-size: 15px; color: var(--muted); letter-spacing: 1px; }
-      .sub b { color: var(--gold); }
-      .digits { display: flex; justify-content: center; align-items: flex-end; gap: 6px; margin: 8px 0 6px; flex-wrap: wrap; }
-      .cell { display: inline-block; min-width: 64px; padding: 6px 8px 4px; border-radius: 10px; font-size: 44px; font-weight: 800; line-height: 1;
-        font-variant-numeric: tabular-nums; color: var(--deep); background: linear-gradient(#fff3c4, var(--gold) 55%, var(--gold2)); box-shadow: 0 3px 0 #9c5a00, 0 0 14px rgba(255, 210, 100, 0.35); }
-      .cell.big { min-width: 96px; }
-      .cell.tick { animation: tick 0.35s ease-out; }
-      @keyframes tick { 0% { transform: translateY(-4px) scale(1.06); } 100% { transform: none; } }
-      .unit { font-size: 15px; color: var(--gold); padding-bottom: 6px; margin-right: 6px; }
-      .eve { font-size: 13px; color: var(--muted); }
-      .greet { font-size: 40px; font-weight: 800; color: var(--gold); text-shadow: 0 3px 0 var(--deep); margin: 8px 0 4px; letter-spacing: 6px; }
+      header { display: flex; align-items: center; gap: 12px; padding: 22px 28px 0; }
+      .seal { width: 30px; height: 30px; flex: none; display: grid; place-items: center; background: var(--red); color: #f6efe4; font-family: var(--serif); font-size: 17px; border-radius: 2px; }
+      h1 { margin: 0; font-size: 20px; line-height: 1; }
+      .en { margin-left: auto; font-size: 10px; letter-spacing: 0.32em; color: var(--muted); }
 
-      #lyric { text-align: center; padding: 0 16px 8px; min-height: 52px; }
-      #lyric .cur { font-size: 20px; font-weight: bold; color: var(--gold); text-shadow: 0 2px 0 var(--deep), 0 0 10px rgba(255, 200, 80, 0.5); letter-spacing: 2px; min-height: 28px; }
-      #lyric .cur.pop { animation: pop 0.4s ease-out; }
-      @keyframes pop { 0% { transform: scale(1.18); opacity: 0.4; } 100% { transform: none; opacity: 1; } }
-      #lyric .nxt { font-size: 13px; color: var(--muted); min-height: 18px; }
-      #stage { position: relative; flex: 1; margin: 0 14px; min-height: 230px; border-radius: 16px; overflow: hidden;
-        background: linear-gradient(rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.32)); box-shadow: inset 0 0 0 2px rgba(255, 211, 107, 0.35); }
-      #game { position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; }
-      .card { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 16px;
-        background: rgba(80, 6, 10, 0.55); backdrop-filter: blur(2px); }
-      .card[hidden] { display: none; }
-      .card h2 { margin: 0; font-size: 30px; color: var(--gold); letter-spacing: 3px; text-shadow: 0 2px 0 var(--deep); }
-      .card p { margin: 0; font-size: 14px; color: var(--ink); line-height: 1.7; }
-      .card .small { font-size: 12px; color: var(--muted); }
-      .card .score { font-size: 54px; font-weight: 800; color: var(--gold); line-height: 1; }
-      button { font: inherit; cursor: pointer; border: 0; border-radius: 999px; }
-      .go { padding: 10px 34px; font-size: 18px; font-weight: bold; color: var(--deep); background: linear-gradient(#fff1b8, var(--gold) 50%, var(--gold2)); box-shadow: 0 3px 0 #9c5a00; }
-      .go:hover { filter: brightness(1.06); } .go:active { transform: translateY(2px); box-shadow: 0 1px 0 #9c5a00; }
+      #count { text-align: center; padding: 26px 24px 18px; }
+      .kicker { font-size: 10.5px; letter-spacing: 0.32em; color: var(--accent); }
+      .sub { font-family: var(--serif); font-size: 15px; color: var(--ink-2); margin-top: 8px; letter-spacing: 0.08em; }
+      .digits { display: flex; justify-content: center; margin: 16px 0 14px; }
+      .cell { display: flex; flex-direction: column; align-items: center; min-width: 108px; padding: 0 18px; border-left: 1px solid var(--line); }
+      .cell:first-child { border-left: 0; }
+      .num { font-family: var(--serif); font-size: 58px; line-height: 1; color: var(--ink); font-variant-numeric: lining-nums tabular-nums; letter-spacing: 0.01em; }
+      .num.tick { animation: tick 0.6s var(--ease); }
+      @keyframes tick { from { opacity: 0.25; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+      .unit { font-size: 10.5px; letter-spacing: 0.24em; color: var(--muted); margin-top: 10px; }
+      .eve { display: flex; justify-content: center; align-items: center; gap: 12px; font-size: 12px; color: var(--muted); letter-spacing: 0.04em; flex-wrap: wrap; }
+      .eve i { width: 4px; height: 4px; border-radius: 50%; background: var(--red); }
+      .greet { font-family: var(--serif); font-size: 46px; color: var(--ink); margin: 12px 0 8px; letter-spacing: 0.12em; }
 
-      footer { display: flex; align-items: center; gap: 8px; padding: 8px 14px 10px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
-      footer .song { flex: 1; min-width: 160px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      footer .song b { color: var(--gold); font-weight: normal; }
-      .ghost { padding: 4px 12px; font-size: 12px; color: var(--ink); background: rgba(255, 255, 255, 0.12); box-shadow: inset 0 0 0 1px rgba(255, 211, 107, 0.4); }
-      .ghost:hover { background: rgba(255, 255, 255, 0.2); }
-      #mute { width: 32px; height: 32px; padding: 0; font-size: 16px; }
-      input[type="range"] { width: 90px; accent-color: var(--gold2); }
-      .note { animation: bob 0.9s ease-in-out infinite; display: inline-block; }
-      @keyframes bob { 50% { transform: translateY(-3px) rotate(-8deg); } }
+      #lyric { text-align: center; padding: 0 24px 14px; min-height: 48px; }
+      #lyric .cur { font-family: var(--serif); font-size: 16px; color: var(--ink); letter-spacing: 0.1em; min-height: 24px; }
+      #lyric .cur.pop { animation: fadeup 0.6s var(--ease); }
+      @keyframes fadeup { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+      #lyric .nxt { font-size: 12px; color: var(--faint); min-height: 18px; letter-spacing: 0.06em; }
+
+      #stage { position: relative; flex: 1; margin: 0 28px; min-height: 220px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--panel); }
+      #game { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+      .sheet { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 20px;
+        background: color-mix(in srgb, var(--panel) 82%, transparent); backdrop-filter: blur(3px); border: 0; border-radius: 0; }
+
+      .sheet[hidden] { display: none; }
+      .sheet h2 { margin: 0; font-family: var(--serif); font-size: 28px; color: var(--ink); letter-spacing: 0.16em; }
+      .sheet .rule { width: 28px; height: 1px; background: var(--accent); margin: 2px 0 4px; }
+      .sheet p { margin: 0; font-size: 13px; color: var(--ink-2); line-height: 1.8; max-width: 420px; }
+      .sheet p b { color: var(--red); font-weight: 400; }
+      .sheet .small { font-size: 11.5px; color: var(--muted); letter-spacing: 0.04em; }
+      .sheet .score { font-family: var(--serif); font-size: 64px; color: var(--ink); line-height: 1; }
+      .go { margin-top: 8px; padding: 9px 36px; font-size: 13px; letter-spacing: 0.24em; }
+
+      footer { display: flex; align-items: center; gap: 10px; padding: 14px 28px 18px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+      footer .song { flex: 1; min-width: 160px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 10px; }
+      footer .song b { font-family: var(--serif); font-weight: 400; font-size: 13px; color: var(--ink); letter-spacing: 0.04em; }
+      #mute { padding: 3px 10px; font-size: 11px; letter-spacing: 0.12em; }
+      input[type="range"] { width: 84px; }
+      .eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
+      .eq i { width: 2px; height: 4px; background: var(--accent); }
+      .eq.on i { animation: eq 0.9s ease-in-out infinite; }
+      .eq.on i:nth-child(2) { animation-delay: -0.3s; } .eq.on i:nth-child(3) { animation-delay: -0.6s; }
+      @keyframes eq { 0%, 100% { height: 3px; } 50% { height: 12px; } }
+      footer button { font-size: 11.5px; padding: 3px 12px; }
     </style>
   </head>
   <body>
     <header>
-      <div class="lantern l"><i></i><b></b><s></s></div>
-      <h1 data-en="Spring Festival">🧧 春节倒计时 🧧</h1>
-      <div class="lantern r"><i></i><b></b><s></s></div>
+      <div class="seal">春</div>
+      <h1 data-en="Spring Festival">春节倒计时</h1>
+      <span class="en">LUNAR NEW YEAR</span>
     </header>
 
     <section id="count"></section>
@@ -95,23 +78,25 @@
 
     <section id="stage">
       <canvas id="game"></canvas>
-      <div class="card" id="intro">
-        <h2 data-en="Grab the red envelopes!">抢红包！</h2>
-        <p data-en="Red envelopes rain down for 30 seconds — click to grab them. Gold ingots are worth a lot; don't touch the firecrackers!">红包雨下 30 秒，点中就是你的。金元宝分最高，<b>别碰爆竹</b>！</p>
+      <div class="sheet" id="intro">
+        <h2 data-en="Red Envelopes">抢红包</h2>
+        <div class="rule"></div>
+        <p data-en="Red envelopes fall for thirty seconds. Click to catch them; gold ingots are worth the most. Leave the firecrackers alone.">红包落下三十秒，点中即是你的。金元宝分值最高，<b>爆竹勿碰</b>。</p>
         <p class="small" id="quota"></p>
-        <button class="go" id="start" data-en="Start">开抢</button>
+        <button class="go primary" id="start" data-en="BEGIN">开 始</button>
       </div>
-      <div class="card" id="result" hidden>
-        <h2 id="r-title"></h2>
+      <div class="sheet" id="result" hidden>
+        <p class="small" id="r-title"></p>
         <div class="score" id="r-score"></div>
+        <div class="rule"></div>
         <p id="r-line"></p>
         <p class="small" id="r-coins"></p>
-        <button class="go" id="again" data-en="Play again">再来一局</button>
+        <button class="go" id="again" data-en="AGAIN">再来一局</button>
       </div>
     </section>
 
     <footer>
-      <button class="ghost" id="mute" title="背景音乐开关" data-en-title="Music on/off">🔊</button>
+      <button id="mute" title="背景音乐开关" data-en-title="Music on/off">音乐</button>
       <input type="range" id="vol" min="0" max="100" value="60" title="音量" data-en-title="Volume" />
       <span class="song" id="song"></span>
       <button class="ghost" id="pick" data-en="Pick a song…">选歌…</button>

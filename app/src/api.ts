@@ -260,4 +260,4 @@ export const RARITY_NAMES: Record<string, string> = {
   get epic() { return t("史诗", "Epic"); },
   get legendary() { return t("传说", "Legendary"); },
 };
-export const RARITY_COLORS: Record<string, string> = { common: "#8a9bb0", rare: "#3f8efc", epic: "#a35cf0", legendary: "#f2a93b" };
+export const RARITY_COLORS: Record<string, string> = { common: "#8c969e", rare: "#4a6fa5", epic: "#7d5ba6", legendary: "#b8956a" };

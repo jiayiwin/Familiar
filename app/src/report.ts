@@ -20,7 +20,7 @@ function eff(d?: CampDay): number {
 }
 
 function text(t: string, x: number, y: number, size: number, color: string, weight = "normal", align: CanvasTextAlign = "left", maxW?: number) {
-  ctx.font = `${weight} ${size}px 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif`;
+  ctx.font = weight === "serif" ? `${size}px "Palatino Linotype", Georgia, "Songti SC", "STSong", "SimSun", serif` : `${weight} ${size}px "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif`;
   ctx.fillStyle = color;
   ctx.textAlign = align;
   ctx.textBaseline = "alphabetic";
@@ -35,7 +35,7 @@ function text(t: string, x: number, y: number, size: number, color: string, weig
 function stat(label: string, value: string, x: number, y: number, maxW = 112) {
   const parts = value.match(/[+\-<]?\d+(?:\.\d+)?|[^\d+\-<]+/g) ?? [value];
   const big = (p: string) => /\d/.test(p);
-  const font = (p: string, k: number) => `bold ${Math.round((big(p) ? 26 : 13) * k)}px 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif`;
+  const font = (p: string, k: number) => (big(p) ? `${Math.round(28 * k)}px "Palatino Linotype", Georgia, serif` : `${Math.round(12 * k)}px "Segoe UI", "Microsoft YaHei UI", sans-serif`);
   const width = (k: number) =>
     parts.reduce((w, p) => {
       ctx.font = font(p.trim() || p, k);
@@ -49,12 +49,12 @@ function stat(label: string, value: string, x: number, y: number, maxW = 112) {
     const t = p.trim();
     if (!t) continue;
     ctx.font = font(t, k);
-    ctx.fillStyle = big(t) ? "#2b1d16" : "#5a4a40";
+    ctx.fillStyle = big(t) ? "#161514" : "#3a3733";
     if (!big(t)) cx += 2 * k;
     ctx.fillText(t, cx, y);
     cx += ctx.measureText(t).width + (big(t) ? 0 : 1 * k);
   }
-  text(label, x, y + 20, 12, "#7a6a5f");
+  text(label, x, y + 20, 12, "#8c857b");
 }
 
 /** Work time for the report: "<1 分钟", "25 分钟", "1 小时 5 分". */
@@ -99,13 +99,13 @@ function draw(r: Report) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   // Card.
-  ctx.fillStyle = "#fffaf3";
+  ctx.fillStyle = "#faf8f4";
   ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = "#d9772b";
+  ctx.fillStyle = "#161514";
   ctx.fillRect(0, 0, W, 64);
-  text(tr("Familiar 今日报告", "Familiar daily report"), 20, 30, 18, "#fff", "bold");
-  text(r.day, 20, 50, 12, "rgba(255,255,255,0.85)");
-  text(tr(`金币 ${r.balance}`, `Coins ${r.balance}`), W - 20, 38, 14, "#fff", "bold", "right");
+  text(tr("今日报告", "Daily Report"), 20, 32, 20, "#f4f1ec", "serif");
+  text(r.day, 20, 51, 10.5, "rgba(244,241,236,0.55)");
+  text(tr(`金币 ${r.balance}`, `Coins ${r.balance}`), W - 20, 38, 15, "#c8a675", "serif", "right");
 
   stat(tr("agent 工作时长", "Agent work time"), r.work_ms ? workTime(r.work_ms) : "0", 20, 104, 122);
   stat(tr("完成轮数", "Turns done"), String(r.turns), 154, 104);
@@ -118,9 +118,9 @@ function draw(r: Report) {
   const cc = r.by_camp["claude-code"];
   const cx = r.by_camp["codex"];
   let y = 228;
-  ctx.fillStyle = "#eadfd2";
+  ctx.fillStyle = "#e2ddd4";
   ctx.fillRect(20, y - 16, W - 40, 1);
-  text(tr("今日拔河", "Today's tug-of-war"), 20, y + 4, 13, "#7a6a5f", "bold");
+  text(tr("今日拔河", "Today's tug-of-war"), 20, y + 4, 13, "#8c857b", "bold");
   if (cc || cx) {
     const a = eff(cc);
     const b = eff(cx);
@@ -131,9 +131,9 @@ function draw(r: Report) {
           : b > a
             ? tr("Codex 领先", "Codex leads")
             : tr("平局", "Tie");
-    text(verdict, W - 20, y + 4, 13, "#2b1d16", "bold", "right");
+    text(verdict, W - 20, y + 4, 13, "#161514", "bold", "right");
     y += 26;
-    for (const [name, d, color] of [["Claude Code", cc, "#d9772b"], ["Codex", cx, "#1f9d8f"]] as const) {
+    for (const [name, d, color] of [["Claude Code", cc, "#b5704f"], ["Codex", cx, "#4f7f6f"]] as const) {
       if (!d) continue;
       text(name, 20, y, 12, color, "bold");
       text(
@@ -141,47 +141,47 @@ function draw(r: Report) {
           `${d.turns} 轮 · 一次通过 ${d.clean} · 出错 ${d.errors} · 效率分 ${eff(d).toFixed(2)}`,
           `${d.turns} turns · ${d.clean} first-try · ${d.errors} errors · score ${eff(d).toFixed(2)}`,
         ),
-        110, y, 12, "#2b1d16", "normal", "left", W - 130,
+        110, y, 12, "#161514", "normal", "left", W - 130,
       );
       y += 20;
     }
   } else {
     y += 26;
-    text(tr("今天还没有完成的回合", "No finished turns yet today"), 20, y, 12, "#7a6a5f");
+    text(tr("今天还没有完成的回合", "No finished turns yet today"), 20, y, 12, "#8c857b");
     y += 20;
   }
 
   // Fish list.
   y += 14;
-  ctx.fillStyle = "#eadfd2";
+  ctx.fillStyle = "#e2ddd4";
   ctx.fillRect(20, y - 16, W - 40, 1);
-  text(tr("鱼篓", "Fish basket"), 20, y + 4, 13, "#7a6a5f", "bold");
+  text(tr("鱼篓", "Fish basket"), 20, y + 4, 13, "#8c857b", "bold");
   y += 26;
   if (!fish.length) {
-    text(tr("今天一条鱼都没钓到", "Not a single fish today"), 20, y, 12, "#7a6a5f");
+    text(tr("今天一条鱼都没钓到", "Not a single fish today"), 20, y, 12, "#8c857b");
     y += 20;
   }
   fish.slice(0, 24).forEach((f, i) => {
     const x = i % 2 === 0 ? 34 : W / 2 + 14;
     const yy = y + Math.floor(i / 2) * 22;
     fishIcon(x, yy - 4, RARITY_COLORS[f.rarity] ?? "#8a9bb0");
-    text(`${names[f.fish_id] ?? f.fish_id}${f.coins ? `  +${f.coins}` : ""}`, x + 16, yy, 12, "#2b1d16", "normal", "left", W / 2 - 34);
+    text(`${names[f.fish_id] ?? f.fish_id}${f.coins ? `  +${f.coins}` : ""}`, x + 16, yy, 12, "#161514", "normal", "left", W / 2 - 34);
   });
-  if (fish.length > 24) text(tr(`…还有 ${fish.length - 24} 条`, `…and ${fish.length - 24} more`), W - 20, y + rows * 22, 11, "#7a6a5f", "normal", "right");
+  if (fish.length > 24) text(tr(`…还有 ${fish.length - 24} 条`, `…and ${fish.length - 24} more`), W - 20, y + rows * 22, 11, "#8c857b", "normal", "right");
 
   if (photo) {
     // Affinity 80+: the two pets in one picture.
     const py = H - 140;
-    ctx.fillStyle = "#eadfd2";
+    ctx.fillStyle = "#e2ddd4";
     ctx.fillRect(20, py - 6, W - 40, 1);
-    text(tr(`合照 · 好感度 ${games!.affinity}`, `Photo · affinity ${games!.affinity}`), 20, py + 12, 13, "#7a6a5f", "bold");
+    text(tr(`合照 · 好感度 ${games!.affinity}`, `Photo · affinity ${games!.affinity}`), 20, py + 12, 13, "#8c857b", "bold");
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(photos[0], W / 2 - 100, py + 18, 96, 96);
     ctx.drawImage(photos[1], W / 2 + 4, py + 18, 96, 96);
   }
   text(
     tr("战绩仅供娱乐，任务难度不同，不代表模型能力", "Just for fun: tasks differ in difficulty, so this says nothing about model ability"),
-    W / 2, H - 14, 10, "#a99a8e", "normal", "center", W - 24,
+    W / 2, H - 14, 10, "#b7b0a5", "normal", "center", W - 24,
   );
 }
 

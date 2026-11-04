@@ -23,7 +23,7 @@ interface Open {
   h: number;
 }
 
-const ACCENTS: Record<string, string> = { "claude-code": "#d97757", codex: "#10a37f" };
+const ACCENTS: Record<string, string> = { "claude-code": "#b5704f", codex: "#4f7f6f" };
 const stage = document.getElementById("stage")!;
 const win = getCurrentWebviewWindow();
 let closing = false;
@@ -89,9 +89,9 @@ function render(o: Open) {
   closing = false;
   stage.innerHTML = "";
   stage.classList.remove("open");
-  const accent = ACCENTS[o.model.camp ?? ""] ?? "#d9772b";
+  const accent = ACCENTS[o.model.camp ?? ""] ?? "#a88454";
   document.documentElement.style.setProperty("--accent", accent);
-  document.documentElement.style.setProperty("--accent-soft", `${accent}29`);
+  document.documentElement.style.setProperty("--accent-soft", `${accent}1f`);
 
   const { r, angles } = layout(o.model.items.length, o);
   for (const [cls, size] of [["disc", r * 2 + 90], ["ring", r * 2]] as const) {
