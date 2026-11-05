@@ -131,9 +131,14 @@ Right-clicking a pet opens a ring of round buttons around it: **Games**, **Feed*
 
 ### Tray menu
 
-Show pets · Hide all (boss key) · Focus mode · Gallery… · Today's report… (with your coin balance) · Shop… · Routing mode · Language · Edit config… · Open data folder · Hook up (Claude Code / Codex) · Start with Windows · Quit.
+Click the tray icon (left or right) to open the tray panel. It shows the version and your coin balance at the top, then:
 
-The gallery entry shows how many packs failed validation, if any.
+- **Quick toggles:** Show pets · Hide all (boss key) · Focus mode
+- **Play:** Gallery · Today's report · Shop · Lunar New Year countdown · Health reminders
+- **Settings:** Routing mode · Language · Start with Windows · Hook up (Claude Code / Codex)
+- **Footer:** Edit config · Data folder · Quit
+
+Toggles keep the panel open; click outside or press Esc to close it. The gallery entry shows how many packs failed validation, if any. The panel follows the system light or dark theme.
 
 ### `/pet` commands (Claude Code)
 

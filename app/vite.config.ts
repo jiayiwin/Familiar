@@ -18,6 +18,7 @@ export default defineConfig({
         report: resolve(__dirname, "report.html"),
         menu: resolve(__dirname, "menu.html"),
         spring: resolve(__dirname, "spring.html"),
+        tray: resolve(__dirname, "tray.html"),
       },
     },
   },

@@ -4,6 +4,7 @@
 mod physics;
 mod radial;
 mod setup;
+mod tray;
 mod windows;
 
 use petd::{Control, Options, StartError};
@@ -13,9 +14,8 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Emitter, Manager, WebviewWindow, Wry};
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 #[derive(Clone, Serialize)]
@@ -78,6 +78,7 @@ async fn pet_menu(window: WebviewWindow, app: tauri::State<'_, Arc<App>>, pet: S
 #[tauri::command]
 async fn menu_pick(h: AppHandle, id: String) {
     radial::close(&h);
+    tray::close(&h);
     let h2 = h.clone();
     let _ = h.run_on_main_thread(move || on_menu(&h2, &id));
 }
@@ -85,6 +86,24 @@ async fn menu_pick(h: AppHandle, id: String) {
 #[tauri::command]
 fn menu_close(h: AppHandle) {
     radial::close(&h);
+    tray::close(&h);
+}
+
+/// A toggle in the tray panel: run it, keep the panel open, send fresh state.
+#[tauri::command]
+async fn tray_pick(h: AppHandle, id: String) {
+    let h2 = h.clone();
+    let _ = h.run_on_main_thread(move || {
+        on_menu(&h2, &id);
+        let app = h2.state::<Arc<App>>().inner().clone();
+        refresh_tray(&h2, &app);
+    });
+}
+
+/// The tray panel asks for its state (also pushed on open).
+#[tauri::command]
+fn tray_info(app: tauri::State<'_, Arc<App>>) -> serde_json::Value {
+    tray_state(app.inner())
 }
 
 /// Mouse went down on the pet and moved: the host follows the cursor and
@@ -204,62 +223,34 @@ fn target_name(t: &str) -> String {
     petd::ops::target_name(t)
 }
 
-fn build_tray_menu(h: &AppHandle, app: &App) -> tauri::Result<Menu<Wry>> {
+/// Everything the tray panel shows (tray.html renders it in the app's style).
+fn tray_state(app: &App) -> serde_json::Value {
     let (broken, mode, focus) = {
         let hub = app.petd.hub.lock().unwrap();
         (hub.lib.broken.len(), hub.cfg.mode, hub.cfg.features.focus_mode)
     };
-    let coins = app.petd.shared.db.balance();
-    let gallery_label = if broken > 0 {
-        petd::tr!("宠物图鉴…（{broken} 个包有错误）", "Gallery… ({broken} packs with errors)")
-    } else {
-        petd::tr!("宠物图鉴…", "Gallery…")
-    };
-    let modes = Submenu::with_id(h, "modes", petd::i18n::t("路由模式", "Routing mode"), true)?;
-    for (id, zh, en) in MODES {
-        modes.append(&CheckMenuItem::with_id(h, format!("mode|{id}"), petd::i18n::t(zh, en), true, mode.as_str() == id, None::<&str>)?)?;
-    }
-    let lang = current_language(app);
-    let langs = Submenu::with_id(h, "langs", petd::i18n::t("语言", "Language"), true)?;
-    for (id, zh, en) in LANGS {
-        langs.append(&CheckMenuItem::with_id(h, format!("lang|{id}"), petd::i18n::t(zh, en), true, lang == id, None::<&str>)?)?;
-    }
     let (boss, focus_key) = hotkey_names(app);
-    Menu::with_items(
-        h,
-        &[
-            &MenuItem::with_id(h, "show", petd::i18n::t("显示宠物", "Show pets"), true, None::<&str>)?,
-            &MenuItem::with_id(h, "hideall", petd::tr!("全部隐藏（老板键 {boss}）", "Hide all (boss key {boss})"), true, None::<&str>)?,
-            &CheckMenuItem::with_id(h, "focus", petd::tr!("专注模式（{focus_key}）", "Focus mode ({focus_key})"), true, focus, None::<&str>)?,
-            &PredefinedMenuItem::separator(h)?,
-            &MenuItem::with_id(h, "gallery", gallery_label, true, None::<&str>)?,
-            &MenuItem::with_id(h, "report", petd::tr!("今日报告…（金币 {coins}）", "Today's report… ({coins} coins)"), true, None::<&str>)?,
-            &MenuItem::with_id(h, "shop", petd::i18n::t("商店…", "Shop…"), true, None::<&str>)?,
-            &modes,
-            &langs,
-            &PredefinedMenuItem::separator(h)?,
-            &MenuItem::with_id(h, "config", petd::i18n::t("编辑配置…", "Edit config…"), true, None::<&str>)?,
-            &MenuItem::with_id(h, "folder", petd::i18n::t("打开数据目录", "Open data folder"), true, None::<&str>)?,
-            &Submenu::with_items(
-                h,
-                petd::i18n::t("接入", "Hook up"),
-                true,
-                &[
-                    &MenuItem::with_id(h, "connect|claude", petd::i18n::t("接入 Claude Code…", "Hook up Claude Code…"), true, None::<&str>)?,
-                    &MenuItem::with_id(h, "connect|codex", petd::i18n::t("接入 Codex…", "Hook up Codex…"), true, None::<&str>)?,
-                ],
-            )?,
-            &CheckMenuItem::with_id(h, "autostart", petd::i18n::t("开机自启", "Start with Windows"), true, setup::autostart_on(), None::<&str>)?,
-            &PredefinedMenuItem::separator(h)?,
-            &MenuItem::with_id(h, "quit", petd::i18n::t("退出", "Quit"), true, None::<&str>)?,
-        ],
-    )
+    let modes: Vec<_> = MODES.iter().map(|(id, zh, en)| serde_json::json!({ "id": id, "label": petd::i18n::t(zh, en) })).collect();
+    let langs: Vec<_> = LANGS.iter().map(|(id, zh, en)| serde_json::json!({ "id": id, "label": petd::i18n::t(zh, en) })).collect();
+    serde_json::json!({
+        "version": env!("CARGO_PKG_VERSION"),
+        "en": petd::i18n::t("zh", "en") == "en",
+        "coins": app.petd.shared.db.balance(),
+        "broken": broken,
+        "mode": mode.as_str(),
+        "lang": current_language(app),
+        "focus": focus,
+        "autostart": setup::autostart_on(),
+        "boss": boss,
+        "focusKey": focus_key,
+        "modes": modes,
+        "langs": langs,
+    })
 }
 
+/// Push fresh state to the tray panel if it is open.
 fn refresh_tray(h: &AppHandle, app: &App) {
-    if let (Some(tray), Ok(menu)) = (h.tray_by_id("main"), build_tray_menu(h, app)) {
-        let _ = tray.set_menu(Some(menu));
-    }
+    tray::refresh(h, tray_state(app));
 }
 
 fn toggle_focus(app: &App) {
@@ -635,6 +626,8 @@ fn main() {
             pet_menu,
             menu_pick,
             menu_close,
+            tray_info,
+            tray_pick,
             drag_start,
             pet_hop,
             focus_session,
@@ -685,11 +678,20 @@ fn main() {
             app.manage(state.clone());
             register_hotkeys(&handle, &state);
 
+            // A pixel-exact 32 px icon for the tray; the panel opens on either click.
+            let tray_icon = tauri::image::Image::new_owned(include_bytes!("../icons/tray.rgba").to_vec(), 32, 32);
+            let st_tray = state.clone();
             TrayIconBuilder::with_id("main")
-                .icon(handle.default_window_icon().cloned().expect("app icon"))
+                .icon(tray_icon)
                 .tooltip("Familiar")
-                .menu(&build_tray_menu(&handle, &state)?)
+                .on_tray_icon_event(move |t, ev| {
+                    if let tauri::tray::TrayIconEvent::Click { button_state: tauri::tray::MouseButtonState::Up, position, .. } = ev {
+                        let h = t.app_handle();
+                        tray::open(h, position, tray_state(&st_tray));
+                    }
+                })
                 .build(app)?;
+            tray::create(&handle)?;
 
             windows::create_card(&handle)?;
             radial::create(&handle)?;
