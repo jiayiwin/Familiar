@@ -6,6 +6,7 @@
 
 use crate::hub::PetView;
 use crate::session::State;
+use crate::whip::{Reason, WHIP_HIT, WHIP_MS};
 use crate::world::{Out, Script, World};
 use crate::Control;
 use serde_json::json;
@@ -44,13 +45,13 @@ impl DuoGame {
 }
 
 pub const DUO_GAMES: &[DuoGame] = &[
-    DuoGame { id: "badminton", name: "羽毛球", gap: 300.0, open: "来打羽毛球！", win: "扣杀得分！", lose: "没接住……", name_en: "Badminton", open_en: "Badminton time!", win_en: "Smash! Point!", lose_en: "Missed it…" },
-    DuoGame { id: "pingpong", name: "乒乓球", gap: 130.0, open: "乒乓球走起～", win: "这球我拿下了！", lose: "擦边球不算！", name_en: "Ping-pong", open_en: "Ping-pong, let's go~", win_en: "That point's mine!", lose_en: "Edge ball doesn't count!" },
-    DuoGame { id: "armwrestle", name: "掰手腕", gap: 0.0, open: "掰个手腕？", win: "力拔山兮！", lose: "手腕好酸……", name_en: "Arm wrestling", open_en: "Arm wrestle?", win_en: "Mighty muscles!", lose_en: "My wrist hurts…" },
+    DuoGame { id: "badminton", name: "羽毛球", gap: 300.0, open: "来打羽毛球！", win: "落地了。", lose: "没接住……", name_en: "Badminton", open_en: "Badminton time!", win_en: "It's down.", lose_en: "Missed it…" },
+    DuoGame { id: "pingpong", name: "乒乓球", gap: 130.0, open: "乒乓球走起～", win: "擦网，算我的。", lose: "擦边球不算！", name_en: "Ping-pong", open_en: "Ping-pong, let's go~", win_en: "Off the net. Mine.", lose_en: "Edge ball doesn't count!" },
+    DuoGame { id: "armwrestle", name: "掰手腕", gap: 0.0, open: "掰个手腕？", win: "你手抖了。", lose: "手腕好酸……", name_en: "Arm wrestling", open_en: "Arm wrestle?", win_en: "Your hand shook.", lose_en: "My wrist hurts…" },
 ];
 
 impl World {
-    fn duo_partner<'a>(views: &'a [PetView], pet: &str) -> Option<&'a PetView> {
+    pub(crate) fn duo_partner<'a>(views: &'a [PetView], pet: &str) -> Option<&'a PetView> {
         let me = views.iter().find(|v| v.id == pet)?;
         if let Some(other) = me.camp.as_deref().and_then(Self::other_camp).and_then(|c| Self::camp_pet(views, c)) {
             return Some(other);
@@ -125,10 +126,13 @@ impl World {
             _ => (0, 0, 5200),
         };
         let seed = (self.rand() * 1000.0).round();
+        // After the win / lose lines the winner cracks the whip; everyone stays put until then.
+        let end = DUO_WALK + ms;
+        let whip_at = end + 2600;
         for p in [anchor, mover] {
             self.recent.entry(p.id.clone()).or_default().push_back(now);
             let moved = p.id == mover.id;
-            self.scripts.insert(p.id.clone(), Script { rule: "duo".into(), until: now + DUO_WALK + ms + 2600, during_attention: false, moved });
+            self.scripts.insert(p.id.clone(), Script { rule: "duo".into(), until: now + whip_at + WHIP_HIT + WHIP_MS, during_attention: false, moved });
             db.log_interaction(now, &p.id, g.id, false);
         }
         out.push(Out::Control(Control::Duo { mover: mover.id.clone(), anchor: anchor.id.clone(), gap: g.gap }));
@@ -140,9 +144,9 @@ impl World {
             }),
         )));
         out.push(Out::Ws(crate::msg("pet.script", &json!({ "pet": anchor.id, "rule": "duo", "bubble": g.open_line(), "ms": 1400, "delay": 0 }))));
-        let end = DUO_WALK + ms;
         out.push(Out::Ws(crate::msg("pet.script", &json!({ "pet": winner.id, "rule": "duo", "action": "cheer", "bubble": g.win_line(), "ms": 2400, "delay": end }))));
         out.push(Out::Ws(crate::msg("pet.script", &json!({ "pet": loser.id, "rule": "duo", "action": "sulk", "bubble": g.lose_line(), "ms": 2400, "delay": end }))));
+        self.whip(Some(&winner.id), &loser.id, loser.state, Reason::Game, whip_at, out);
         self.bond(db, views, 1, out);
     }
 }

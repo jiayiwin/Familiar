@@ -11,8 +11,14 @@ use petd::{Control, Options, StartError};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+
+static MODEL_DL_DONE: AtomicU64 = AtomicU64::new(0);
+static MODEL_DL_TOTAL: AtomicU64 = AtomicU64::new(0);
+
+// Letter pending delivery: generated before window is ready to receive events.
+static PENDING_LETTER: Mutex<Option<serde_json::Value>> = Mutex::new(None);
 use std::time::{Duration, Instant};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
@@ -56,6 +62,43 @@ fn petd_info(info: tauri::State<'_, Info>) -> Info {
 }
 
 #[tauri::command]
+fn take_letter() -> Option<serde_json::Value> {
+    PENDING_LETTER.lock().unwrap().take()
+}
+
+#[tauri::command]
+fn model_state(app: tauri::State<'_, Arc<App>>) -> serde_json::Value {
+    let ready = petd::local_llm::is_ready(&app.petd.paths.home);
+    serde_json::json!({
+        "ready": ready,
+        "done": MODEL_DL_DONE.load(Ordering::Relaxed),
+        "total": MODEL_DL_TOTAL.load(Ordering::Relaxed),
+    })
+}
+
+#[tauri::command]
+async fn start_model_download(app: tauri::State<'_, Arc<App>>) -> Result<(), String> {
+    if petd::local_llm::is_ready(&app.petd.paths.home) {
+        return Ok(());
+    }
+    if MODEL_DL_TOTAL.load(Ordering::Relaxed) > 0 {
+        return Ok(()); // already downloading
+    }
+    let home = app.petd.paths.home.clone();
+    tauri::async_runtime::spawn(async move {
+        MODEL_DL_TOTAL.store(petd::local_llm::MODEL_BYTES, Ordering::Relaxed);
+        let _ = petd::local_llm::download(&home, |done, total| {
+            MODEL_DL_DONE.store(done, Ordering::Relaxed);
+            MODEL_DL_TOTAL.store(total, Ordering::Relaxed);
+        }).await;
+        // Reset so is_ready() is the source of truth
+        MODEL_DL_DONE.store(0, Ordering::Relaxed);
+        MODEL_DL_TOTAL.store(0, Ordering::Relaxed);
+    });
+    Ok(())
+}
+
+#[tauri::command]
 fn set_hit_rects(window: WebviewWindow, app: tauri::State<'_, Arc<App>>, rects: Vec<Rect>) {
     let mut hits = app.hits.lock().unwrap();
     let e = hits.entry(window.label().to_string()).or_insert((vec![], false));
@@ -64,7 +107,8 @@ fn set_hit_rects(window: WebviewWindow, app: tauri::State<'_, Arc<App>>, rects: 
 
 #[tauri::command]
 async fn pet_menu(window: WebviewWindow, app: tauri::State<'_, Arc<App>>, pet: String) -> Result<(), String> {
-    let model = radial::build(&app, &pet).ok_or("no such pet")?;
+    let has_letter = PENDING_LETTER.lock().unwrap().is_some();
+    let model = radial::build(&app, &pet, has_letter).ok_or("no such pet")?;
     let r = radial::open(window.app_handle(), &window, model);
     if let Err(e) = &r {
         app.petd.paths.log(&format!("menu: {e}"));
@@ -232,6 +276,23 @@ fn tray_state(app: &App) -> serde_json::Value {
     let (boss, focus_key) = hotkey_names(app);
     let modes: Vec<_> = MODES.iter().map(|(id, zh, en)| serde_json::json!({ "id": id, "label": petd::i18n::t(zh, en) })).collect();
     let langs: Vec<_> = LANGS.iter().map(|(id, zh, en)| serde_json::json!({ "id": id, "label": petd::i18n::t(zh, en) })).collect();
+    let model_ready = petd::local_llm::is_ready(&app.petd.paths.home);
+    let dl_done = MODEL_DL_DONE.load(Ordering::Relaxed);
+    let dl_total = MODEL_DL_TOTAL.load(Ordering::Relaxed);
+    let habit_data = |ht: &str| {
+        let db = &app.petd.shared.db;
+        let streak: i64 = db.kv_get(&format!("habit:{}:streak", ht)).and_then(|v| v.parse().ok()).unwrap_or(0);
+        let best: i64 = db.kv_get(&format!("habit:{}:best", ht)).and_then(|v| v.parse().ok()).unwrap_or(0);
+        let today_v = db.kv_get(&format!("habit:{}:today", ht)).unwrap_or_default();
+        let last_date = db.kv_get(&format!("habit:{}:last_date", ht)).unwrap_or_default();
+        let today_s = chrono::Local::now().format("%Y-%m-%d").to_string();
+        let today_checked = !last_date.is_empty() && last_date == today_s;
+        serde_json::json!({
+            "streak": streak, "best": best,
+            "today": if today_checked { today_v } else { String::new() },
+            "active": !last_date.is_empty(),
+        })
+    };
     serde_json::json!({
         "version": env!("CARGO_PKG_VERSION"),
         "en": petd::i18n::t("zh", "en") == "en",
@@ -245,6 +306,10 @@ fn tray_state(app: &App) -> serde_json::Value {
         "focusKey": focus_key,
         "modes": modes,
         "langs": langs,
+        "modelReady": model_ready,
+        "modelDlDone": dl_done,
+        "modelDlTotal": dl_total,
+        "habits": { "smoking": habit_data("smoking"), "sugar": habit_data("sugar") },
     })
 }
 
@@ -392,6 +457,16 @@ fn on_menu(h: &AppHandle, id: &str) {
             );
             return;
         }
+        // 小皮鞭: the user holds the whip; the pet answers to its state.
+        ["whip", pet] => {
+            let views = app.petd.hub.lock().unwrap().pets();
+            let r = sh.world.lock().unwrap().user_whip(pet, &views, petd::now_ms(), &sh.db);
+            match r {
+                Ok(outs) => send_outs(sh, outs),
+                Err(e) => pet_say(h, pet, &e, None),
+            }
+            return;
+        }
         ["duel", pet] => {
             let r = {
                 let hub = app.petd.hub.lock().unwrap();
@@ -417,6 +492,30 @@ fn on_menu(h: &AppHandle, id: &str) {
                 "fx",
                 serde_json::json!({ "kind": "rps", "user": user, "pet": me, "outcome": outcome, "coins": coins }),
             );
+            // The pet lost to you: after the reveal and its sulk, the whip.
+            if outcome == "win" {
+                let views = app.petd.hub.lock().unwrap().pets();
+                let outs = sh.world.lock().unwrap().lost_to_user(pet, &views, 2600);
+                send_outs(sh, outs);
+            }
+            return;
+        }
+        // 相声: from a pet's ring menu (xs|pet) or the tray (xs: the Claude Code pet, or any).
+        ["xs", rest @ ..] => {
+            let views = app.petd.hub.lock().unwrap().pets();
+            let pet = match rest.first() {
+                Some(p) => p.to_string(),
+                None => petd::world::World::camp_pet(&views, "claude-code").or_else(|| views.first()).map(|v| v.id.clone()).unwrap_or_default(),
+            };
+            let r = {
+                let mut w = sh.world.lock().unwrap();
+                w.reload_xs(&app.petd.paths.home);
+                w.request_xs(rest.get(1).copied(), &pet, petd::now_ms(), &views, &sh.db)
+            };
+            match r {
+                Ok(outs) => send_outs(sh, outs),
+                Err(e) => pet_say(h, &pet, &e, None),
+            }
             return;
         }
         ["duo", pet, game] => {
@@ -445,17 +544,68 @@ fn on_menu(h: &AppHandle, id: &str) {
             let _ = h.emit_to(format!("pet-{pet}").as_str(), "fx", serde_json::json!({ "kind": "card", "from": 96.0, "used": 0.0 }));
             return;
         }
-        ["feed", pet] => {
+        ["feed", pet] | ["feed", pet, _] => {
+            let n: usize = g.get(2).and_then(|s| s.parse().ok()).unwrap_or(1).min(50);
             let views = app.petd.hub.lock().unwrap().pets();
             if let Some(v) = views.iter().find(|v| v.id == *pet).cloned() {
-                let (text, outs) = sh.world.lock().unwrap().feed(&v, &views, petd::now_ms(), &sh.db);
-                for o in outs {
-                    if let petd::world::Out::Ws(m) = o {
-                        let _ = sh.ws_tx.send(m);
+                let mut last_bond_tier = "none";
+                let mut last_text = String::new();
+                let mut last_count = 0i64;
+                let mut batch_fed = 0i64;
+                let mut letter_data: Option<(i64, String)> = None;
+                for _ in 0..n {
+                    let (text, outs, reward, feed_count) = sh.world.lock().unwrap().feed(&v, &views, petd::now_ms(), &sh.db);
+                    for o in outs {
+                        if let petd::world::Out::Ws(m) = o {
+                            let _ = sh.ws_tx.send(m);
+                        }
                     }
+                    let no_fish = matches!(reward, petd::bond::BondReward::NoFish);
+                    let milestone = matches!(reward, petd::bond::BondReward::Letter { .. } | petd::bond::BondReward::Secret(_));
+                    if !no_fish {
+                        last_text = text;
+                        last_count = feed_count;
+                        batch_fed += 1;
+                    } else {
+                        last_text = text; // "鱼篓是空的" message
+                    }
+                    let (bond_str, ldata) = match reward {
+                        petd::bond::BondReward::NoFish => ("none", None),
+                        petd::bond::BondReward::Whisper(_) => ("whisper", None),
+                        petd::bond::BondReward::Secret(_) => ("secret", None),
+                        petd::bond::BondReward::Letter { feed_count: fc, pet_name, .. } => ("letter", Some((fc, pet_name))),
+                    };
+                    last_bond_tier = bond_str;
+                    if ldata.is_some() { letter_data = ldata; }
+                    if milestone || no_fish { break; }
                 }
-                let ate = text == "好吃！" || text == petd::tr!("好吃！", "Yum!");
-                let _ = h.emit_to(format!("pet-{pet}").as_str(), "fx", serde_json::json!({ "kind": "feed", "ok": ate, "text": text }));
+                // If batch partially succeeded then ran out of fish, report what was fed
+                let report_ok = batch_fed > 0;
+                let report_count = last_count;
+                let _ = h.emit_to(format!("pet-{pet}").as_str(), "fx", serde_json::json!({
+                    "kind": "feed", "ok": report_ok, "text": last_text, "bond": last_bond_tier,
+                    "count": report_count, "batch": batch_fed
+                }));
+                if let Some((fc, pack_id)) = letter_data {
+                    // Resolve display name from pack library (pack_id comes from bond::on_feed)
+                    let display_name = {
+                        let hub = sh.hub.lock().unwrap();
+                        hub.lib.packs.get(&pack_id)
+                            .map(|p| p.name.clone())
+                            .filter(|n| !n.is_empty())
+                            .unwrap_or_else(|| pack_id.clone())
+                    };
+                    let h2 = h.clone();
+                    let en = petd::i18n::is_en();
+                    let home = app.petd.paths.home.clone();
+                    let pet_label = format!("pet-{pet}");
+                    tauri::async_runtime::spawn(async move {
+                        let letter = petd::bond::generate_letter(fc, &display_name, en, Some(home)).await;
+                        let payload = serde_json::json!({ "text": letter, "count": fc, "pet_name": display_name });
+                        *PENDING_LETTER.lock().unwrap() = Some(payload);
+                        let _ = h2.emit_to(pet_label.as_str(), "letter-notify", ());
+                    });
+                }
             }
             return;
         }
@@ -509,9 +659,15 @@ fn on_menu(h: &AppHandle, id: &str) {
         }
         (Some("report"), _, _) => windows::open_report(h),
         (Some("spring"), _, _) => windows::open_spring(h),
+        (Some("radio"), _, _) => windows::open_radio(h),
         (Some("shop"), _, _) => windows::open_shop(h),
         (Some("config"), _, _) => open_path(&app.petd.paths.config()),
         (Some("folder"), _, _) => open_path(&app.petd.paths.home),
+        (Some("xsdir"), _, _) => {
+            let dir = petd::xiangsheng::dir(&app.petd.paths.home);
+            let _ = std::fs::create_dir_all(&dir);
+            open_path(&dir)
+        }
         (Some("musicdir"), _, _) => {
             let dir = petd::spring::music_dir(&app.petd.paths.home);
             let _ = std::fs::create_dir_all(&dir);
@@ -525,6 +681,11 @@ fn on_menu(h: &AppHandle, id: &str) {
             refresh_tray(h, &app);
         }
         (Some("connect"), Some(which), _) => connect(h, which),
+        (Some("read_letter"), _, _) => {
+            if PENDING_LETTER.lock().unwrap().is_some() {
+                let _ = crate::windows::open_letter(h);
+            }
+        }
         (Some("quit"), _, _) => {
             app.positions.save_now();
             h.exit(0);
@@ -544,6 +705,86 @@ fn send_outs(sh: &petd::server::Shared, outs: Vec<petd::world::Out>) {
             }
         }
     }
+}
+
+/// The first pet window's id, for lines the tray wants a pet to say.
+fn first_pet(h: &AppHandle) -> Option<String> {
+    let mut labels: Vec<String> = h.webview_windows().keys().filter(|l| l.starts_with("pet-")).cloned().collect();
+    labels.sort();
+    labels.first().map(|l| l["pet-".len()..].to_string())
+}
+
+#[tauri::command]
+// Async on purpose: creating a window from a sync command deadlocks on Windows.
+async fn habit_craving(h: tauri::AppHandle, habit_type: String) {
+    use chrono::Datelike;
+    let _ = habit_type;
+    let zh = ["先别动。我放段相声，你听着。", "我这儿有段相声，正好。", "来。听完这段再说。"];
+    let en = ["Hold still. I'll put on a xiangsheng bit — just listen.", "I've got a bit queued up. Good timing.", "Come on. Hear this one out first."];
+    let i = chrono::Local::now().ordinal() as usize % zh.len();
+    if let Some(pet) = first_pet(&h) {
+        pet_say(&h, &pet, petd::i18n::t(zh[i], en[i]), None);
+    }
+    windows::open_radio_tab(&h, "xs");
+}
+
+#[tauri::command]
+fn habit_checkin(h: tauri::AppHandle, app: tauri::State<'_, Arc<App>>, habit_type: String, status: String) -> serde_json::Value {
+    let db = &app.petd.shared.db;
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let yesterday = (chrono::Local::now() - chrono::Duration::days(1)).format("%Y-%m-%d").to_string();
+    let streak_key = format!("habit:{}:streak", habit_type);
+    let best_key = format!("habit:{}:best", habit_type);
+    let last_key = format!("habit:{}:last_date", habit_type);
+    let today_key = format!("habit:{}:today", habit_type);
+    let last_date = db.kv_get(&last_key).unwrap_or_default();
+    let streak: i64 = db.kv_get(&streak_key).and_then(|v| v.parse().ok()).unwrap_or(0);
+    let best: i64 = db.kv_get(&best_key).and_then(|v| v.parse().ok()).unwrap_or(0);
+    let new_streak: i64 = match status.as_str() {
+        "relapsed" => 0,
+        "clean" | "resisted" => {
+            if last_date == today { streak }
+            else if last_date == yesterday || streak == 0 { streak + 1 }
+            else { 1 }
+        }
+        _ => streak,
+    };
+    let new_best = new_streak.max(best);
+    db.kv_set(&streak_key, &new_streak.to_string());
+    db.kv_set(&best_key, &new_best.to_string());
+    db.kv_set(&last_key, &today);
+    db.kv_set(&today_key, &status);
+    let n = new_streak;
+    let pick = |zh: &[&str], en: &[&str]| -> String {
+        let i = (n.max(1) as usize - 1) % zh.len();
+        petd::i18n::t(zh[i], en[i.min(en.len() - 1)]).to_string()
+    };
+    let msg: String = match (status.as_str(), n) {
+        ("relapsed", _) => pick(
+            &["我知道的。今天晚一点再喂我一次吧。", "嗯。明天我还在这儿。", "没什么好说的。我把今天记下了，没记别的。"],
+            &["I know. Feed me a little later tonight.", "Mm. I'll still be here tomorrow.", "Nothing to say. I wrote today down, nothing else."],
+        ),
+        ("resisted", _) => pick(
+            &["过去了。它来的时候我也在。", "我知道。刚才那几分钟键盘很安静。", "这种时候我帮不上什么。但我看见了。"],
+            &["It passed. I was here when it came.", "I know. The keyboard went quiet for a few minutes there.", "I can't do much at times like that. But I saw."],
+        ),
+        ("clean", 3) => petd::i18n::t("第三天最难。你过来了。", "Day three is the hard one. You're through it.").into(),
+        ("clean", 7) => petd::i18n::t("七天。我数了七次日落，屏幕上的那种。", "Seven days. I counted seven sunsets — the on-screen kind.").into(),
+        ("clean", 14) => petd::i18n::t("两个星期。你最近存文件的节奏变了，我说不清是哪里。", "Two weeks. The rhythm of your saves has changed. I can't say where.").into(),
+        ("clean", 30) => petd::i18n::t("一个月。我不打算说什么。就是想让你知道我在数。", "A month. I'm not going to say anything. I just want you to know I'm counting.").into(),
+        ("clean", 100) => petd::i18n::t("一百天。这个数我留着，不告诉别人。", "A hundred days. I'm keeping this number. Not telling anyone.").into(),
+        ("clean", _) => pick(
+            &["记下了。", "嗯。今天的键盘声比昨天稳。", "我把今天也叠上去了。", "今天的光线没抖。"],
+            &["Noted.", "Mm. The keyboard sounded steadier than yesterday.", "I stacked today on top of the others.", "The light didn't flicker today."],
+        ),
+        _ => String::new(),
+    };
+    if !msg.is_empty() {
+        if let Some(pet) = first_pet(&h) {
+            pet_say(&h, &pet, &msg, None);
+        }
+    }
+    serde_json::json!({ "streak": new_streak, "best": new_best, "today": status, "msg": msg })
 }
 
 /// A terminal running `codex`, where `/usage` spends a banked reset.
@@ -638,7 +879,12 @@ fn main() {
             create_pack,
             read_image,
             remove_pack,
-            quiet
+            quiet,
+            model_state,
+            start_model_download,
+            take_letter,
+            habit_checkin,
+            habit_craving
         ])
         .on_menu_event(|h, ev| on_menu(h, ev.id().as_ref()))
         .on_window_event(|w, ev| {
@@ -732,8 +978,10 @@ fn main() {
                             Control::Duo { mover, anchor, gap } => physics::walk_pair(st.clone(), &h2, &mover, &anchor, gap, "duo"),
                             Control::Report => windows::open_report(&h2),
                             Control::Spring => windows::open_spring(&h2),
+                            Control::Radio => windows::open_radio(&h2),
                             Control::Menu { pet } => {
-                                if let (Some(w), Some(model)) = (h2.get_webview_window(&format!("pet-{pet}")), radial::build(&st, &pet)) {
+                                let has_letter = PENDING_LETTER.lock().unwrap().is_some();
+                                if let (Some(w), Some(model)) = (h2.get_webview_window(&format!("pet-{pet}")), radial::build(&st, &pet, has_letter)) {
                                     let _ = radial::open(&h2, &w, model);
                                 }
                             }

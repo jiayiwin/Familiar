@@ -2,10 +2,10 @@
 # 自己的规则放进 ~/.familiar/interactions/*.yaml；同 id 覆盖内置规则，enabled: false 可关掉。
 #
 # 字段：
-#   on            触发：turn_done（对方 / 自己完成一轮）| state（进入某状态）
+#   on            触发：turn_done（对方 / 自己完成一轮）| state（进入某状态）| slow（对方一口气干了太久）
 #   from          事件来自哪边：other（对方阵营，默认）| self
 #   result        on: turn_done 时的结果：ok | error | aborted
-#   min_turn_s    on: turn_done 时本轮至少多长
+#   min_turn_s    on: turn_done 时本轮至少多长；on: slow 时连续干活多久算慢
 #   state         on: state 时进入的状态：attention | stone | error | done …
 #   actor_state   做动作的宠物当前必须处于的状态之一
 #   chance        概率 0–1
@@ -31,11 +31,11 @@ rules:
     action: taunt
     ms: 3000
     bubble:
-      claude-code: ["翻车了吧～", "要不要我教你？", "嘿嘿，出错了"]
-      codex: ["翻车了吧～", "要不要我教你？", "嘿嘿，出错了"]
+      claude-code: ["看见了。", "红了一片。", "我这儿是好的。"]
+      codex: ["看见了。", "红了一片。", "我这儿是好的。"]
     bubble_en:
-      claude-code: ["Oops, crashed~", "Want me to show you how?", "Heh, error!"]
-      codex: ["Oops, crashed~", "Want me to show you how?", "Heh, error!"]
+      claude-code: ["Saw that.", "That's a lot of red.", "Works on my machine."]
+      codex: ["Saw that.", "That's a lot of red.", "Works on my machine."]
 
   - id: comfort
     on: state
@@ -46,11 +46,11 @@ rules:
     action: comfort
     ms: 3500
     bubble:
-      claude-code: ["别灰心，抱抱", "歇一下再来", "我陪你"]
-      codex: ["别灰心，抱抱", "歇一下再来", "我陪你"]
+      claude-code: ["我陪你。", "石头也会化的。", "我坐这儿，不走。"]
+      codex: ["我陪你。", "石头也会化的。", "我坐这儿，不走。"]
     bubble_en:
-      claude-code: ["Chin up, hug?", "Take a breather", "I'm right here"]
-      codex: ["Chin up, hug?", "Take a breather", "I'm right here"]
+      claude-code: ["I'm here.", "Stone melts too.", "I'll sit right here."]
+      codex: ["I'm here.", "Stone melts too.", "I'll sit right here."]
 
   - id: applaud
     on: turn_done
@@ -63,11 +63,26 @@ rules:
     working_action: sulk
     ms: 2500
     bubble:
-      claude-code: ["厉害！", "干得漂亮"]
-      codex: ["厉害！", "干得漂亮"]
+      claude-code: ["五分钟没出错。我数着的。", "嗯。那一段很稳。"]
+      codex: ["五分钟没出错。我数着的。", "嗯。那一段很稳。"]
     bubble_en:
-      claude-code: ["Nice one!", "Smooth work"]
-      codex: ["Nice one!", "Smooth work"]
+      claude-code: ["Five minutes, no errors. I counted.", "Mm. That stretch was steady."]
+      codex: ["Five minutes, no errors. I counted.", "Mm. That stretch was steady."]
+
+  # 小皮鞭：对方一口气干了八分钟还没收尾，闲着的这只走过去抽一鞭。
+  # 气泡是执鞭那只的话；挨打那只的回话和鞭响在 whip.rs 里。
+  - id: whip
+    on: slow
+    from: other
+    min_turn_s: 480
+    actor_state: [idle, done, sleeping]
+    chance: 1
+    cooldown: 30m
+    action: throw
+    move: to_target
+    ms: 2600
+    bubble: ["太久了。动一动。", "我在旁边看了很久。", "快一点。我等得脚麻了。", "这一下不疼。下一下疼。"]
+    bubble_en: ["Too long. Move.", "I've been watching a while.", "Faster. My feet have gone numb waiting.", "This one doesn't hurt. The next one does."]
 
   - id: urge
     on: state
@@ -81,8 +96,8 @@ rules:
     during_attention: true
     ms: 2500
     bubble:
-      claude-code: ["它在等你！", "快去看看它"]
-      codex: ["它在等你！", "快去看看它"]
+      claude-code: ["那边停了。", "它在看你。"]
+      codex: ["那边停了。", "它在看你。"]
     bubble_en:
-      claude-code: ["It's waiting for you!", "Go check on it"]
-      codex: ["It's waiting for you!", "Go check on it"]
+      claude-code: ["That one's stopped.", "It's looking at you."]
+      codex: ["That one's stopped.", "It's looking at you."]

@@ -45,9 +45,9 @@ quips:
     - "{project} 这个项目好像很难"
     - "我在钓鱼，别告诉老板"
     - "代码在跑，鱼在游"
-    - "要不要先喝口水？"
-    - "看起来进展不错"
-    - "它又在想事情了"
+    - "这行你盯了很久了。"
+    - "今天的键盘声很整齐。"
+    - "它又卡住了，转圈那种。"
   # English lines (used when the UI language is English; same variables).
   lines_en:
     - "{file} again? That's edit #{n}"
@@ -56,9 +56,9 @@ quips:
     - "{project} looks like a tough one"
     - "I'm fishing. Don't tell the boss"
     - "Code's running, fish are swimming"
-    - "Water break, maybe?"
-    - "Looking good so far"
-    - "Deep in thought again"
+    - "You've been staring at that line a while."
+    - "The keyboard sounds even today."
+    - "It's stuck again. The spinning kind."
 
 interactions:
   per_pet_hour: 6           # 每只宠物每小时最多 6 次主动互动

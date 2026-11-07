@@ -177,9 +177,9 @@ impl World {
         let (Some(cc), Some(cx)) = (Self::camp_pet(views, "claude-code"), Self::camp_pet(views, "codex")) else { return };
         for at in gdb::add_affinity(db, &cc.pack, &cx.pack, delta) {
             let text = match at {
-                20 => crate::i18n::t("好感度 20：解锁击掌！", "Affinity 20: high fives unlocked!"),
-                50 => crate::i18n::t("好感度 50：解锁一起睡！", "Affinity 50: naps together unlocked!"),
-                _ => crate::i18n::t("好感度 80：解锁合照（看今日报告）！", "Affinity 80: group photo unlocked (see today's report)!"),
+                20 => crate::i18n::t("我们好像熟了一点。", "I think we're getting used to each other."),
+                50 => crate::i18n::t("困了可以靠着了。", "Tired? You can lean on me now."),
+                _ => crate::i18n::t("八十了。我们拍了张照，在今天的报告里。", "Eighty. We took a photo — it's in today's report."),
             };
             Self::say(&cc.id, text, 5000, 0, out);
             Self::say(&cx.id, text, 5000, 0, out);
@@ -210,6 +210,7 @@ impl World {
                 self.try_steal(now, views, db, out);
                 self.try_rps(now, views, db, out);
                 self.try_duo(now, views, db, out);
+                self.try_xs(now, views, db, out);
                 self.sleep_together(now, views, db, out);
             }
             self.absence(now, views, db, out);
@@ -337,20 +338,27 @@ impl World {
                     &json!({ "state": "done", "winner": winner, "net": net, "winner_pet": winner_pet, "loser_pet": loser_pet }),
                 )));
                 if !self.frozen {
-                    let w = Self::camp_pet(views, &winner).map(|p| p.id.clone());
-                    let l = Self::other_camp(&winner).and_then(|c| Self::camp_pet(views, c)).map(|p| p.id.clone());
-                    let mut text = crate::tr!("赛跑赢了！", "Won the race!");
+                    let w = Self::camp_pet(views, &winner).cloned();
+                    let l = Self::other_camp(&winner).and_then(|c| Self::camp_pet(views, c)).cloned();
+                    let mut text = crate::tr!("我先到的。", "I got there first.");
                     if n > 0 {
-                        text = if net > 0 { crate::tr!("赛跑赢了！你押中了 +{net}", "Won the race! Your bet paid +{net}") } else { crate::tr!("赛跑赢了！（你这把 {net}）", "Won the race! (you: {net} this round)") };
+                        text = if net > 0 { crate::tr!("我先到的。你押对了，+{net}", "I got there first. You called it, +{net}") } else { crate::tr!("我先到的。你这把 {net}", "I got there first. You: {net}") };
                     }
-                    if let Some(w) = w {
-                        if !self.scripts.contains_key(&w) {
-                            self.act(&w, "race", "cheer", &text, 3000, 0, false, now, out);
+                    let lose_text = crate::i18n::t("跑输了……", "Lost the race…");
+                    // Both free: the winner walks over with the whip.
+                    let both_free = matches!((&w, &l), (Some(w), Some(l)) if w.id != l.id && !self.scripts.contains_key(&w.id) && !self.scripts.contains_key(&l.id));
+                    if both_free {
+                        self.whip_walkover(w.as_ref().unwrap(), l.as_ref().unwrap(), &text, lose_text, "race", now, out);
+                    } else {
+                        if let Some(w) = w.map(|p| p.id) {
+                            if !self.scripts.contains_key(&w) {
+                                self.act(&w, "race", "cheer", &text, 3000, 0, false, now, out);
+                            }
                         }
-                    }
-                    if let Some(l) = l {
-                        if !self.scripts.contains_key(&l) {
-                            self.act(&l, "race", "sulk", crate::i18n::t("跑输了……", "Lost the race…"), 3000, 0, false, now, out);
+                        if let Some(l) = l.map(|p| p.id) {
+                            if !self.scripts.contains_key(&l) {
+                                self.act(&l, "race", "sulk", lose_text, 3000, 0, false, now, out);
+                            }
                         }
                     }
                 }
@@ -405,7 +413,7 @@ impl World {
                 if !self.frozen && !self.focus {
                     if let Some(me) = Self::pet_for(views, key) {
                         if !self.scripts.contains_key(&me.id) {
-                            self.act(&me.id, "slap", "taunt", crate::i18n::t("打脸了吧！", "Told you so!"), 3000, 0, false, now, out);
+                            self.act(&me.id, "slap", "taunt", crate::i18n::t("我就说。", "Told you."), 3000, 0, false, now, out);
                         }
                     }
                     if !self.scripts.contains_key(&t.taunter) {
@@ -434,7 +442,7 @@ impl World {
                 let before = gdb::stage(gdb::pack_turns(db, &p.pack), &thresholds);
                 let after = gdb::stage(gdb::add_pack_turn(db, &p.pack), &thresholds);
                 if after > before && !self.frozen {
-                    Self::say(&p.id, &crate::tr!("进化了！第 {after} 阶", "Evolved! Stage {after}"), 5000, 0, out);
+                    Self::say(&p.id, &crate::tr!("我变了。你看出来了吗。", "I've changed. Can you tell?"), 5000, 0, out);
                 }
             }
         }
@@ -483,15 +491,25 @@ impl World {
                         }
                     }
                 } else {
-                    let paid = db.earn(15, "duel", &d.project, now, cap);
-                    if let Some(w) = Self::camp_pet(views, &winner).map(|p| p.id.clone()) {
-                        if !self.scripts.contains_key(&w) {
-                            self.act(&w, "duel", "cheer", &crate::tr!("擂台胜利！+{paid}", "Duel won! +{paid}"), 3500, 0, false, now, out);
+                    let _ = db.earn(15, "duel", &d.project, now, cap);
+                    let w = Self::camp_pet(views, &winner).cloned();
+                    let l = Self::other_camp(&winner).and_then(|c| Self::camp_pet(views, c)).cloned();
+                    let win_text = crate::i18n::t("这轮我没出错。", "No mistakes this round.");
+                    let lose_text = crate::i18n::t("擂台输了……", "Lost the duel…");
+                    let both_free = matches!((&w, &l), (Some(w), Some(l)) if w.id != l.id && !self.scripts.contains_key(&w.id) && !self.scripts.contains_key(&l.id));
+                    if both_free && !self.frozen {
+                        // The loser takes the whip.
+                        self.whip_walkover(w.as_ref().unwrap(), l.as_ref().unwrap(), win_text, lose_text, "duel", now, out);
+                    } else {
+                        if let Some(w) = w.map(|p| p.id) {
+                            if !self.scripts.contains_key(&w) {
+                                self.act(&w, "duel", "cheer", win_text, 3500, 0, false, now, out);
+                            }
                         }
-                    }
-                    if let Some(l) = Self::other_camp(&winner).and_then(|c| Self::camp_pet(views, c)).map(|p| p.id.clone()) {
-                        if !self.scripts.contains_key(&l) {
-                            self.act(&l, "duel", "sulk", crate::i18n::t("擂台输了……", "Lost the duel…"), 3000, 0, false, now, out);
+                        if let Some(l) = l.map(|p| p.id) {
+                            if !self.scripts.contains_key(&l) {
+                                self.act(&l, "duel", "sulk", lose_text, 3000, 0, false, now, out);
+                            }
                         }
                     }
                 }
@@ -567,12 +585,12 @@ impl World {
         }
         let end = round * 2200;
         let (w, l) = if wa > wb { (a, b) } else { (b, a) };
-        let paid = db.earn(2, "rps", "", now, self.t.balance.economy.daily_cap);
+        let _ = db.earn(2, "rps", "", now, self.t.balance.economy.daily_cap);
         self.recent.entry(a.id.clone()).or_default().push_back(now);
         self.recent.entry(b.id.clone()).or_default().push_back(now);
         self.scripts.insert(a.id.clone(), Script { rule: "rps".into(), until: now + end + 2500, during_attention: false, moved: false });
         self.scripts.insert(b.id.clone(), Script { rule: "rps".into(), until: now + end + 2500, during_attention: false, moved: false });
-        out.push(Out::Ws(crate::msg("pet.script", &json!({ "pet": w.id, "rule": "rps", "action": "cheer", "bubble": crate::tr!("猜拳赢了！+{paid}", "Won rock-paper-scissors! +{paid}"), "ms": 2500, "delay": end }))));
+        out.push(Out::Ws(crate::msg("pet.script", &json!({ "pet": w.id, "rule": "rps", "action": "cheer", "bubble": crate::i18n::t("你出慢了。", "You were late."), "ms": 2500, "delay": end }))));
         out.push(Out::Ws(crate::msg("pet.script", &json!({ "pet": l.id, "rule": "rps", "action": "sulk", "bubble": crate::i18n::t("再来！", "Again!"), "ms": 2500, "delay": end }))));
         db.log_interaction(now, &a.id, "rps", false);
         self.bond(db, views, 1, out);
@@ -788,11 +806,11 @@ impl World {
     }
 
     /// Right-click "投喂": feed today's latest fish (any fish if none today).
-    pub fn feed(&mut self, pet: &PetView, views: &[PetView], now: u64, db: &Db) -> (String, Vec<Out>) {
+    pub fn feed(&mut self, pet: &PetView, views: &[PetView], now: u64, db: &Db) -> (String, Vec<Out>, crate::bond::BondReward, i64) {
         let mut out = vec![];
         let row = gdb::take_fish(db, now, None, "eaten");
         if row.is_none() {
-            return (crate::tr!("鱼篓是空的，先去钓鱼吧", "The fish basket is empty — go fishing first"), out);
+            return (crate::tr!("篓里什么都没有。我等着。", "Nothing in the basket. I'll wait."), out, crate::bond::BondReward::NoFish, 0);
         }
         let _ = db.with(|c| {
             c.execute(
@@ -801,7 +819,10 @@ impl World {
             )
         });
         self.bond(db, views, 1, &mut out);
-        (crate::tr!("好吃！", "Yum!"), out)
+        let en = crate::i18n::is_en();
+        let (bond_text, reward, feed_count) = crate::bond::on_feed(db, &pet.pack, &pet.pack, &pet.id, en);
+        let text = if bond_text.is_empty() { crate::tr!("……嗯。", "…mm.") } else { bond_text };
+        (text, out, reward, feed_count)
     }
 
     /// Evolution stage and affinity, for views and the report.
@@ -961,7 +982,7 @@ mod tests {
         ok.detail.result = Some(TurnResult::Ok);
         h.apply(&ok, t0 + 120_000);
         let out = w.tick(t0 + 120_000, &mut h, &db);
-        assert!(msgs(&out, "pet.script").iter().any(|s| s["rule"] == "slap" && s["bubble"] == "打脸了吧！"));
+        assert!(msgs(&out, "pet.script").iter().any(|s| s["rule"] == "slap" && s["bubble"] == "我就说。"));
     }
 
     #[test]

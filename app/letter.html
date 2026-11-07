@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Letter · Familiar</title>
+    <style>
+      :root {
+        --paper: #fdf8ef;
+        --envelope: #e8c87a;
+        --env-dark: #d4aa50;
+        --env-shadow: #c99a30;
+        --seal-red: #8b2635;
+        --seal-dark: #6b1e2b;
+        --ink: #2c1f0e;
+        --ink-soft: #7a6245;
+        --gold: #c8963a;
+        --paper-line: #e0ccaa;
+        --radius: 16px;
+        --ui: -apple-system, "Segoe UI", sans-serif;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body {
+        width: 420px; height: 540px;
+        overflow: hidden;
+        font-family: "Georgia", "STSong", "SimSun", serif;
+      }
+      body { display: flex; background: transparent; }
+
+      .card {
+        width: 100%; height: 100%;
+        border-radius: var(--radius);
+        overflow: hidden;
+        box-shadow: 0 12px 48px rgba(0,0,0,0.32), 0 2px 8px rgba(0,0,0,0.12);
+        position: relative;
+      }
+
+      /* ── ENVELOPE STATE ── */
+      #envelope {
+        position: absolute; inset: 0;
+        background: var(--envelope);
+        background-image:
+          repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(0,0,0,0.035) 40px),
+          repeating-linear-gradient(transparent, transparent 39px, rgba(0,0,0,0.035) 40px);
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        cursor: pointer;
+        user-select: none;
+        transition: opacity 0.35s;
+      }
+
+      /* top V-flap */
+      .env-flap {
+        position: absolute; top: 0; left: 0; right: 0;
+        height: 190px;
+        background: var(--env-dark);
+        clip-path: polygon(0 0, 100% 0, 50% 100%);
+        transform-origin: top center;
+        transition: transform 0.65s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 2;
+        /* subtle shadow line under flap */
+        filter: drop-shadow(0 4px 6px rgba(0,0,0,0.18));
+      }
+      .env-flap.open {
+        transform: perspective(600px) rotateX(-180deg);
+      }
+
+      /* bottom V pointing up */
+      .env-bottom {
+        position: absolute; bottom: 0; left: 0; right: 0;
+        height: 170px;
+        background: var(--env-shadow);
+        clip-path: polygon(0 100%, 100% 100%, 50% 0);
+        z-index: 0;
+      }
+
+      /* left and right diagonal folds */
+      .env-left {
+        position: absolute; left: 0; top: 0; bottom: 0;
+        width: 50%;
+        background: color-mix(in srgb, var(--envelope) 85%, #a07020);
+        clip-path: polygon(0 0, 100% 50%, 0 100%);
+        z-index: 1;
+      }
+      .env-right {
+        position: absolute; right: 0; top: 0; bottom: 0;
+        width: 50%;
+        background: color-mix(in srgb, var(--envelope) 85%, #a07020);
+        clip-path: polygon(100% 0, 0 50%, 100% 100%);
+        z-index: 1;
+      }
+
+      .env-body {
+        display: flex; flex-direction: column;
+        align-items: center; gap: 18px;
+        z-index: 3;
+        position: relative;
+      }
+
+      .env-sender {
+        font-size: 14px; letter-spacing: 0.1em;
+        color: rgba(44,31,14,0.6);
+        font-weight: 500;
+      }
+
+      .env-seal {
+        width: 68px; height: 68px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 35% 35%, #a83040, var(--seal-red) 60%, #6b1e2b);
+        border: 3px solid var(--seal-dark);
+        color: #f5d78e;
+        font-size: 28px;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer;
+        box-shadow:
+          0 4px 16px rgba(139,38,53,0.5),
+          inset 0 1px 3px rgba(255,255,255,0.15),
+          inset 0 -1px 2px rgba(0,0,0,0.3);
+        transition: transform 0.15s, box-shadow 0.15s;
+        line-height: 1;
+      }
+      .env-seal:hover {
+        transform: scale(1.06);
+        box-shadow: 0 6px 22px rgba(139,38,53,0.6), inset 0 1px 3px rgba(255,255,255,0.15);
+      }
+      .env-seal:active { transform: scale(0.96); }
+
+      .env-hint {
+        font-size: 12px; letter-spacing: 0.5px;
+        color: rgba(44,31,14,0.45);
+        font-family: var(--ui);
+      }
+
+      /* ── LETTER STATE ── */
+      #letter {
+        position: absolute; inset: 0;
+        background: var(--paper);
+        display: none;
+        flex-direction: column;
+        border-radius: var(--radius);
+      }
+      #letter.visible {
+        display: flex;
+        animation: letterReveal 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+      @keyframes letterReveal {
+        from { opacity: 0; transform: translateY(18px) scale(0.97); }
+        to   { opacity: 1; transform: none; }
+      }
+
+      .letter-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 18px 22px 14px;
+        border-bottom: 1px solid var(--paper-line);
+        flex: none;
+      }
+      .seal { font-size: 20px; line-height: 1; }
+      .fish-count {
+        font-size: 13px; color: var(--ink-soft);
+        font-family: var(--ui);
+      }
+      .close-btn {
+        width: 26px; height: 26px;
+        border: none; background: none; cursor: pointer;
+        color: var(--ink-soft); font-size: 15px;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 50%;
+        transition: background 0.15s, color 0.15s;
+        flex: none;
+      }
+      .close-btn:hover { background: rgba(0,0,0,0.07); color: var(--ink); }
+
+      .letter-date {
+        text-align: right;
+        padding: 10px 22px 2px;
+        font-size: 11px; color: var(--ink-soft);
+        font-family: var(--ui); letter-spacing: 0.3px;
+        flex: none;
+      }
+
+      .letter-paper {
+        flex: 1; overflow: hidden;
+        padding: 14px 24px 0;
+        display: flex; flex-direction: column;
+        /* ruled paper lines aligned to 28px line-height */
+        background-image: repeating-linear-gradient(
+          transparent, transparent 27px, var(--paper-line) 28px
+        );
+        background-size: 100% 28px;
+        background-position: 0 48px;
+      }
+
+      #letter-text {
+        flex: 1;
+        overflow-y: auto;
+        font-size: 14px;
+        line-height: 28px;
+        color: var(--ink);
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-family: "Georgia", "STSong", "SimSun", serif;
+        scrollbar-width: thin;
+        scrollbar-color: var(--paper-line) transparent;
+        margin: 0;
+        padding-bottom: 8px;
+      }
+      #letter-text::-webkit-scrollbar { width: 4px; }
+      #letter-text::-webkit-scrollbar-track { background: transparent; }
+      #letter-text::-webkit-scrollbar-thumb { background: var(--paper-line); border-radius: 2px; }
+
+      .letter-sig {
+        text-align: right;
+        font-style: italic;
+        font-size: 15px;
+        color: var(--ink-soft);
+        font-family: "Georgia", "STSong", serif;
+        padding: 10px 0 16px;
+        border-top: 1px solid var(--paper-line);
+        margin-top: 4px;
+        flex: none;
+        line-height: 1.6;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <!-- Envelope state -->
+      <div id="envelope">
+        <div class="env-flap" id="env-flap"></div>
+        <div class="env-bottom"></div>
+        <div class="env-left"></div>
+        <div class="env-right"></div>
+        <div class="env-body">
+          <div class="env-sender"><span id="pet-name-label">小柚</span></div>
+          <button class="env-seal" id="env-seal">❦</button>
+          <p class="env-hint" id="env-hint">拆开看看</p>
+        </div>
+      </div>
+
+      <!-- Letter state -->
+      <div id="letter">
+        <div class="letter-header">
+          <span class="seal">📜</span>
+          <span class="fish-count" id="fish-count"></span>
+          <button class="close-btn" id="close-btn" title="关闭">✕</button>
+        </div>
+        <div class="letter-date" id="letter-date"></div>
+        <div class="letter-paper">
+          <pre id="letter-text"></pre>
+          <div class="letter-sig" id="letter-sig" style="display:none"></div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/letter.ts"></script>
+  </body>
+</html>

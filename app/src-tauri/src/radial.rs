@@ -53,7 +53,23 @@ pub struct Model {
     pub items: Vec<Node>,
 }
 
-pub fn build(app: &App, pet: &str) -> Option<Model> {
+/// 说相声: a random piece, any piece by name, and the folder for your own scripts.
+fn xs_group(app: &App, pet: &str) -> Node {
+    let pieces: Vec<(String, String, bool)> = {
+        let mut w = app.petd.shared.world.lock().unwrap();
+        w.reload_xs(&app.petd.paths.home);
+        w.t.xs.iter().map(|p| (p.id.clone(), p.title.clone(), p.lang.is_some())).collect()
+    };
+    let mut kids = vec![with_hint(item(format!("xs|{pet}"), "🎲", t("随便来一段", "Surprise me")), t("两只宠物一起说", "Both pets perform"))];
+    for (id, title, mine) in pieces.iter().take(24) {
+        let n = item(format!("xs|{pet}|{id}"), if *mine { "📜" } else { "" }, title.as_str());
+        kids.push(if *mine { with_hint(n, t("我的本子", "My script")) } else { n });
+    }
+    kids.push(with_hint(item("xsdir", "📂", t("放自己的本子…", "Add your own scripts…")), t("甲：乙：格式的 txt", "txt with 甲：/乙： lines")));
+    group("🎙️", t("说相声", "Comedy duo"), kids)
+}
+
+pub fn build(app: &App, pet: &str, has_letter: bool) -> Option<Model> {
     let (view, packs, favs, mode, focus, size, kegel) = {
         let hub = app.petd.hub.lock().unwrap();
         let view = hub.pets().into_iter().find(|v| v.id == pet)?;
@@ -71,6 +87,8 @@ pub fn build(app: &App, pet: &str) -> Option<Model> {
     // ---- games
     let mut games = vec![
         with_hint(item("spring", "🧧", t("春节倒计时", "Spring Festival")), t("抢红包小游戏", "Red-envelope game")),
+        with_hint(item("radio", "📻", t("电台", "Radio")), t("全世界的电台，还有相声台", "Stations from around the world")),
+        xs_group(app, pet),
         with_hint(item("tug", "🤼", t("拔河", "Tug-of-war")), t("比今天的效率分", "Today's productivity score")),
         item(format!("duo|{pet}|badminton"), "🏸", t("羽毛球", "Badminton")),
         item(format!("duo|{pet}|pingpong"), "🏓", t("乒乓球", "Ping-pong")),
@@ -159,14 +177,23 @@ pub fn build(app: &App, pet: &str) -> Option<Model> {
 
     // ---- health
     let health = vec![
-        with_hint(item(format!("kegel|{pet}"), "🍑", t("提肛一组", "Kegel set")), t("收紧 3 秒、放松 3 秒", "Squeeze 3s, relax 3s")),
+        with_hint(item(format!("kegel|{pet}"), "🍑", t("提肛一组", "Kegel set")), t("收三秒，松三秒", "Three on, three off")),
         with_hint(
             item("reminders", "⏰", t("提醒设置…", "Reminder settings…")),
             if kegel.is_empty() { t("还没设提肛时间", "No kegel times yet").to_string() } else { kegel.join(" ") },
         ),
     ];
 
-    let mut items = vec![group("🎮", t("游戏", "Games"), games), item(format!("feed|{pet}"), "🐟", t("投喂", "Feed")), group("🎨", t("换装", "Outfits"), switch), group("🍑", t("健康", "Health"), health)];
+    let feed_items = vec![
+        item(format!("feed|{pet}|1"), "🐟", t("×1", "×1")),
+        item(format!("feed|{pet}|5"), "🐟", t("×5", "×5")),
+        item(format!("feed|{pet}|10"), "🐟", t("×10", "×10")),
+    ];
+    let whip = with_hint(item(format!("whip|{pet}"), "🪢", t("小皮鞭", "Little whip")), t("干活慢了，抽一下", "Slow? Give it a crack"));
+    let mut items = vec![group("🎮", t("游戏", "Games"), games), group("🐟", t("投喂", "Feed"), feed_items), whip, group("🎨", t("换装", "Outfits"), switch), group("🍑", t("健康", "Health"), health)];
+    if has_letter {
+        items.insert(0, with_hint(item("read_letter", "✉", t("读信", "Open letter")), t("有一封信在等你", "A letter is waiting")));
+    }
     if view.camp.as_deref() == Some("codex") {
         items.push(group("🎫", t("重置卡", "Reset card"), reset_card(pet)));
     }

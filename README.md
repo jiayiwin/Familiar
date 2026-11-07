@@ -52,7 +52,7 @@ Windows 10/11 only for now. Built with Rust, Tauri 2 and TypeScript/Canvas.
 
 ### Privacy and office-friendliness
 
-- Everything stays on `127.0.0.1` behind a token. No network calls, no uploads.
+- Everything stays on `127.0.0.1` behind a token. No uploads. The only thing that goes online is the radio, and only while you use it.
 - Boss key (`Ctrl+Alt+H`) hides everything instantly. Pets also hide automatically while a fullscreen app is in front or while you are sharing your screen in a meeting.
 - Focus mode keeps only status and "waiting for you" alerts.
 
@@ -134,7 +134,7 @@ Right-clicking a pet opens a ring of round buttons around it: **Games**, **Feed*
 Click the tray icon (left or right) to open the tray panel. It shows the version and your coin balance at the top, then:
 
 - **Quick toggles:** Show pets · Hide all (boss key) · Focus mode
-- **Play:** Gallery · Today's report · Shop · Lunar New Year countdown · Health reminders
+- **Play:** Gallery · Today's report · Shop · Lunar New Year countdown · Health reminders · Radio · Comedy duo
 - **Settings:** Routing mode · Language · Start with Windows · Hook up (Claude Code / Codex)
 - **Footer:** Edit config · Data folder · Quit
 
@@ -153,6 +153,8 @@ Toggles keep the panel open; click outside or press Esc to close it. The gallery
 | `/pet report` | Open today's report |
 | `/pet size s/m/l` | Pet size |
 | `/pet spring` | Open the Spring Festival countdown and the red-envelope game |
+| `/pet radio` | Open the radio |
+| `/pet xiangsheng [piece]` | The two pets perform a comedy duo bit (相声) |
 | `/pet kegel [times… / off]` | Do a kegel set with your pet now; with times, remind daily, e.g. `/pet kegel 10:30 15:30` |
 | `/pet lang auto/zh/en` | UI language |
 | `/pet next` | Next pet from your favorites |
@@ -204,6 +206,8 @@ None of this gets in the way of the status display. **While any session is waiti
 
 **Two-pet mini games.** When both pets have been idle for 2 minutes they occasionally play badminton, ping-pong or arm wrestling on their own (20-minute cooldown); the ring menu or `/pet badminton|pingpong|armwrestle` starts one any time. Rock-paper-scissors: best of three on their own after 3 idle minutes, or play against a pet from the ring menu (+2 coins for a win). Ball toss: drag one pet onto the other and they throw a ball back and forth 5 times; click the ball mid-air to steal it (+1 coin, 2-minute cooldown).
 
+**The little whip.** Lose, and you take the whip. After badminton / ping-pong / arm wrestling / a duel / a race, the winner walks over and cracks it on the loser; a pet that loses rock-paper-scissors to you takes it too. When the other team has been grinding one turn for 8 minutes, the idle pet comes over and whips it (the `whip` rule in `interactions.yaml`: `min_turn_s` sets the wait, `enabled: false` turns it off). Ring menu → 🪢 Little whip cracks it yourself; the pet answers to its current state. The crack, the yelp, racket hits, whistle and win / lose jingles are all synthesized in code, nothing copyrighted.
+
 **Bets and duels.** When both teams start a new turn within 2 minutes of each other, a race begins; for 20 seconds you can bet 10 / 50 / 100 coins (at most half your balance) from the ring menu. First to finish successfully wins; an error or interrupt loses. Odds = 0.9 ÷ win rate over the last 20 races, clamped to 1.2–5.0 (1.8 until there are 5 races). With only one team online, the bookmaker lets you bet on how the next turn goes (under 1 minute / 1–5 minutes / over 5 minutes / errors / needs your approval). **Duel** (ring menu or `/pet duel`): each side picks a session; the first to pass its next turn without errors wins +15 coins; finishing within 5 seconds of each other is a draw.
 
 **Small talk.** Quips every 90–180 seconds while working ("Editing main.rs again, 5th time"), never repeating within 30 minutes. Built-in interaction rules: taunt when the other side errors, comfort when it turns to stone, applause after a long task, and a nudge where an idle pet runs over to wave when the other side is waiting for you. Plus comebacks, pets sulking when the other team starts a session, fish stealing, a late-night "go to bed" after 23:00, packing a bag 30 minutes before the end of the day, dancing on Friday after 17:00, and a "where were you?" when the other team has been away for days.
@@ -222,6 +226,10 @@ None of this gets in the way of the status display. **While any session is waiti
 **Wellbeing** (off by default). `features.water: true` reminds you to drink water every 60 minutes when idle. `features.breathe: true`: if you are called to approve more than 6 times in 10 minutes, the pet leads 30 seconds of 4-7-8 breathing (click to skip).
 
 **Spring Festival**: right-click a pet → Games → Spring Festival (or `/pet spring`) opens a countdown to Lunar New Year with background music: put your own copy of Andy Lau's "恭喜发财" (or any song) in `~/.familiar/music/` ("Music folder" on the page opens it) or use "Pick a song…". An `.lrc` file with the same name shows the lyrics in time with the song. The song is copyrighted, so it is not bundled; without one, an original gong-and-drum tune plays. Below it is a 30-second red-envelope rain: click envelopes and gold ingots, avoid the firecrackers. The first 3 rounds a day pay up to 15 coins each. On New Year's Eve evening and New Year's Day the pet wishes you a happy new year.
+
+**Radio**: Tray → **Radio** (or right-click a pet → Games → Radio, or `/pet radio`) opens live radio from around the world: popular stations, a **Crosstalk** tab with real Chinese 相声 and 评书 stations (and comedy stations elsewhere), every country, search and favorites. **Roam** jumps to a random station somewhere in the world. Closing the window keeps the station playing; the media keys and the Windows volume panel control it too. The station list comes from [Radio Browser](https://www.radio-browser.info/), a free community directory; the sound comes straight from each station.
+
+**Comedy duo (相声)**: when both pets have been idle for a while, they sometimes walk up to each other, set up a little table and perform a short 相声 bit: big speech bubbles, voiced by the Windows voices on your computer (a male voice for the joker, a female one for the straight man), a 醒木 knock to open, laughs and applause at the punchlines. `features.sounds: false` in `config.yaml` keeps it silent. Start one any time: right-click a pet → Games → Comedy duo, Tray → Comedy duo, or `/pet xiangsheng`. Eight Chinese and five English pieces are built in (all original; the 报菜名 patter and the 八百标兵 tongue twister are traditional). To have them perform scripts you have, put plain text files in `~/.familiar/xiangsheng/` (right-click → Games → Comedy duo → Add your own scripts… opens the folder): an optional `《title》` first line, then `甲：…` / `乙：…` lines (甲 is the joker, 乙 the straight man; `逗哏：`/`捧哏：` and `A:`/`B:` work too). Stage directions in brackets are skipped, and one with 笑 in it, like `（观众笑）`, gets a laugh. UTF-8 or GBK both work. Your scripts show up in the menu by name; long ones only play when you pick them. YAML in the format of [`crates/petd/assets/xiangsheng.yaml`](crates/petd/assets/xiangsheng.yaml) works too. These files stay on your computer.
 
 **Kegel reminders**: add daily times in Gallery → Reminders (or right-click a pet → Health → Reminder settings). At each time the pet turns its back to you and leads a set: squeezing and lifting with its tail up, then relaxing with a wag, with "Squeeze ⬆ / Relax ⬇", a countdown and a soft beep; the page explains how to do it. Right-click → Health → Kegel set, or `/pet kegel`, starts one any time.
 
@@ -467,7 +475,7 @@ How it fits together: each agent hook runs `familiar-emit`, which posts a small 
 
 ## Privacy and security
 
-- **Local only.** The daemon listens on `127.0.0.1` (port 47321 by default, a random free port if taken) and every request needs the token in `~/.familiar/token`. Familiar makes no network requests and uploads nothing. All data stays in `~/.familiar/`.
+- **Local only.** The daemon listens on `127.0.0.1` (port 47321 by default, a random free port if taken) and every request needs the token in `~/.familiar/token`. Familiar uploads nothing and makes no network requests, except the radio while you use it: it loads the station list from [Radio Browser](https://www.radio-browser.info/) and plays streams straight from the stations. Nothing about you or your agents is sent. All data stays in `~/.familiar/`.
 - **Minimal event data.** Hooks pass the daemon only what the pets need: session id, event type, the session's working directory, tool name, edited file name and the agent's process id. Prompts, file contents and tool output are not forwarded. For Codex shell commands only the first word is used to tell reads from other tools; the command text never leaves the emitter.
 - **Hooks are appended, never replaced.** The Claude Code side is a regular plugin. For Codex, Familiar appends its hook after yours and backs up `hooks.json` first; `--uninstall codex` removes it. Both "Hook up" actions tell you what they will change before doing it.
 - **Codex quota is read-only.** The quota display reads Codex's own session logs (`$CODEX_HOME/sessions` and `~/.codex/sessions`) without modifying them. Familiar never uses a reset card on your behalf.
@@ -511,6 +519,6 @@ Windows Terminal can be brought to the front, but not switched to a specific tab
 
 [MIT](LICENSE). The built-in pets (pixel cat and pixel bot) and their sounds are generated by code in this repository and are covered by the same license.
 
-Third-party components shipped with the app: [onnxruntime-web](https://github.com/microsoft/onnxruntime) (MIT) and the [U-2-Net](https://github.com/xuebinqin/U-2-Net) u2netp model (Apache-2.0, see [`app/public/models/LICENSE-U2Net.txt`](app/public/models/LICENSE-U2Net.txt)), used for removing busy backgrounds in "Make a pet from a picture".
+Third-party components shipped with the app: [onnxruntime-web](https://github.com/microsoft/onnxruntime) (MIT) and the [U-2-Net](https://github.com/xuebinqin/U-2-Net) u2netp model (Apache-2.0, see [`app/public/models/LICENSE-U2Net.txt`](app/public/models/LICENSE-U2Net.txt)), used for removing busy backgrounds in "Make a pet from a picture"; and [hls.js](https://github.com/video-dev/hls.js) (Apache-2.0), for radio stations that stream in HLS.
 
 Packs you make from someone else's characters are for personal use; sharing them needs the rights holder's permission.

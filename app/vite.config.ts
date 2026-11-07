@@ -19,6 +19,8 @@ export default defineConfig({
         menu: resolve(__dirname, "menu.html"),
         spring: resolve(__dirname, "spring.html"),
         tray: resolve(__dirname, "tray.html"),
+        radio: resolve(__dirname, "radio.html"),
+        letter: resolve(__dirname, "letter.html"),
       },
     },
   },

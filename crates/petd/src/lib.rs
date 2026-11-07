@@ -2,6 +2,8 @@
 //! "petd = Tauri main process"); it has no GUI code of its own.
 
 pub mod balance;
+pub mod bond;
+pub mod local_llm;
 pub mod codex;
 pub mod config;
 pub mod db;
@@ -19,6 +21,8 @@ pub mod protocol;
 pub mod server;
 pub mod session;
 pub mod spring;
+pub mod whip;
+pub mod xiangsheng;
 pub mod world;
 
 use fs4::fs_std::FileExt;
@@ -55,6 +59,8 @@ pub enum Control {
     Report,
     /// Open the Spring Festival countdown (`/pet spring`).
     Spring,
+    /// Open the radio (`/pet radio`).
+    Radio,
     /// Open the ring menu on a pet (`/pet menu`).
     Menu { pet: String },
     /// Throw a pet (tests and `/pet fling`): logical px/s.

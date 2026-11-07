@@ -22,6 +22,12 @@ getrandom = "0.3"
 rusqlite = { version = "0.37", features = ["bundled"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+encoding_rs = "0.8"
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream"], default-features = false }
+candle-core = { version = "0.8", default-features = false }
+candle-nn = { version = "0.8", default-features = false }
+candle-transformers = { version = "0.8", default-features = false }
+tokenizers = { version = "0.21", default-features = false, features = ["fancy-regex"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Threading"] }

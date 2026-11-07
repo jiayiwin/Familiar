@@ -192,7 +192,7 @@ async fn cmd(Ax(sh): Ax<Shared>, Json(c): Json<Cmd>) -> String {
             let kind = c.args.first().cloned().unwrap_or_else(|| "rps".into());
             let pet = c.args.get(1).cloned().unwrap_or_else(|| "claude-code".into());
             let payload = match kind.as_str() {
-                "feed" => serde_json::json!({ "kind": "feed", "ok": true, "text": crate::i18n::t("好吃！", "Yum!") }),
+                "feed" => serde_json::json!({ "kind": "feed", "ok": true, "text": crate::i18n::t("……嗯。", "…mm.") }),
                 "bet" => serde_json::json!({ "kind": "bet", "ok": true, "text": crate::i18n::t("押了 50 金币", "Bet 50 coins"), "game": "race", "stake": 50, "odds": 1.8 }),
                 "card" => serde_json::json!({ "kind": "card", "from": 96.0, "used": 0.0 }),
                 _ => serde_json::json!({ "kind": "rps", "user": 2, "pet": 0, "outcome": "win", "coins": 2 }),
@@ -255,6 +255,37 @@ async fn cmd(Ax(sh): Ax<Shared>, Json(c): Json<Cmd>) -> String {
         "spring" => {
             let _ = sh.control.send(crate::Control::Spring);
             crate::tr!("已打开春节倒计时。", "Opened the Spring Festival countdown.")
+        }
+        "radio" => {
+            let _ = sh.control.send(crate::Control::Radio);
+            crate::tr!("已打开电台。", "Opened the radio.")
+        }
+        // /pet xiangsheng [piece id or title]
+        "xiangsheng" | "xs" | "crosstalk" | "comedy" | "相声" => {
+            let piece = c.args.first().cloned();
+            let views = sh.hub.lock().unwrap().pets();
+            let pet = crate::world::World::camp_pet(&views, "claude-code").or_else(|| views.first()).map(|v| v.id.clone()).unwrap_or_default();
+            let r = {
+                let mut w = sh.world.lock().unwrap();
+                w.reload_xs(&sh.paths.home);
+                w.request_xs(piece.as_deref(), &pet, crate::now_ms(), &views, &sh.db)
+            };
+            match r {
+                Ok(outs) => {
+                    for o in outs {
+                        match o {
+                            crate::world::Out::Ws(m) => {
+                                let _ = sh.ws_tx.send(m);
+                            }
+                            crate::world::Out::Control(ctl) => {
+                                let _ = sh.control.send(ctl);
+                            }
+                        }
+                    }
+                    crate::tr!("开演！", "Showtime!")
+                }
+                Err(e) => e,
+            }
         }
         "report" => {
             let _ = sh.control.send(crate::Control::Report);

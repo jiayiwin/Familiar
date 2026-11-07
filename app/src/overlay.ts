@@ -5,6 +5,7 @@
 
 import { connect, getJson, inTauri, postJson, subscribe, type Bug, type Conn, type WorldState } from "./api";
 import { initLang, t as tr } from "./i18n"; // `t` is a common local name here
+import { Whip } from "./whip";
 
 const q = new URLSearchParams(location.search);
 const MON = { x: Number(q.get("x") ?? 0), y: Number(q.get("y") ?? 0), w: Number(q.get("w") ?? innerWidth), h: Number(q.get("h") ?? innerHeight) };
@@ -66,6 +67,28 @@ function sfx(name: string) {
   const a = new Audio(`sfx/${name}.wav`);
   a.volume = 0.5;
   a.play().catch(() => {});
+}
+
+let _modelToastEl: HTMLElement | null = null;
+let _modelToastTimer: ReturnType<typeof setTimeout> | null = null;
+function showModelToast(text: string, kind: "progress" | "success" | "error") {
+  if (!_modelToastEl) {
+    _modelToastEl = document.createElement("div");
+    Object.assign(_modelToastEl.style, {
+      position: "fixed", bottom: "28px", left: "50%", transform: "translateX(-50%)",
+      background: "rgba(20,20,20,0.88)", color: "#fff", padding: "7px 22px",
+      borderRadius: "20px", fontSize: "13px", fontFamily: "system-ui, sans-serif",
+      pointerEvents: "none", zIndex: "9999", transition: "opacity 0.4s", opacity: "0",
+      backdropFilter: "blur(6px)", boxShadow: "0 2px 12px rgba(0,0,0,0.3)",
+    });
+    document.body.appendChild(_modelToastEl);
+  }
+  if (_modelToastTimer) { clearTimeout(_modelToastTimer); _modelToastTimer = null; }
+  _modelToastEl.textContent = text;
+  _modelToastEl.style.opacity = "1";
+  if (kind !== "progress") {
+    _modelToastTimer = setTimeout(() => { if (_modelToastEl) _modelToastEl.style.opacity = "0"; }, 3500);
+  }
 }
 
 /** Feet of a pet window in this overlay's coordinates, or null if it is on another monitor. */
@@ -247,8 +270,8 @@ function drawPopups(now: number) {
 }
 
 /** Badminton / ping-pong between two pets: the overlay draws the flight. */
-interface Rally { game: string; a: string; t0: number; each: number; hits: number; ms: number; pa: Box; pb: Box }
-interface Box { x: number; y: number; bottom: number; h: number }
+interface Rally { game: string; a: string; t0: number; each: number; hits: number; ms: number; pa: Box; pb: Box; lastHit: number; ended: boolean }
+interface Box { x: number; y: number; bottom: number; h: number; top: number }
 let rally: Rally | null = null;
 
 async function petBox(pet: string): Promise<Box | null> {
@@ -259,7 +282,7 @@ async function petBox(pet: string): Promise<Box | null> {
   const sc = await w.scaleFactor();
   const p = (await w.outerPosition()).toLogical(sc);
   const s = (await w.outerSize()).toLogical(sc);
-  return { x: p.x + s.width / 2 - MON.x, y: p.y + s.height * 0.55 - MON.y, bottom: p.y + s.height - MON.y - 2, h: s.height };
+  return { x: p.x + s.width / 2 - MON.x, y: p.y + s.height * 0.55 - MON.y, bottom: p.y + s.height - MON.y - 2, h: s.height, top: p.y - MON.y };
 }
 
 async function startRally(d: Record<string, unknown>) {
@@ -268,9 +291,19 @@ async function startRally(d: Record<string, unknown>) {
   await new Promise((r) => setTimeout(r, walk - 60));
   const [pa, pb] = [await petBox(String(d.anchor)), await petBox(String(d.mover))];
   if (!pa || !pb || pa.x < 0 || pa.x > MON.w) return;
-  rally = { game: String(d.game), a: String(d.anchor), t0: recv + walk, each: Number(d.each), hits: Number(d.hits), ms: Number(d.ms), pa, pb };
+  rally = { game: String(d.game), a: String(d.anchor), t0: recv + walk, each: Number(d.each), hits: Number(d.hits), ms: Number(d.ms), pa, pb, lastHit: -1, ended: false };
+  sfx("whistle");
   // A hidden window gets no animation frames: show it first.
   void setShown(allowed);
+}
+
+/** Arm wrestling is drawn by the pet windows; the overlay only keeps the sounds in one place. */
+function armSounds(d: Record<string, unknown>) {
+  const walk = Number(d.walk) || 1300;
+  const ms = Number(d.ms) || 5200;
+  setTimeout(() => sfx("whistle"), walk);
+  setTimeout(() => sfx("slam"), walk + ms - 260);
+  setTimeout(() => sfx("win"), walk + ms + 150);
 }
 
 function drawRally(now: number): boolean {
@@ -280,6 +313,18 @@ function drawRally(now: number): boolean {
   if (t > r.ms + 300) {
     rally = null;
     return false;
+  }
+  if (t >= 0) {
+    // One "pock" per racket touch; the jingle when the last shot lands.
+    const i = Math.min(r.hits - 1, Math.floor(t / r.each));
+    if (i !== r.lastHit) {
+      r.lastHit = i;
+      sfx("pock");
+    }
+    if (!r.ended && t >= r.ms) {
+      r.ended = true;
+      sfx("win");
+    }
   }
   const ground = Math.max(r.pa.bottom, r.pb.bottom);
   const [L, R] = r.pa.x < r.pb.x ? [r.pa, r.pb] : [r.pb, r.pa];
@@ -370,7 +415,283 @@ function drawRally(now: number): boolean {
   return true;
 }
 
-/** Head of a pet window in this overlay's coordinates. */
+// ---------------------------------------------------------------- 小皮鞭
+/**
+ * One crack of the whip. `from` is the pet holding it (null: the user, whose
+ * fist comes in from above). The pets' lines ride on `pet.script`; the lash,
+ * the impact and the three sounds (crack, yelp, the master's hmph) live in
+ * whip.ts, one source for every window.
+ */
+const lashes: Whip[] = [];
+
+async function startWhip(d: Record<string, unknown>) {
+  const delay = Number(d.delay) || 0;
+  const hit = Number(d.hit) || 760;
+  const recv = performance.now();
+  // Read the windows just before the stroke: the whipper may still be walking over.
+  await new Promise((r) => setTimeout(r, Math.max(0, delay - 40)));
+  const to = await petBox(String(d.to));
+  if (!to || to.x < 0 || to.x > MON.w) return;
+  const from = d.from ? await petBox(String(d.from)) : null;
+  lashes.push(new Whip({ from, to, t0: recv + delay, hit, screenW: MON.w, floor: to.bottom, text: tr("啪！", "CRACK!"), sfx }));
+  void setShown(allowed);
+}
+
+function drawLashes(now: number): boolean {
+  for (let i = lashes.length - 1; i >= 0; i--) {
+    if (!lashes[i].step(now)) lashes.splice(i, 1);
+    else lashes[i].draw(ctx, now);
+  }
+  return lashes.length > 0;
+}
+
+// ---------------------------------------------------------------- 相声
+
+/** A crosstalk show: the table between the pets, big bubbles, the audience. */
+interface XsLine { who: string; text: string; at: number; ms: number; fx: string; act?: string | null }
+interface Xs { a: string; b: string; title: string; t0: number; ms: number; lines: XsLine[]; pa: Box; pb: Box; fired: Set<number>; spoken: Set<number>; voice: boolean; en: boolean }
+interface Laugh { x: number; y: number; text: string; color: string; t0: number; dx: number }
+let xs: Xs | null = null;
+const laughs: Laugh[] = [];
+const FONT = "14px 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', system-ui, sans-serif";
+
+async function startXs(d: Record<string, unknown>) {
+  const walk = Number(d.walk) || 1300;
+  const recv = performance.now();
+  await new Promise((r) => setTimeout(r, walk - 60));
+  const [pa, pb] = [await petBox(String(d.a)), await petBox(String(d.b))];
+  if (!pa || !pb || pa.x < 0 || pa.x > MON.w) return;
+  xs = { a: String(d.a), b: String(d.b), title: String(d.title ?? ""), t0: recv + walk, ms: Number(d.ms), lines: (d.lines as XsLine[]) ?? [], pa, pb, fired: new Set(), spoken: new Set(), voice: d.voice !== false, en: d.lang === "en" };
+  if (xs.voice) sfx("xingmu");
+  void setShown(allowed);
+}
+
+// The two performers' voices: the Windows voices that come with the system
+// (offline). 逗哏 gets a male voice, 捧哏 a female one when there is one.
+function pickVoices(en: boolean): [SpeechSynthesisVoice | null, SpeechSynthesisVoice | null, boolean] {
+  const all = typeof speechSynthesis === "undefined" ? [] : speechSynthesis.getVoices();
+  const mine = all.filter((v) => (en ? /^en/i.test(v.lang) : /^zh/i.test(v.lang) && !/HK|TW/i.test(v.lang)));
+  const pool = mine.length ? mine : all.filter((v) => (en ? /^en/i : /^zh/i).test(v.lang));
+  const male = en ? /David|Mark|Guy|George|James|Richard/i : /Kangkang|Yunxi|Yunjian|Yunyang|Kang/i;
+  const female = en ? /Zira|Aria|Jenny|Hazel|Susan|Eva/i : /Yaoyao|Huihui|Xiaoxiao|Xiaoyi|Yao|Hui/i;
+  const a = pool.find((v) => male.test(v.name)) ?? pool[0] ?? null;
+  const b = pool.find((v) => female.test(v.name) && v !== a) ?? pool.find((v) => v !== a) ?? a;
+  return [a, b, a === b];
+}
+
+/** Say a line (cutting off the previous one so the voices stay on the bubbles). */
+function speak(text: string, who: string, en: boolean) {
+  if (typeof speechSynthesis === "undefined" || !allowed) return;
+  const [va, vb, same] = pickVoices(en);
+  if (!va) return;
+  const clean = text.replace(/[“”"《》「」『』]/g, "").replace(/[—…]+/g, "，").replace(/\/\//g, "").trim();
+  if (!clean) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(clean);
+  const b = who === "b";
+  u.voice = b ? vb : va;
+  u.lang = en ? "en-US" : "zh-CN";
+  u.rate = en ? 1.12 : 1.3;
+  // One voice for both: tell them apart by pitch.
+  u.pitch = same ? (b ? 1.35 : 0.85) : b ? 1.08 : 1;
+  u.volume = 1;
+  speechSynthesis.speak(u);
+}
+
+function stopXs() {
+  xs = null;
+  if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
+}
+
+/** Break text into lines that fit `maxW` (CJK by character, Latin by word). */
+function wrap(text: string, maxW: number): string[] {
+  ctx.font = FONT;
+  const out: string[] = [];
+  let line = "";
+  const tokens = text.match(/[\u2E80-\uFFFF]|[^\s\u2E80-\uFFFF]+|\s+/g) ?? [];
+  for (const tk of tokens) {
+    const next = line + tk;
+    if (ctx.measureText(next).width > maxW && line.trim()) {
+      out.push(line.trimEnd());
+      line = tk.trimStart();
+    } else line = next;
+  }
+  if (line.trim()) out.push(line.trimEnd());
+  return out.slice(0, 5);
+}
+
+/** A speech bubble above a pet; `side` pushes it outward (-1 left, 1 right). */
+function bubble(text: string, box: Box, side: number, color: string, k: number) {
+  const maxW = 220;
+  const rows = wrap(text, maxW - 26);
+  ctx.font = FONT;
+  const w = Math.min(maxW, Math.max(...rows.map((r) => ctx.measureText(r).width)) + 26);
+  const lh = 20, h = rows.length * lh + 18;
+  const tipX = box.x + side * 14, tipY = box.top + 42;
+  let x = tipX - w / 2 + side * (w / 2 - 30);
+  x = Math.max(6, Math.min(MON.w - w - 6, x));
+  const y = Math.max(6, tipY - 12 - h);
+  // Pop in from the tail.
+  const sc = 0.85 + 0.15 * Math.min(1, k * 6);
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, k * 8);
+  ctx.translate(tipX, tipY);
+  ctx.scale(sc, sc);
+  ctx.translate(-tipX, -tipY);
+  ctx.shadowColor = "rgba(31,34,69,0.22)";
+  ctx.shadowBlur = 14;
+  ctx.shadowOffsetY = 4;
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 14);
+  ctx.fill();
+  ctx.shadowColor = "transparent";
+  const tx = Math.max(x + 18, Math.min(x + w - 18, tipX));
+  ctx.beginPath();
+  ctx.moveTo(tx - 7, y + h - 1);
+  ctx.lineTo(tipX, tipY);
+  ctx.lineTo(tx + 7, y + h - 1);
+  ctx.closePath();
+  ctx.fill();
+  // Speaker colour: a short bar on top.
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.roundRect(x + 13, y + 6, 20, 3, 1.5);
+  ctx.fill();
+  ctx.fillStyle = "#1f2245";
+  ctx.font = FONT;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  rows.forEach((r, i) => ctx.fillText(r, x + 13, y + 13 + i * lh));
+  ctx.restore();
+}
+
+/** The little 相声 table: red cloth with a gold trim, a fan and a 醒木 on top. */
+function drawTable(cx: number, ground: number) {
+  const w = 54, top = ground - 40;
+  ctx.save();
+  ctx.fillStyle = "#6b3f2a";
+  ctx.fillRect(cx - w / 2 + 4, top + 6, 4, 34);
+  ctx.fillRect(cx + w / 2 - 8, top + 6, 4, 34);
+  ctx.fillStyle = "#8a5236";
+  ctx.fillRect(cx - w / 2 - 3, top, w + 6, 6);
+  ctx.fillStyle = "#d6372c";
+  ctx.beginPath();
+  ctx.moveTo(cx - w / 2 - 2, top + 6);
+  ctx.lineTo(cx + w / 2 + 2, top + 6);
+  ctx.lineTo(cx + w / 2 + 5, top + 30);
+  ctx.lineTo(cx - w / 2 - 5, top + 30);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "#f4b63f";
+  ctx.fillRect(cx - w / 2 - 5, top + 27, w + 10, 3);
+  ctx.font = "bold 11px 'Microsoft YaHei UI', 'Segoe UI', sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(tr("相声", "COMEDY"), cx, top + 17);
+  ctx.fillStyle = "#f6f1e7";
+  ctx.save();
+  ctx.translate(cx - 10, top - 2);
+  ctx.rotate(-0.25);
+  ctx.fillRect(-10, -2, 20, 4);
+  ctx.restore();
+  ctx.fillStyle = "#4a2a1c";
+  ctx.fillRect(cx + 6, top - 5, 10, 5);
+  ctx.restore();
+}
+
+function drawBanner(text: string, cx: number, y: number, k: number) {
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, k);
+  ctx.font = "bold 15px 'Microsoft YaHei UI', 'Segoe UI', sans-serif";
+  const w = ctx.measureText(text).width + 54;
+  const x = Math.max(6, Math.min(MON.w - w - 6, cx - w / 2));
+  ctx.fillStyle = "#2b3275";
+  ctx.beginPath();
+  ctx.roundRect(x, y - 15, w, 30, 15);
+  ctx.fill();
+  ctx.fillStyle = "#ee5b3c";
+  ctx.beginPath();
+  ctx.arc(x + 14, y, 4, 0, Math.PI * 2);
+  ctx.arc(x + w - 14, y, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, x + w / 2, y + 1);
+  ctx.restore();
+}
+
+function addLaughs(cx: number, ground: number, clap: boolean, now: number) {
+  const words = clap
+    ? [tr("好！", "Yes!"), "👏", tr("再来一段！", "Again!"), "👏", tr("好！", "Ha!"), "👏"]
+    : [tr("哈哈哈", "haha"), tr("哈哈", "LOL"), "😂", tr("哈哈哈哈", "hahaha")];
+  const colors = ["#ee5b3c", "#2b3275", "#2f9a8a", "#e0794f", "#ad98e6"];
+  // Spread across the stage in slots, leaving the table in the middle clear.
+  const n = clap ? 6 : 4;
+  const slots = clap ? [-150, -95, -50, 50, 95, 150] : [-120, -60, 60, 120];
+  const order = slots.map((v) => ({ v, r: Math.random() })).sort((p, q) => p.r - q.r).map((o) => o.v);
+  for (let i = 0; i < n; i++) {
+    laughs.push({ x: cx + order[i] + (Math.random() - 0.5) * 14, y: ground - 46 - (i % 2) * 22, text: words[i % words.length], color: colors[i % colors.length], t0: now + i * 170, dx: (Math.random() - 0.5) * 16 });
+  }
+}
+
+function drawXs(now: number): boolean {
+  if (xs && now - xs.t0 > xs.ms + 400) xs = null; // the last voice line ends by itself
+  const x = xs;
+  if (x) {
+    const t = now - x.t0;
+    const ground = Math.max(x.pa.bottom, x.pb.bottom);
+    const mid = (x.pa.x + x.pb.x) / 2;
+    drawTable(mid, ground);
+    // The title hangs above them through the opening.
+    const opening = x.lines.length > 3 ? x.lines[3].at : 6000;
+    if (x.title && t < opening + 1500 && t > 0) {
+      drawBanner(tr(`相声《${x.title}》`, `“${x.title}”`), mid, Math.max(24, Math.min(x.pa.top, x.pb.top) - 30), Math.min(1, t / 300, (opening + 1500 - t) / 500));
+    }
+    const side = (b: Box, o: Box) => (b.x < o.x ? -1 : 1);
+    x.lines.forEach((l, i) => {
+      if (t >= l.at && t < l.at + l.ms) {
+        const k = (t - l.at) / l.ms;
+        if (x.voice && !x.spoken.has(i)) {
+          x.spoken.add(i);
+          speak(l.text, l.who, x.en);
+        }
+        if (l.who !== "b") bubble(l.text, x.pa, side(x.pa, x.pb), "#ee5b3c", k);
+        if (l.who !== "a") bubble(l.text, x.pb, side(x.pb, x.pa), "#2b3275", k);
+      }
+      // Laughs right after the punchline; applause with the bow.
+      const at = l.fx === "clap" ? l.at + 200 : l.at + l.ms;
+      if ((l.fx === "laugh" || l.fx === "clap") && t >= at && !x.fired.has(i)) {
+        x.fired.add(i);
+        addLaughs(mid, ground, l.fx === "clap", now);
+        if (x.voice) sfx(l.fx === "clap" ? "applause" : "applause-short");
+      }
+    });
+  }
+  for (let i = laughs.length - 1; i >= 0; i--) {
+    const p = laughs[i];
+    const k = (now - p.t0) / 1500;
+    if (k < 0) continue;
+    if (k >= 1) {
+      laughs.splice(i, 1);
+      continue;
+    }
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, (1 - k) * 2);
+    ctx.font = "bold 16px 'Microsoft YaHei UI', 'Segoe UI', 'Segoe UI Emoji', sans-serif";
+    ctx.textAlign = "center";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    const px = p.x + p.dx * k, py = p.y - k * 46;
+    ctx.strokeText(p.text, px, py);
+    ctx.fillStyle = p.color;
+    ctx.fillText(p.text, px, py);
+    ctx.restore();
+  }
+  return !!xs || laughs.length > 0;
+}
+
 async function petHead(pet: string): Promise<{ x: number; y: number } | null> {
   if (!inTauri) return null;
   const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
@@ -488,7 +809,9 @@ function step(now: number) {
 
   ctx.clearRect(0, 0, MON.w, MON.h);
   for (const c of crawlers.values()) drawBug(c, now);
-  const tossing = drawToss(now) || drawRally(now);
+  const xsOn = drawXs(now);
+  const lashing = drawLashes(now);
+  const tossing = drawToss(now) || drawRally(now) || xsOn || lashing;
   drawPopups(now);
   void setShown(allowed && (crawlers.size > 0 || popups.length > 0 || tossing));
   void reportHits();
@@ -497,15 +820,39 @@ function step(now: number) {
 
 async function main() {
   size();
+  // The voice list loads lazily; ask early so the first show has it.
+  if (typeof speechSynthesis !== "undefined") speechSynthesis.getVoices();
   const conn = await connect();
   await initLang(conn);
   onWorld(await getJson<WorldState>(conn, "/v1/world"));
   subscribe(conn, (type, data) => {
     if (type === "world.state") onWorld(data as WorldState);
-    else if (type === "bug.spawn") void spawn(data as Bug);
-    else if (type === "duo") {
+    else if (type === "model_download") {
+      const d = data as { done?: number; total?: number; ready?: boolean; error?: string };
+      if (d.error) {
+        showModelToast(tr("模型下载失败", "Model download failed"), "error");
+      } else if (d.ready) {
+        showModelToast(tr("本地模型好了。", "Local model's ready."), "success");
+      } else if (d.done != null && d.total != null) {
+        const pct = Math.round((d.done / d.total) * 100);
+        showModelToast(tr(`在下载模型… ${pct}%`, `Downloading the model… ${pct}%`), "progress");
+      }
+    } else if (type === "bug.spawn") void spawn(data as Bug);
+    else if (type === "xs") void startXs(data as Record<string, unknown>);
+    else if (type === "pet.cancel") {
+      const d = data as { pet: string };
+      if (xs && (d.pet === xs.a || d.pet === xs.b)) stopXs();
+    } else if (type === "duo") {
       const d = data as Record<string, unknown>;
       if (d.game === "badminton" || d.game === "pingpong") void startRally(d);
+      else if (PRIMARY) armSounds(d);
+    } else if (type === "whip") {
+      void startWhip(data as Record<string, unknown>);
+    } else if (type === "duel" || type === "race") {
+      // Sounds only (the pet windows show the chips); one overlay plays them.
+      const d = data as { state?: string; winner?: string };
+      if (PRIMARY && d.state === "start") sfx("whistle");
+      if (PRIMARY && d.state === "done" && d.winner && d.winner !== "tie") sfx("win");
     } else if (type === "toss") {
       const d = data as { state: string; a: string; b: string; throws: number; each: number; coins?: number };
       if (d.state === "start") void startToss(d);
@@ -538,11 +885,17 @@ async function main() {
     const w = getCurrentWebviewWindow();
     await w.listen<boolean>("overlay:visible", (e) => {
       allowed = e.payload;
-      if (!allowed) void setShown(false);
+      if (!allowed) {
+        void setShown(false);
+        if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
+      }
     });
     await w.listen<boolean>("boss", (e) => {
       allowed = !e.payload;
-      if (!allowed) void setShown(false);
+      if (!allowed) {
+        void setShown(false);
+        if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
+      }
     });
     const { invoke } = await import("@tauri-apps/api/core");
     allowed = !(await invoke<boolean>("quiet").catch(() => false));

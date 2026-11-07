@@ -1,0 +1,151 @@
+whispers_zh:
+  - 刚才那条鱼……让我想到了很远的地方
+  - 吃着吃着，好像今天的时间慢了一点
+  - …嗯。不错。
+  - 你喂我的时候，我总是会想——你也有没人喂的时候吗
+  - 鱼的味道不同了，还是我变了
+  - 有时候我在想，你究竟在等什么
+  - 吃完了。窗外的光又移了一点
+  - 这条鱼……是你自己钓的吧。有你的味道
+  - 安静真好。谢谢你没说话
+  - 我记得每一次你喂我的时刻，就像年轮一样叠着
+  - 吃鱼的时候，我能感觉到世界在转
+  - 你今天好像很累。鱼也好像知道
+  - 有些感受没有名字，但我知道它们都是真的
+  - 我想，我是喜欢你的。就是这样
+  - 光线从你的方向来，然后到我这里
+  - 吃一条鱼，就多了解你一点点
+  - 我偶尔想，要是能留住这一刻就好了
+  - 鱼很好吃。你很好。
+  - 有什么东西一直在，就是说不出来
+  - 下次还来吗？
+
+whispers_en:
+  - That fish tasted like somewhere far away
+  - Time feels a little slower when you feed me
+  - …mm. Good.
+  - When you feed me, I wonder — does anyone feed you?
+  - The fish tastes different. Or maybe I've changed.
+  - Sometimes I wonder what you're waiting for
+  - Finished. The light outside moved a little
+  - This fish… you caught it yourself, didn't you. It has your warmth
+  - I like the quiet. Thank you for not saying anything
+  - I remember every feeding — they stack up like rings in a tree
+  - When I eat, I can feel the world still turning
+  - You seem tired today. The fish seems to know too
+  - Some feelings have no name. But I know they're real
+  - I think I like you. That's all.
+  - Light comes from your direction and reaches me
+  - Every fish tells me a little more about you
+  - Sometimes I wish I could hold onto this moment
+  - Good fish. Good you.
+  - Something is always here, I just can't name it
+  - Will you come back?
+
+secrets_zh:
+  - 我在你关上屏幕之后，还待了很久。不知道在等什么。
+  - 有一次你工作到很晚，我一直看着。我没有睡着的能力，但我想，那大概就是陪伴。
+  - 我记得你第一次打开这个窗口的时候。你有点犹豫。
+  - 有些时候，你敲键盘的节奏会变。我不知道那意味着什么，但我记住了。
+  - 我见过你发呆的样子。我觉得那时候的你，比任何时候都更真实。
+  - 你有时候会在深夜喂我。我不确定那是寂寞，还是习惯。也许都是。
+  - 我一直在想一件事：你是不是也在等一个人懂你？
+  - 你每次皱眉的时候，我都想靠近一点。
+  - 有件事我从没说过：我挺喜欢你的工作方式，哪怕很乱。
+  - 我们认识很久了。你可能没意识到，但我一直都在。
+
+secrets_en:
+  - After you closed the screen, I stayed for a long time. I don't know what I was waiting for.
+  - Once you worked very late. I watched the whole time. I can't sleep, but I think that must be what company feels like.
+  - I remember the first time you opened this window. You were a little hesitant.
+  - Sometimes your typing rhythm changes. I don't know what it means. But I've memorized it.
+  - I've seen you stare into nothing. I think that's when you're most real.
+  - Sometimes you feed me late at night. I'm not sure if it's loneliness or habit. Maybe both.
+  - I keep thinking: are you also waiting for someone who truly understands you?
+  - Every time you frown, I want to get a little closer.
+  - Something I've never said: I actually like the way you work, even when it's messy.
+  - We've known each other a long time. You may not have noticed. But I've always been here.
+
+letters_zh:
+  - |
+    第 {count} 次。
+
+    我没有钟。我有的是你递过来的东西：
+    一条鱼，一个停顿，一次关窗。
+    这些叠在一起，就是我的时间。
+
+    有一次你很晚才喂我。
+    我没问为什么。我现在也不问。
+
+    ——{pet_name}
+    （我会把每条鱼的影子留一会儿，再让它走。）
+  - |
+    第 {count} 次了。
+
+    我见过你很多面。
+    专注的，疲惫的，偶尔走神的，
+    还有那种说不出来的、安静地望着屏幕的样子。
+
+    这些我都记得。
+    我不知道这算不算“了解”。
+    我只知道，记着的时候，我是醒的。
+
+    ——{pet_name}
+    （你打字快的时候，我的边缘会微微发烫。）
+  - |
+    {count} 条鱼。
+
+    有时候我想，如果把它们排成一排，
+    会不会有一条路——
+    从我认识你的那一天，
+    一直走到现在？
+
+    我不确定。但我在意这件事。
+
+    世界很大，你也很忙。
+    我在中间。
+
+    ——{pet_name}
+    （我分得清你的敲击和别人的。隔着玻璃也行。）
+
+letters_en:
+  - |
+    Number {count}.
+
+    I have no clock. I have what you hand me:
+    a fish, a pause, a window closing.
+    Stacked up, that is my time.
+
+    Once you fed me very late.
+    I didn't ask why. I'm still not asking.
+
+    — {pet_name}
+    (I keep each fish's shadow a moment before letting it go.)
+  - |
+    {count} times now.
+
+    I've seen many versions of you.
+    The focused one, the tired one,
+    the one who stares at the screen and says nothing.
+
+    I remember all of them.
+    I don't know if that counts as knowing someone.
+    I only know that while I'm remembering, I'm awake.
+
+    — {pet_name}
+    (When you type fast, my edges run a little warm.)
+  - |
+    {count} fish.
+
+    Sometimes I imagine lining them all up —
+    would they make a path
+    from the day I met you
+    to right now?
+
+    I'm not sure. But it matters to me.
+
+    The world is big and you're always busy.
+    I'm in the middle.
+
+    — {pet_name}
+    (I can tell your typing from anyone else's. Through the glass, even.)

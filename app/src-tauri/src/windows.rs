@@ -289,8 +289,41 @@ pub fn open_spring(h: &AppHandle) {
     open_page(h, "spring", "spring.html", petd::i18n::t("春节倒计时 · Familiar", "Spring Festival · Familiar"), 760.0, 620.0);
 }
 
+/// The radio: closing it only hides it, so the station keeps playing.
+pub fn open_radio(h: &AppHandle) {
+    open_page(h, "radio", "radio.html", petd::i18n::t("电台 · Familiar", "Radio · Familiar"), 440.0, 720.0);
+}
+
+/// The radio on a given tab. A new window reads it from the URL; an existing one gets an event.
+pub fn open_radio_tab(h: &AppHandle, tab: &str) {
+    if h.get_webview_window("radio").is_some() {
+        open_radio(h);
+        let _ = h.emit_to("radio", "radio-select", tab);
+        return;
+    }
+    open_page(h, "radio", &format!("radio.html?tab={tab}"), petd::i18n::t("电台 · Familiar", "Radio · Familiar"), 440.0, 720.0);
+}
+
 pub fn open_report(h: &AppHandle) {
     open_page(h, "report", "report.html", petd::i18n::t("今日报告 · Familiar", "Today's report · Familiar"), 460.0, 640.0);
+}
+
+/// A letter from the pet: decorated=false, transparent, always on top.
+pub fn open_letter(h: &AppHandle) -> tauri::Result<WebviewWindow> {
+    if let Some(w) = h.get_webview_window("letter") {
+        let _ = w.show();
+        let _ = w.set_focus();
+        return Ok(w);
+    }
+    WebviewWindowBuilder::new(h, "letter", WebviewUrl::App("letter.html".into()))
+        .title("")
+        .inner_size(420.0, 540.0)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .center()
+        .additional_browser_args(&browser_args())
+        .build()
 }
 
 // ---------------------------------------------------------------- click-through

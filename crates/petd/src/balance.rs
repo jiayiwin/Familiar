@@ -287,6 +287,8 @@ pub struct Tables {
     pub balance: Balance,
     pub fish: Vec<Fish>,
     pub rules: Vec<Rule>,
+    /// 相声 pieces in the current language.
+    pub xs: Vec<crate::xiangsheng::Piece>,
     pub warnings: Vec<String>,
 }
 
@@ -302,6 +304,7 @@ impl Tables {
             balance,
             fish: serde_yaml::from_str::<FishFile>(FISH_YAML).expect("built-in fish.yaml").pick(en),
             rules: serde_yaml::from_str::<RuleFile>(INTERACTIONS_YAML).expect("built-in interactions.yaml").pick(en),
+            xs: crate::xiangsheng::builtin(en),
             warnings: vec![],
         }
     }
@@ -314,6 +317,7 @@ impl Tables {
 
     fn load_in(home: &Path, en: bool) -> Tables {
         let mut t = Tables::builtin_in(en);
+        t.xs = crate::xiangsheng::load(home, en, &mut t.warnings);
         if let Ok(text) = std::fs::read_to_string(home.join("balance.yaml")) {
             let mut base: Value = serde_yaml::from_str(BALANCE_YAML).unwrap();
             match serde_yaml::from_str::<Value>(&text) {
@@ -380,9 +384,10 @@ mod tests {
         let t = Tables::builtin();
         assert_eq!(t.balance.economy.daily_cap, 300);
         assert_eq!(t.fish.len(), 12);
-        assert_eq!(t.rules.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["taunt", "comfort", "applaud", "urge"]);
+        assert_eq!(t.rules.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["taunt", "comfort", "applaud", "whip", "urge"]);
         assert_eq!(t.rules[0].cooldown_ms(), 600_000);
-        assert!(t.rules[3].during_attention);
+        assert!(t.rules[4].during_attention);
+        assert_eq!(t.rules[3].on, "slow");
         assert_eq!(t.rules[0].bubble.as_ref().unwrap().for_camp("codex").len(), 3);
     }
 
@@ -398,7 +403,7 @@ mod tests {
         let zh = Tables::builtin_in(false);
         assert_eq!(zh.fish[0].name, "分号小鱼");
         assert_eq!(zh.balance.quips.lines[0], "又改 {file} 了，第 {n} 次");
-        assert_eq!(zh.rules[0].bubble.as_ref().unwrap().for_camp("codex")[0], "翻车了吧～");
+        assert_eq!(zh.rules[0].bubble.as_ref().unwrap().for_camp("codex")[0], "看见了。");
         let en = Tables::builtin_in(true);
         assert_eq!(en.fish[0].name, "Semicolon Minnow");
         assert!(en.balance.quips.lines.iter().all(|l| l.is_ascii()));

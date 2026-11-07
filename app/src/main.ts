@@ -54,7 +54,7 @@ async function main() {
   const pet = new PetRenderer(ctx);
   let packKey = "";
   let loading: Promise<void> = Promise.resolve();
-  let scriptTimer = 0;
+  let scriptTimers: number[] = [];
 
   pet.onResize = (w, h) => void resize(w, h);
   pet.onHits = (rects) => void reportHits(rects);
@@ -85,7 +85,6 @@ async function main() {
 
   function onScript(s: Script) {
     if (s.pet !== petId) return;
-    clearTimeout(scriptTimer);
     if (s.tug) {
       tugLead = s.tug.lead;
       tugMs = s.ms;
@@ -95,9 +94,25 @@ async function main() {
       else if (s.bubble) pet.say(s.bubble, s.ms);
       if (s.burst) pet.fx.burst(s.burst, s.burst_text || undefined, 200);
     };
-    // Walk over first when the script moves the pet.
-    if (s.delay) scriptTimer = window.setTimeout(run, s.delay);
+    // Walk over first when the script moves the pet. One scene can queue
+    // several beats for the same pet (lose line, then the whip), so each
+    // delayed beat keeps its own timer; pet.cancel clears them all.
+    if (s.delay) scriptTimers.push(window.setTimeout(run, s.delay));
     else run();
+  }
+
+  // 相声: this pet's actions on the show's timeline (the overlay draws the bubbles).
+  let xsTimers: number[] = [];
+  function playXs(d: Record<string, unknown>) {
+    xsTimers.forEach(clearTimeout);
+    xsTimers = [];
+    const me = d.a === petId ? "a" : "b";
+    const walk = Number(d.walk) || 1300;
+    for (const l of (d.lines as { who: string; at: number; ms: number; act?: string | null }[]) ?? []) {
+      if (!l.act || (l.who !== me && l.who !== "ab")) continue;
+      const act = l.act;
+      xsTimers.push(window.setTimeout(() => pet.override(act, Math.min(l.ms + 400, 3000), "script", null), walk + l.at));
+    }
   }
 
   let lastFocus: boolean | null = null;
@@ -119,13 +134,19 @@ async function main() {
         if (d.pet === petId) {
           const used = Math.round(Number(d.used) || 0);
           if (d.kind === "card") playFx(pet, { kind: "card", from: d.from, used: d.used });
-          else if (d.kind === "refresh") pet.override("cheer", 2500, "script", tr("Codex 额度刷新了，满血干活！", "Codex quota refreshed — full power!"));
+          else if (d.kind === "refresh") pet.override("cheer", 2500, "script", tr("额度回来了。继续。", "Quota's back. On we go."));
           else if (d.kind === "low") pet.override("sulk", 3500, "script", tr(`Codex 额度快见底了（已用 ${used}%），右键 → 重置卡`, `Codex quota almost gone (${used}% used). Right-click → reset card`));
         }
         break;
+      case "xs":
+        if (d.a === petId || d.b === petId) playXs(d);
+        break;
       case "pet.cancel":
         if (d.pet === petId) {
-          clearTimeout(scriptTimer);
+          scriptTimers.forEach(clearTimeout);
+          scriptTimers = [];
+          xsTimers.forEach(clearTimeout);
+          xsTimers = [];
           pet.clearOverride("script");
           pet.stopTug();
         }
@@ -133,12 +154,16 @@ async function main() {
       case "fx":
         if (d.pet === petId) playFx(pet, d.payload as Record<string, unknown>);
         break;
+      case "whip":
+        // The overlay draws the lash; the one hit jolts in its own window.
+        if (d.to === petId) scriptTimers.push(window.setTimeout(() => pet.hit(), (Number(d.delay) || 0) + (Number(d.hit) || 0)));
+        break;
       case "duel": {
         const pets = (d.pets as string[] | undefined) ?? [];
         const fmt = (ms: number) => (ms >= 60_000 ? tr(`${Math.floor(ms / 60_000)}分${Math.round((ms % 60_000) / 1000)}秒`, `${Math.floor(ms / 60_000)}m${Math.round((ms % 60_000) / 1000)}s`) : tr(`${Math.round(ms / 1000)}秒`, `${Math.round(ms / 1000)}s`));
         if (d.state === "start" && pets.includes(petId)) {
           pet.fx.chip("duel", tr("⚔ 擂台 · 等下一轮", "⚔ Duel · next turn"), "#b5332e");
-          if (pets[0] === petId) pet.override("taunt", 2500, "script", tr("擂台开打！下一轮不出错、先做完的赢，赢家 +15", "Duel on! First to finish the next turn with no errors wins +15"));
+          if (pets[0] === petId) pet.override("taunt", 2500, "script", tr("下一轮见真章。不出错，先做完的赢。", "Next turn settles it. Clean and first."));
           else setTimeout(() => pet.override("cheer", 2000, "script", tr("来啊，比比谁快！", "Bring it — let's see who's faster!")), 1800);
         } else if (d.state === "step" && d.pet === petId) {
           if (d.phase === "started") pet.fx.chip("duel", tr("⚔ 擂台 · 比赛中", "⚔ Duel · racing"), "#b5332e");
@@ -163,7 +188,7 @@ async function main() {
         const focus = (data as WorldState).focus;
         // Say so when focus mode flips, so nobody wonders where the games went.
         if (lastFocus !== null && focus !== lastFocus) {
-          pet.say(focus ? tr("专注模式：只提醒，不玩耍", "Focus mode: alerts only, no games") : tr("专注模式已关闭", "Focus mode off"), 3500);
+          pet.say(focus ? tr("专注模式。我安静。", "Focus mode. I'll be quiet.") : tr("专注模式已关闭", "Focus mode off"), 3500);
         }
         lastFocus = focus;
         pet.setFocus(focus);
@@ -280,7 +305,10 @@ async function listenHost(pet: PetRenderer, conn: Conn) {
         break;
     }
   });
-  await win.listen<boolean>("boss", (e) => pet.setMuted(e.payload));
+  await win.listen<boolean>("boss", (e) => {
+    pet.setMuted(e.payload);
+    bossMuted = e.payload;
+  });
   // Drop a pet pack (folder or .zip) on the pet to install it.
   await win.onDragDropEvent(async (e) => {
     if (e.payload.type !== "drop") return;
@@ -300,17 +328,29 @@ async function listenHost(pet: PetRenderer, conn: Conn) {
   await win.listen<Record<string, unknown>>("fx", (e) => playFx(pet, e.payload));
 }
 
+/** Boss key mutes everything, the pack sounds and these. */
+let bossMuted = false;
+function sfx(name: string) {
+  if (bossMuted) return;
+  const a = new Audio(`sfx/${name}.wav`);
+  a.volume = 0.5;
+  a.play().catch(() => {});
+}
+
 function playFx(pet: PetRenderer, p: Record<string, unknown>) {
   {
     switch (p.kind) {
       case "rps": {
         const coins = Number(p.coins) || 0;
         const [result, color] =
-          p.outcome === "win" ? [tr(`你赢了！${coins > 0 ? `+${coins} 金币` : ""}`, `You win!${coins > 0 ? ` +${coins} coins` : ""}`), "#c0392b"]
+          p.outcome === "win" ? [tr("……你赢了。", "…you win."), "#c0392b"]
           : p.outcome === "lose" ? [tr("我赢啦～", "I win~"), "#2e7d32"]
           : [tr("平局，再来一把？", "Tie! Again?"), "#6b5040"];
         pet.fx.versus(Number(p.user), Number(p.pet), result, color);
         setTimeout(() => {
+          // The jingle is yours: a win for you, a loss for you.
+          if (p.outcome === "win") sfx("win");
+          else if (p.outcome === "lose") sfx("lose");
           if (p.outcome === "win") {
             pet.override("sulk", 2200, "script", null);
             pet.fx.burst("confetti");
@@ -324,14 +364,23 @@ function playFx(pet: PetRenderer, p: Record<string, unknown>) {
       case "card":
         pet.fx.card(Number(p.from) || 95, Number(p.used) || 0);
         setTimeout(() => {
-          pet.override("cheer", 2600, "script", tr("重置卡生效，满血复活！", "Reset card used — back at full power!"));
+          pet.override("cheer", 2600, "script", tr("刷新了。像没用过一样。", "Reset. Like it was never used."));
           pet.fx.burst("confetti");
         }, 2300);
         break;
       case "feed":
         if (p.ok) {
           pet.fx.fish(() => {
-            pet.override("eat", 0, "script", String(p.text ?? tr("好吃！", "Yum!")));
+            const count = Number(p.count) || 0;
+            const batch = Number(p.batch) || 1;
+            const bond = String(p.bond ?? "");
+            const baseText = String(p.text ?? tr("……嗯。", "…mm."));
+            const batchPrefix = batch > 1 ? tr(`×${batch} · `, `×${batch} · `) : "";
+            const countLine = count > 0 ? `${batchPrefix}${tr(`第 ${count} 条`, `#${count}`)}` : "";
+            const milestoneHint =
+              bond === "letter" ? tr(" · 有封信给你", " · a letter for you") :
+              bond === "secret" ? tr(" · 揭晓一个秘密", " · a secret revealed") : "";
+            pet.override("eat", 0, "script", countLine ? `${baseText}\n${countLine}${milestoneHint}` : baseText);
             pet.fx.burst("hearts");
           });
         } else {
@@ -361,6 +410,9 @@ async function listenHostRest(pet: PetRenderer) {
   await win.listen<string>("tug-refused", (e) => {
     const v = pet.currentView();
     if (v?.camp === "claude-code" || v?.camp === "codex") pet.say(e.payload, 3500);
+  });
+  await win.listen("letter-notify", () => {
+    pet.say(tr("我写了封信。在右键菜单里。", "I wrote you a letter. It's in the right-click menu."), 0);
   });
   if (await invoke<boolean>("quiet")) pet.setMuted(true);
 }

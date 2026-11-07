@@ -86,6 +86,8 @@ pub struct World {
     pub bugs: Vec<Bug>,
     pub(crate) next_id: u64,
     pub(crate) working_since: HashMap<String, u64>,
+    /// (rule, pet) -> the working stretch (`working_since`) an `on: slow` rule already fired for.
+    pub(crate) slow_fired: HashMap<(String, String), u64>,
     pub(crate) pending: HashMap<String, (u64, Vec<CatchFx>)>,
     pub(crate) cooldowns: HashMap<(String, String), u64>,
     pub(crate) recent: HashMap<String, VecDeque<u64>>,
@@ -98,6 +100,8 @@ pub struct World {
     pub frozen: bool,
     pub(crate) focus: bool,
     pub(crate) arena: bool,
+    /// `features.sounds`: the 相声 is voiced.
+    pub(crate) sounds: bool,
     pub(crate) last_eval: u64,
     pub(crate) last_stats: u64,
     pub(crate) stats: Stats,
@@ -130,6 +134,7 @@ impl World {
             bugs: vec![],
             next_id: 1,
             working_since: HashMap::new(),
+            slow_fired: HashMap::new(),
             pending: HashMap::new(),
             cooldowns: HashMap::new(),
             recent: HashMap::new(),
@@ -142,6 +147,7 @@ impl World {
             frozen: false,
             focus: false,
             arena: true,
+            sounds: true,
             last_eval: 0,
             last_stats: 0,
             stats: Stats::default(),
@@ -197,6 +203,7 @@ impl World {
         let views = hub.pets();
         self.focus = hub.cfg.features.focus_mode;
         self.arena = hub.cfg.features.arena;
+        self.sounds = hub.cfg.features.sounds;
 
         // Freeze while anyone waits on the user.
         let frozen = hub.sessions.values().any(|s| s.state == State::Attention);
@@ -231,7 +238,7 @@ impl World {
                     if !(4..23).contains(&h) && !self.focus && db.kv_get("night_reminded").as_deref() != Some(day_of(now).as_str()) {
                         if let Some(pet) = Self::pet_for(&views, &key) {
                             db.kv_set("night_reminded", &day_of(now));
-                            out.push(Out::Ws(crate::msg("pet.script", &json!({ "pet": pet.id, "rule": "night", "bubble": crate::i18n::t("很晚了，做完这轮早点休息吧", "It's late — wrap up this round and get some sleep"), "ms": 5000 }))));
+                            out.push(Out::Ws(crate::msg("pet.script", &json!({ "pet": pet.id, "rule": "night", "bubble": crate::i18n::t("外面早黑透了。我陪到你关机。", "It's been dark out for hours. I'll stay till you shut down."), "ms": 5000 }))));
                         }
                     }
                     let ms = fin.ended_at.saturating_sub(fin.started_at);
@@ -343,6 +350,7 @@ impl World {
         if now.saturating_sub(self.last_eval) >= self.t.balance.interactions.tick_ms {
             self.last_eval = now;
             self.quips(now, &views, hub, &mut out);
+            self.rules_slow(now, &views, db, &mut out);
         }
         if now.saturating_sub(self.last_stats) >= STATS_EVERY_MS {
             self.last_stats = now;
@@ -560,6 +568,33 @@ impl World {
         }
     }
 
+    /// `on: slow`: a pet has been working on one stretch for `min_turn_s`.
+    /// Fires once per stretch (whether or not the dice let the actor act).
+    fn rules_slow(&mut self, now: u64, views: &[PetView], db: &Db, out: &mut Vec<Out>) {
+        let rules: Vec<Rule> = self.t.rules.iter().filter(|r| r.on == "slow").cloned().collect();
+        if rules.is_empty() {
+            return;
+        }
+        for v in views {
+            let working = matches!(v.state, State::Thinking | State::Tool | State::Reading);
+            let Some(&since) = self.working_since.get(&v.id).filter(|_| working) else { continue };
+            let Some(card) = v.sessions.iter().find(|c| matches!(c.state, State::Thinking | State::Tool | State::Reading)) else { continue };
+            let key: Key = (card.source.clone(), card.session.clone());
+            for r in &rules {
+                if now.saturating_sub(since) < r.min_turn_s * 1000 {
+                    continue;
+                }
+                let mark = (r.id.clone(), v.id.clone());
+                if self.slow_fired.get(&mark) == Some(&since) {
+                    continue;
+                }
+                self.slow_fired.insert(mark, since);
+                self.fire(r, &key, now, views, db, out);
+            }
+        }
+        self.slow_fired.retain(|(_, pet), _| self.working_since.contains_key(pet));
+    }
+
     fn rules_state(&mut self, key: &Key, to: State, now: u64, views: &[PetView], db: &Db, out: &mut Vec<Out>) {
         let name = serde_json::to_value(to).ok().and_then(|v| v.as_str().map(String::from)).unwrap_or_default();
         let rules: Vec<Rule> =
@@ -633,6 +668,12 @@ impl World {
         match r.id.as_str() {
             "taunt" => self.on_taunt(&key.0, &actor.id, now),
             "comfort" => self.bond(db, views, 1, out),
+            // The rule's bubble is the whipper's line; the lash and the victim's line come here.
+            "whip" => {
+                if let Some(t) = &target {
+                    self.whip(Some(&actor.id), &t.id, t.state, crate::whip::Reason::Slow, walk_ms, out);
+                }
+            }
             _ => {}
         }
     }
@@ -773,7 +814,7 @@ impl World {
             let ahead = best.is_some() && today_n > best_now;
             if ahead && !self.shadow_ahead {
                 if let Some(c) = online.first() {
-                    self.react(c, "shadow_pass", "cheer", crate::i18n::t("今天比最佳那天同一时间做得还多！", "Ahead of your best day at this hour!"), now, views, db, out);
+                    self.react(c, "shadow_pass", "cheer", crate::i18n::t("这个点。你以前从没走到这儿过。", "By this hour? You've never been this far before."), now, views, db, out);
                 }
             }
             self.shadow_ahead = ahead;
@@ -961,7 +1002,7 @@ impl World {
             let last: u64 = db.kv_get("water_at").and_then(|v| v.parse().ok()).unwrap_or(0);
             if now.saturating_sub(last) >= 3_600_000 {
                 db.kv_set("water_at", &now.to_string());
-                out.push(Out::Ws(crate::msg("pet.script", &json!({ "pet": main.id, "rule": "water", "action": "wave", "bubble": crate::i18n::t("喝口水吧 💧", "Time for some water 💧"), "ms": 4000 }))));
+                out.push(Out::Ws(crate::msg("pet.script", &json!({ "pet": main.id, "rule": "water", "action": "wave", "bubble": crate::i18n::t("一个小时了，你一下都没动。", "An hour. You haven't moved once."), "ms": 4000 }))));
             }
         }
         // Deep breath: more than 6 waits in 10 minutes (off by default).
@@ -971,7 +1012,7 @@ impl World {
                 db.kv_set("breathe_at", &now.to_string());
                 self.attention_times.clear();
                 for v in views {
-                    out.push(Out::Ws(crate::msg("pet.script", &json!({ "pet": v.id, "rule": "breathe", "action": "breathe", "bubble": crate::i18n::t("一起深呼吸：吸气 4 秒…屏住 7 秒…呼气 8 秒", "Breathe with me: in 4s… hold 7s… out 8s"), "ms": 30_000 }))));
+                    out.push(Out::Ws(crate::msg("pet.script", &json!({ "pet": v.id, "rule": "breathe", "action": "breathe", "bubble": crate::i18n::t("我慢一点，你跟着我就行。", "I'll go slow. Just follow me."), "ms": 30_000 }))));
                 }
             }
         }
@@ -1097,7 +1138,7 @@ pub fn kegel_script(views: &[PetView], pet: Option<&str>, reps: u32) -> Option<S
         "pet.script",
         &json!({
             "pet": v.id, "rule": "kegel", "action": "kegel", "reps": reps,
-            "bubble": crate::tr!("提肛时间到！跟着我做 {reps} 组 🍑", "Kegel time! Follow me for {reps} reps 🍑"),
+            "bubble": crate::tr!("到点了。{reps} 组，我先做。", "It's time. {reps} sets — I'll go first."),
             "ms": 3000 + reps as u64 * 6000,
         }),
     ))

@@ -65,8 +65,8 @@ function miniAction(s: State): string {
 }
 
 const DEFAULT_BUBBLES: Record<string, string[]> = {
-  get attention() { return [tr("轮到你啦！", "Your turn!")]; },
-  get done() { return [tr("搞定！", "Done!")]; },
+  get attention() { return [tr("等你呢。", "Waiting on you."), tr("它停下了。看你。", "It stopped. Your move."), tr("该你了。", "Your call.")]; },
+  get done() { return [tr("做完了。", "Done."), tr("好了。", "It's finished."), tr("完了，去看看。", "All done — go look.")]; },
   get error() { return [tr("出错了…", "Oops, error…")]; },
   get stone() { return [tr("石化了…", "Turned to stone…")]; },
 };
@@ -76,6 +76,8 @@ const BUBBLE_MS: Record<string, number> = { attention: 0, stone: 0, done: 4000, 
 const WAKE_MS = 800;
 const WAVE_MS = 600;
 const SMOKE_MS = 400;
+/** How long a whip hit shakes the body. */
+const HIT_MS = 600;
 const MINI_LEAVE_WAVE = 600;
 const MINI_LEAVE_MOVE = 400;
 const SOUNDS_PER_MIN = 4;
@@ -132,6 +134,8 @@ export class PetRenderer {
   private kegel: { start: number; reps: number; last: string; fur: string } | null = null;
   /** Effects around the pet (hands, fish, chips, confetti…). */
   readonly fx = new Fx();
+  /** When the whip last landed: the body jolts and flushes red, then settles. */
+  private hitAt = -1e9;
   /** Tug of war: which side of the rope we stand on, whether we lead, until when. */
   private tug: { side: "left" | "right"; lead: boolean | null; start: number; until: number } | null = null;
   private duo: Duo | null = null;
@@ -251,6 +255,11 @@ export class PetRenderer {
    * Play a temporary action. `ms` 0 means "one run" for one-shot actions.
    * Attention always wins over gameplay; only physics may override it.
    */
+  /** The whip just landed on this pet. */
+  hit(): void {
+    this.hitAt = performance.now();
+  }
+
   override(action: string, ms: number, kind: string, bubble?: string | null): void {
     if (!this.sprites || this.switching) return;
     if (action === "kegel") {
@@ -339,8 +348,8 @@ export class PetRenderer {
     if (items.length > 1) {
       text = tr(`收获 ${fish.length} 条鱼${coins ? `，+${coins} 金币` : ""}`, `Caught ${fish.length} fish${coins ? `, +${coins} coins` : ""}`);
     } else if (items[0].outcome === "fish") {
-      const tag = { rare: tr("稀有！", "Rare! "), epic: tr("史诗！！", "Epic!! "), legendary: tr("传说！！！", "Legendary!!! ") }[items[0].rarity] ?? "";
-      text = tr(`${tag}钓到 ${items[0].name}${coins ? ` +${coins}` : ""}`, `${tag}Got ${items[0].name}${coins ? ` +${coins}` : ""}`);
+      const tag = { rare: tr("。稀有的。", ". Rare."), epic: tr("。史诗。", ". Epic."), legendary: tr("……传说里的那条。", "… the one from the stories.") }[items[0].rarity] ?? "";
+      text = tr(`钓到 ${items[0].name}${coins ? ` +${coins}` : ""}${tag}`, `Got ${items[0].name}${coins ? ` +${coins}` : ""}${tag}`);
     } else if (items[0].outcome === "boot") {
       text = tr("钓到一只破靴子…", "Reeled in an old boot…");
     } else {
@@ -514,7 +523,7 @@ export class PetRenderer {
     const hatKey = v?.hat === "crown" || v?.hat === "halo" || v?.stage ? Math.floor(now / 100) : v?.hat ?? "";
     if (this.breathe && now >= this.breathe.until) this.breathe = null;
     if (this.kegel) this.kegelTick(now);
-    const fxKey = this.fx.busy(now) || this.breathe || this.kegel ? Math.floor(now / 33) : -1;
+    const fxKey = this.fx.busy(now) || this.breathe || this.kegel || now - this.hitAt < HIT_MS ? Math.floor(now / 33) : -1;
     const key = `${fxKey}|${tugKey}|${hatKey}|${this.action}|${idx}|${this.bubbleText}|${v?.online}|${v?.waiting}|${v?.hue}|${v?.marker}|${v?.label}|${miniKey}|${v?.minis_more}|${smoke}|${moving}`;
     if (key === this.lastKey) return;
     this.lastKey = key;
@@ -538,6 +547,14 @@ export class PetRenderer {
     const { w, h } = this.size();
     const c = this.ctx;
     c.clearRect(0, 0, w, h);
+    // Just whipped: everything jolts sideways and settles, like a slap landing.
+    const jt = now - this.hitAt;
+    const jolted = jt >= 0 && jt < HIT_MS;
+    if (jolted) {
+      c.save();
+      const e = Math.exp(-jt / 140);
+      c.translate(Math.sin(jt / 24) * 11 * e, -Math.abs(Math.cos(jt / 32)) * 6 * e);
+    }
     const f = sp.pack.frame;
     const hue = this.view?.hue ?? 0;
     const bottom = h - FOOT_H;
@@ -606,6 +623,14 @@ export class PetRenderer {
       }
     }
     hits.push({ x: cx - mainW / 2, y: bottom - mainH, w: mainW, h: mainH, kind: "main" });
+    // The flush: a red wash over what has been drawn so far (the pets only).
+    if (jolted && jt < 260) {
+      c.save();
+      c.globalCompositeOperation = "source-atop";
+      c.fillStyle = `rgba(230, 40, 60, ${0.6 * (1 - jt / 260)})`;
+      c.fillRect(0, 0, w, h);
+      c.restore();
+    }
 
     // Effects on top of the pet, under the bubble.
     this.fx.draw(c, this.anchor(a, idx, cx, bottom, w), now);
@@ -616,6 +641,7 @@ export class PetRenderer {
     // Camp tag (and project / rule label) under the feet.
     if (this.view?.marker) this.drawMarker(this.view.marker, this.view.label, cx, bottom);
     else if (this.view?.label) this.footText(this.view.label, cx, bottom, mainW, "#1f2245", false);
+    if (jolted) c.restore();
 
     const hk = JSON.stringify(hits.map((r) => [Math.round(r.x), Math.round(r.y), Math.round(r.w), Math.round(r.h), r.key ?? ""]));
     if (hk !== this.lastHits) {
@@ -636,7 +662,7 @@ export class PetRenderer {
     else if (st.phase === "done") {
       this.kegel = null;
       this.beep(880);
-      this.override("cheer", 2600, "script", tr(`完成 ${kg.reps} 组！今天也很棒 💪`, `${kg.reps} reps done! Nice work 💪`));
+      this.override("cheer", 2600, "script", tr(`${kg.reps} 组。没人看见。`, `${kg.reps} sets. Nobody saw a thing.`));
     }
   }
 
@@ -847,7 +873,7 @@ export class PetRenderer {
     const c = this.ctx;
     const reps = this.kegel?.reps ?? 0;
     const [label, color] =
-      st.phase === "ready" ? [tr(`提肛时间！准备 ${st.left}`, `Kegel time! Ready ${st.left}`), "#2b3275"]
+      st.phase === "ready" ? [tr(`准备 ${st.left}`, `Ready ${st.left}`), "#2b3275"]
       : st.phase === "squeeze" ? [tr(`收紧 ⬆ ${st.left}`, `Squeeze ⬆ ${st.left}`), "#ee5b3c"]
       : [tr(`放松 ⬇ ${st.left}`, `Relax ⬇ ${st.left}`), "#2f9a8a"];
     const count = st.phase === "ready" ? tr(`${reps} 组`, `${reps} reps`) : `${st.rep}/${reps}`;

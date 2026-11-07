@@ -6,7 +6,7 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWi
 
 /// Logical size of the panel window; the card sits at its taskbar-side edge.
 const W: f64 = 340.0;
-const H: f64 = 820.0;
+const H: f64 = 900.0;
 
 pub fn create(h: &AppHandle) -> tauri::Result<()> {
     WebviewWindowBuilder::new(h, "tray", WebviewUrl::App("tray.html".into()))
