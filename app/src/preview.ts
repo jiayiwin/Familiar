@@ -75,7 +75,9 @@ export class Previews {
       fr = it.sprites.frameAt(a, 0);
     }
     const f = it.sprites.pack.frame;
-    const scale = Math.max(1, Math.floor(Math.min(size / f.w, size / f.h)));
+    // Whole multiples keep pixel art crisp; a frame bigger than the canvas is scaled down to fit.
+    const raw = Math.min(size / f.w, size / f.h);
+    const scale = raw >= 1 ? Math.floor(raw) : raw;
     if (!a) a = it.sprites.action("idle")!;
     it.sprites.draw(c, a, fr.idx, size / 2, size - (size - f.h * scale) / 2, scale, it.hue);
   }
