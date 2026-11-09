@@ -36,6 +36,13 @@ pub fn is_dev_build() -> bool {
         .unwrap_or(true)
 }
 
+/// The source tree this exe was built in (`<repo>/target/<profile>/familiar.exe`), if it still runs from there.
+pub fn repo_root() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let root = exe.parent()?.parent()?.parent()?;
+    root.join(".claude-plugin").is_dir().then(|| root.to_path_buf())
+}
+
 pub fn autostart_on() -> bool {
     run(Command::new("reg").args(["query", RUN_KEY, "/v", RUN_NAME])).is_ok()
 }
@@ -73,8 +80,7 @@ pub fn plugin_root(resource_dir: Option<PathBuf>) -> Option<PathBuf> {
     if let Some(p) = installed.filter(|p| p.join(".claude-plugin").is_dir()) {
         return Some(p);
     }
-    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    repo.join(".claude-plugin").is_dir().then_some(repo)
+    repo_root()
 }
 
 fn emitter(root: &Path) -> PathBuf {

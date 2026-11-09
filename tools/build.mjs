@@ -6,12 +6,32 @@
 import { execSync } from "node:child_process";
 import { copyFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const debug = process.argv.includes("--debug");
 const bundle = process.argv.includes("--bundle");
-const run = (cmd, cwd = root) => execSync(cmd, { cwd, stdio: "inherit" });
+
+// Release binaries would otherwise carry the builder's home and checkout paths
+// (panic locations, C asserts). Later remaps win, so the broad ones go first.
+const env = { ...process.env };
+if (!debug) {
+  const remaps = [
+    [homedir(), "~"],
+    [process.env.RUSTUP_HOME || join(homedir(), ".rustup"), "rustup"],
+    [process.env.CARGO_HOME || join(homedir(), ".cargo"), "cargo"],
+    [root, "familiar"],
+  ];
+  const inherited = (process.env.CARGO_ENCODED_RUSTFLAGS ?? "").split("\x1f").concat((process.env.RUSTFLAGS ?? "").split(/\s+/)).filter(Boolean);
+  env.CARGO_ENCODED_RUSTFLAGS = [...inherited, ...remaps.map(([from, to]) => `--remap-path-prefix=${from}=${to}`)].join("\x1f");
+  delete env.RUSTFLAGS;
+  if (process.platform === "win32") {
+    // MSVC's switch for trimming __FILE__ in the C dependencies.
+    env.CL = [process.env.CL, ...remaps.filter(([from]) => !/\s/.test(from)).map(([from]) => `/d1trimfile:${from}\\`)].filter(Boolean).join(" ");
+  }
+}
+const run = (cmd, cwd = root) => execSync(cmd, { cwd, env, stdio: "inherit" });
 
 run("npm run build", join(root, "app"));
 // custom-protocol embeds app/dist; without it the exe tries to load the Vite dev server.

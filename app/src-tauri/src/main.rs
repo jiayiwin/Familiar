@@ -235,7 +235,7 @@ fn builtin_pets(app: &AppHandle) -> Option<PathBuf> {
         }
     }
     // `cargo run` from the repo.
-    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../pets");
+    let dev = setup::repo_root()?.join("pets");
     dev.is_dir().then_some(dev)
 }
 
