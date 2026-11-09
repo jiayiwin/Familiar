@@ -671,7 +671,7 @@ impl World {
             // The rule's bubble is the whipper's line; the lash and the victim's line come here.
             "whip" => {
                 if let Some(t) = &target {
-                    self.whip(Some(&actor.id), &t.id, t.state, crate::whip::Reason::Slow, walk_ms, out);
+                    self.whip(Some(&actor.id), &t.id, t.state, crate::whip::Reason::Slow, walk_ms, db, out);
                 }
             }
             _ => {}
@@ -753,6 +753,13 @@ impl World {
 
     fn refresh_stats(&mut self, now: u64, views: &[PetView], db: &Db, out: &mut Vec<Out>) {
         let today = day_of(now);
+        // For the report: the most sessions online at once, and who stood for each camp.
+        db.note_online(now, views.iter().map(|v| v.online).sum());
+        for c in CAMPS {
+            if let Some(v) = Self::camp_pet(views, c).filter(|v| v.online > 0) {
+                db.note_duty(now, c, &v.pack);
+            }
+        }
         let online: Vec<&str> = CAMPS
             .iter()
             .copied()
@@ -903,6 +910,7 @@ impl World {
         }
         out.push(Out::Control(Control::Tug { mover: right.id.clone(), anchor: left.id.clone() }));
         crate::progress::bump(db, "tugs");
+        db.log_event(now, "game", "tug", 1);
         true
     }
 
@@ -926,8 +934,13 @@ impl World {
         }
         let champ = progress::champion(db, now);
         hub.hats.clear();
+        hub.wear.clear();
         hub.stages.clear();
         for v in views {
+            let wear = progress::wear_of(db, &v.pack);
+            if !wear.is_empty() {
+                hub.wear.insert(v.id.clone(), wear);
+            }
             let custom = hub.lib.get(&v.pack).and_then(|p| crate::games::thresholds_of(p.evolutions.as_ref()));
             if let Some(t) = &custom {
                 self.games.evo.insert(v.pack.clone(), t.clone());
@@ -1039,6 +1052,7 @@ impl World {
         }
         if due {
             if let Some(m) = kegel_script(views, None, hub.cfg.features.kegel_reps) {
+                db.log_event(now, "kegel", "", hub.cfg.features.kegel_reps.clamp(1, 30) as i64);
                 out.push(Out::Ws(m));
             }
         }

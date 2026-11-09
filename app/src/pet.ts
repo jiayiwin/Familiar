@@ -4,7 +4,7 @@
 
 import type { MiniView, PetView, State } from "./api";
 import type { Sprites } from "./sprites";
-import { drawHat, ropeStyle } from "./decor";
+import { animatedOutfit, drawHat, drawWearBehind, drawWearFront, fitOf, ropeStyle, type Fit } from "./decor";
 import { Fx, type Anchor } from "./fx";
 import { t as tr } from "./i18n"; // `t` is a common local name here
 
@@ -519,8 +519,8 @@ export class PetRenderer {
     if (this.tug && (now >= this.tug.until || v?.state === "attention")) this.tug = null;
     if (this.duo && now >= this.duo.start + this.duo.ms + 400) this.duo = null;
     const tugKey = this.tug || this.duo ? Math.floor(now / 33) : -1;
-    // Crown sparkle and halo bob animate on their own.
-    const hatKey = v?.hat === "crown" || v?.hat === "halo" || v?.stage ? Math.floor(now / 100) : v?.hat ?? "";
+    // Crown sparkle, halo bob, wings, auras… animate on their own.
+    const hatKey = animatedOutfit(v?.hat, v?.wear) || v?.stage ? Math.floor(now / 80) : `${v?.hat ?? ""}|${JSON.stringify(v?.wear ?? null)}`;
     if (this.breathe && now >= this.breathe.until) this.breathe = null;
     if (this.kegel) this.kegelTick(now);
     const fxKey = this.fx.busy(now) || this.breathe || this.kegel || now - this.hitAt < HIT_MS ? Math.floor(now / 33) : -1;
@@ -618,8 +618,10 @@ export class PetRenderer {
           this.drawRear(cx, bottom, mainW, mainH, kegelAt(this.kegel, now), now, (turn - 0.5) * 2, this.kegel.fur);
         }
       } else {
-        sp.draw(c, a, idx, cx, bottom, this.sc(sp) * this.breath(now), hue);
-        if (this.view?.hat) this.drawHatOn(a, idx, cx, bottom, now);
+        const sc = this.sc(sp) * this.breath(now);
+        this.drawBehind(a, idx, cx, bottom, now, sc);
+        sp.draw(c, a, idx, cx, bottom, sc, hue);
+        this.drawFront(a, idx, cx, bottom, now, sc);
       }
     }
     hits.push({ x: cx - mainW / 2, y: bottom - mainH, w: mainW, h: mainH, kind: "main" });
@@ -975,13 +977,27 @@ export class PetRenderer {
     c.fill();
   }
 
-  /** The equipped hat (or season crown) on the head of the current frame. */
-  private drawHatOn(a: NonNullable<ReturnType<Sprites["action"]>>, idx: number, cx: number, bottom: number, now: number): void {
+  /** The current frame's landmarks placed where the sprite is drawn. */
+  private fit(a: NonNullable<ReturnType<Sprites["action"]>>, idx: number, cx: number, bottom: number, sc: number): Fit {
     const sp = this.sprites!;
     const f = sp.pack.frame;
-    const sc = this.sc(sp);
-    const h = sp.head(a, idx);
-    drawHat(this.ctx, this.view!.hat!, cx + (h.x - f.w / 2) * sc, bottom - (f.h - h.top) * sc, h.w * sc, now);
+    return fitOf(sp.body(a, idx), f.w, f.h, cx, bottom, sc);
+  }
+
+  /** Outfit pieces behind the sprite (wings, cape, pack, the big auras). */
+  private drawBehind(a: NonNullable<ReturnType<Sprites["action"]>>, idx: number, cx: number, bottom: number, now: number, sc = this.sc(this.sprites!)): void {
+    if (this.view?.wear) drawWearBehind(this.ctx, this.view.wear, this.fit(a, idx, cx, bottom, sc), now);
+  }
+
+  /** Outfit pieces over the sprite, then the hat (or season crown) on the head. */
+  private drawFront(a: NonNullable<ReturnType<Sprites["action"]>>, idx: number, cx: number, bottom: number, now: number, sc = this.sc(this.sprites!)): void {
+    if (this.view?.wear) drawWearFront(this.ctx, this.view.wear, this.fit(a, idx, cx, bottom, sc), now);
+    if (this.view?.hat) {
+      const sp = this.sprites!;
+      const f = sp.pack.frame;
+      const h = sp.head(a, idx);
+      drawHat(this.ctx, this.view.hat, cx + (h.x - f.w / 2) * sc, bottom - (f.h - h.top) * sc, h.w * sc, now);
+    }
   }
 
   /**
@@ -1018,8 +1034,9 @@ export class PetRenderer {
     c.save();
     c.translate(px, bottom);
     c.rotate(lean);
+    this.drawBehind(a, idx, 0, 0, now);
     sp.draw(c, a, idx, 0, 0, this.sc(sp), this.view?.hue ?? 0);
-    if (this.view?.hat) this.drawHatOn(a, idx, 0, 0, now);
+    this.drawFront(a, idx, 0, 0, now);
     c.restore();
     // The pet on the left carries the flag at the joint.
     if (t.side === "left") {
@@ -1063,8 +1080,9 @@ export class PetRenderer {
       c.save();
       c.translate(cx, bottom);
       c.rotate(lean);
+      this.drawBehind(a, idx, 0, 0, now);
       sp.draw(c, a, idx, 0, 0, this.sc(sp), hue);
-      if (this.view?.hat) this.drawHatOn(a, idx, 0, 0, now);
+      this.drawFront(a, idx, 0, 0, now);
       c.restore();
       // Arm from the shoulder to the clasp (the other window draws its half).
       const sx = cx + toward * mainW * 0.2 + Math.sin(lean) * mainH * 0.5;
@@ -1113,8 +1131,9 @@ export class PetRenderer {
     c.save();
     c.translate(cx + toward * lunge * 10, bottom - hop);
     c.rotate(lean);
+    this.drawBehind(a, idx, 0, 0, now);
     sp.draw(c, a, idx, 0, 0, this.sc(sp), hue);
-    if (this.view?.hat) this.drawHatOn(a, idx, 0, 0, now);
+    this.drawFront(a, idx, 0, 0, now);
     // Racket at the hand facing the other pet.
     const hx = toward * mainW * 0.3;
     const hy = -mainH * 0.45;

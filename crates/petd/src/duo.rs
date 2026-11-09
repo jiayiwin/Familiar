@@ -146,7 +146,8 @@ impl World {
         out.push(Out::Ws(crate::msg("pet.script", &json!({ "pet": anchor.id, "rule": "duo", "bubble": g.open_line(), "ms": 1400, "delay": 0 }))));
         out.push(Out::Ws(crate::msg("pet.script", &json!({ "pet": winner.id, "rule": "duo", "action": "cheer", "bubble": g.win_line(), "ms": 2400, "delay": end }))));
         out.push(Out::Ws(crate::msg("pet.script", &json!({ "pet": loser.id, "rule": "duo", "action": "sulk", "bubble": g.lose_line(), "ms": 2400, "delay": end }))));
-        self.whip(Some(&winner.id), &loser.id, loser.state, Reason::Game, whip_at, out);
+        self.whip(Some(&winner.id), &loser.id, loser.state, Reason::Game, whip_at, db, out);
+        db.log_event(now, "game", g.id, 1);
         self.bond(db, views, 1, out);
     }
 }

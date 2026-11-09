@@ -86,7 +86,10 @@ impl World {
     /// The stroke itself, at `delay` ms from now: the overlay's lash + sounds,
     /// the whipper's line (when a pet holds the whip) and the victim's.
     /// Scripts (who is busy, who walks home) are the caller's business.
-    pub(crate) fn whip(&mut self, from: Option<&str>, to: &str, to_state: State, reason: Reason, delay: u64, out: &mut Vec<Out>) {
+    /// Every lash lands in the day's report (`whip` event on the victim).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn whip(&mut self, from: Option<&str>, to: &str, to_state: State, reason: Reason, delay: u64, db: &crate::db::Db, out: &mut Vec<Out>) {
+        db.log_event(crate::now_ms(), "whip", to, 1);
         let (master, ouch) = match reason {
             Reason::Game => (Some(self.whip_line(GAME_MASTER)), self.whip_line(GAME_OUCH)),
             Reason::Slow => (None, self.whip_line(SLOW_OUCH)), // the rule's own bubble is the master line
@@ -118,7 +121,7 @@ impl World {
     /// After a duel or race: the winner says its piece, walks over and cracks
     /// the whip; the loser sulks, then takes it. Both are busy until it is over.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn whip_walkover(&mut self, winner: &PetView, loser: &PetView, win_text: &str, lose_text: &str, rule: &str, now: u64, out: &mut Vec<Out>) {
+    pub(crate) fn whip_walkover(&mut self, winner: &PetView, loser: &PetView, win_text: &str, lose_text: &str, rule: &str, now: u64, db: &crate::db::Db, out: &mut Vec<Out>) {
         let until = now + WHIP_WALK + WHIP_HIT + WHIP_MS;
         self.scripts.insert(winner.id.clone(), Script { rule: rule.into(), until, during_attention: false, moved: true });
         self.scripts.insert(loser.id.clone(), Script { rule: rule.into(), until, during_attention: false, moved: false });
@@ -126,15 +129,15 @@ impl World {
         // Bubble only while walking: an action would cut the walk animation.
         out.push(Out::Ws(crate::msg("pet.script", &json!({ "pet": winner.id, "rule": rule, "bubble": win_text, "ms": WHIP_WALK, "delay": 0 }))));
         out.push(Out::Ws(crate::msg("pet.script", &json!({ "pet": loser.id, "rule": rule, "action": "sulk", "bubble": lose_text, "ms": WHIP_WALK + 200, "delay": 0 }))));
-        self.whip(Some(&winner.id), &loser.id, loser.state, Reason::Game, WHIP_WALK, out);
+        self.whip(Some(&winner.id), &loser.id, loser.state, Reason::Game, WHIP_WALK, db, out);
     }
 
     /// Lost a round to the user (rock-paper-scissors): the user holds the whip,
     /// the pet takes it like any beaten player, `delay` ms after the verdict.
-    pub fn lost_to_user(&mut self, pet: &str, views: &[PetView], delay: u64) -> Vec<Out> {
+    pub fn lost_to_user(&mut self, pet: &str, views: &[PetView], delay: u64, db: &crate::db::Db) -> Vec<Out> {
         let Some(v) = views.iter().find(|v| v.id == pet) else { return vec![] };
         let mut out = vec![];
-        self.whip(None, pet, v.state, Reason::Game, delay, &mut out);
+        self.whip(None, pet, v.state, Reason::Game, delay, db, &mut out);
         out
     }
 
@@ -143,7 +146,7 @@ impl World {
         let v = views.iter().find(|v| v.id == pet).ok_or_else(|| crate::tr!("找不到这只宠物", "Can't find that pet"))?;
         let mut out = vec![];
         db.log_interaction(now, pet, "whip", self.frozen);
-        self.whip(None, pet, v.state, Reason::User, 0, &mut out);
+        self.whip(None, pet, v.state, Reason::User, 0, db, &mut out);
         Ok(out)
     }
 }
@@ -181,7 +184,9 @@ mod tests {
     fn user_whip_is_a_lash_and_one_line() {
         let mut w = World::new(Tables::builtin(), 3);
         let views = two_pets();
-        let out = w.user_whip("codex", &views, 1_793_600_000_000, &Db::in_memory()).unwrap();
+        let db = Db::in_memory();
+        let out = w.user_whip("codex", &views, 1_793_600_000_000, &db).unwrap();
+        assert_eq!(db.report(&crate::db::day_of(crate::now_ms())).whipped.get("codex"), Some(&1), "the lash is on the report");
         let lash = ws(&out, "whip");
         assert_eq!(lash.len(), 1);
         assert_eq!(lash[0]["to"], "codex");
@@ -199,7 +204,7 @@ mod tests {
         let views = two_pets();
         let (a, b) = (views[0].clone(), views[1].clone());
         let mut out = vec![];
-        w.whip_walkover(&a, &b, "赢", "输", "duel", 0, &mut out);
+        w.whip_walkover(&a, &b, "赢", "输", "duel", 0, &Db::in_memory(), &mut out);
         assert!(out.iter().any(|o| matches!(o, Out::Control(Control::Move { pet, target: Some(t) }) if pet == &a.id && t == &b.id)));
         assert_eq!(ws(&out, "whip")[0]["from"], a.id);
         assert!(w.scripts[&a.id].moved && !w.scripts[&b.id].moved);

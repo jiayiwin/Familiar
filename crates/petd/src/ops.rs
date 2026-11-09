@@ -202,6 +202,7 @@ pub fn kegel_now(sh: &Shared, pet: Option<&str>) -> Result<String, String> {
         (hub.pets(), hub.cfg.features.kegel_reps)
     };
     let m = crate::world::kegel_script(&views, pet, reps).ok_or_else(|| crate::tr!("现在没有显示的宠物", "No pet is showing right now"))?;
+    sh.db.log_event(crate::now_ms(), "kegel", "", reps.clamp(1, 30) as i64);
     let _ = sh.ws_tx.send(m);
     Ok(crate::tr!("开始提肛，跟着宠物做 {reps} 组。", "Kegel set started: {reps} reps with your pet."))
 }

@@ -3,7 +3,7 @@
 // stream. Nothing goes online until this window is opened. Closing the window
 // only hides it, so the station keeps playing.
 
-import { connect, inTauri } from "./api";
+import { connect, inTauri, postJson, type Conn } from "./api";
 import { EN, initLang, t as tr } from "./i18n";
 
 interface Station {
@@ -178,7 +178,13 @@ function setState(s: typeof state, note?: string) {
 function share() {
   save("radio.now", { name: cur?.name ?? "", playing: state === "playing" || state === "loading", ts: Date.now() });
 }
-setInterval(() => state === "playing" && share(), 10_000);
+/** Listening time goes on the daily report: 10 s per heartbeat while playing. */
+let conn: Conn | null = null;
+setInterval(() => {
+  if (state !== "playing") return;
+  share();
+  if (conn) void postJson(conn, "/v1/stat", { kind: "radio", what: "station", n: 10 }).catch(() => {});
+}, 10_000);
 
 function showCurrent() {
   if (!cur) return;
@@ -433,7 +439,8 @@ async function refresh() {
 
 async function main() {
   try {
-    await initLang(await connect(), { reload: false });
+    conn = await connect();
+    await initLang(conn, { reload: false });
   } catch {
     /* standalone preview */
   }

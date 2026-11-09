@@ -106,14 +106,44 @@
       .ach b { display: block; font-family: var(--display); font-weight: 700; font-size: 14px; }
       .ach small { color: var(--muted); }
       .ach .coin { float: right; color: var(--accent); font-family: var(--display); font-weight: 700; }
-      .shopbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 10px; flex-wrap: wrap; }
-      .shopbar b { font-family: var(--display); font-weight: 700; font-size: 20px; color: var(--accent); }
-      .shopgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
-      .item { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 6px; align-items: center; text-align: center; box-shadow: var(--shadow); transition: transform 0.25s var(--ease); }
-      .item:hover { transform: translateY(-2px); }
+      /* shop: a sticky fitting room on the left, the racks on the right */
+      .shopwrap { display: flex; gap: 20px; align-items: flex-start; }
+      .fitroom { position: sticky; top: 14px; width: 252px; flex: none; background: var(--panel); border: 1px solid var(--line); border-radius: 22px; padding: 16px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 12px; }
+      .fithead { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-family: var(--display); font-weight: 700; font-size: 14px; }
+      .fithead select { max-width: 130px; border-radius: 999px; font-size: 12px; padding: 3px 10px; }
+      #fitcanvas { display: block; width: 218px; height: 218px; border-radius: 16px;
+        background: radial-gradient(circle at 50% 94%, color-mix(in srgb, var(--mustard) 45%, transparent) 0 74px, transparent 75px), linear-gradient(180deg, var(--t-sky), var(--t-butter)); }
+      .fitworn { display: flex; flex-wrap: wrap; gap: 6px; min-height: 26px; }
+      .fitworn .chip { font-size: 11.5px; padding: 2px 10px; display: inline-flex; gap: 6px; align-items: center; background: var(--t-lilac); color: var(--indigo); cursor: default; }
+      .fitworn .chip button { border: 0; background: transparent; padding: 0; color: var(--muted); box-shadow: none; font-size: 11px; cursor: pointer; line-height: 1; }
+      .fitworn .chip button:hover { color: var(--red); border: 0; }
+      .fitworn .empty { color: var(--muted); font-size: 12px; }
+      .fitwallet { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-radius: 14px; background: var(--indigo); color: #fff; font-size: 12px; font-weight: 600; }
+      .fitwallet b { font-family: var(--display); font-size: 20px; color: var(--mustard); }
+      .shopmain { flex: 1; min-width: 0; }
+      .shopcats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+      .shopcats .chip .n { opacity: 0.6; margin-left: 4px; }
+      .shopgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(164px, 1fr)); gap: 14px; }
+      .item { position: relative; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 10px 10px 12px; display: flex; flex-direction: column; gap: 3px; box-shadow: var(--shadow); transition: transform 0.25s var(--ease), box-shadow 0.25s var(--ease); }
+      .item:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); }
       .item.worn { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), var(--shadow); }
-      .item canvas { display: block; background: var(--t-butter); border-radius: 12px; }
-      .item small { color: var(--muted); }
+      .item canvas { display: block; width: 100%; border-radius: 12px; background: var(--stage, var(--t-butter)); }
+      .item .slot { position: absolute; top: 16px; left: 16px; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; padding: 1px 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.86); color: var(--ink-2); }
+      .item .wornbadge { position: absolute; top: 16px; right: 16px; font-size: 10px; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: var(--accent); color: #fff; }
+      .item .ttl { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; margin-top: 7px; padding: 0 2px; }
+      .item b { font-family: var(--display); font-weight: 700; font-size: 14px; }
+      .item .price { font-family: var(--display); font-weight: 700; color: var(--accent); font-size: 12.5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+      .item .price:not(.owned)::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--mustard); box-shadow: inset 0 0 0 2px #d99a1c; }
+      .item .price.owned { color: var(--green); }
+      .item.locked .price { color: var(--muted); }
+      .item small { color: var(--muted); display: block; padding: 0 2px; min-height: 2.7em; line-height: 1.35; font-size: 11.5px; }
+      .item .act { margin-top: 6px; display: flex; }
+      .item .act button { flex: 1; padding: 5px 10px; }
+      .item .act small { min-height: 0; text-align: center; flex: 1; padding: 6px 0 0; }
+      .item[data-slot="hat"] { --stage: var(--t-butter); } .item[data-slot="face"] { --stage: var(--t-sky); } .item[data-slot="neck"] { --stage: var(--t-peach); }
+      .item[data-slot="back"] { --stage: var(--t-lilac); } .item[data-slot="feet"] { --stage: var(--t-mint); } .item[data-slot="hand"] { --stage: var(--t-butter); }
+      .item[data-slot="aura"] { --stage: linear-gradient(180deg, var(--t-lilac), var(--t-sky)); } .item[data-slot="rope"], .item[data-slot="quips"] { --stage: var(--chip); }
+      @media (max-width: 720px) { .shopwrap { flex-direction: column; } .fitroom { position: static; width: 100%; } }
       .modal { position: fixed; inset: 0; background: rgba(20, 22, 44, 0.42); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px; }
       .modal[hidden] { display: none; }
       .mbox { position: relative; overflow: hidden; background: var(--bg); border-radius: 22px; width: min(760px, 100%); max-height: 100%; overflow: auto; padding: 24px 26px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.3); }
@@ -194,11 +224,18 @@
       <section><h2 id="ach-progress"></h2><div class="achgrid" id="achgrid"></div></section>
     </div>
     <div id="tab-shop" hidden>
-      <section>
-        <div class="shopbar"><span><span data-en="Coins">金币</span> <b id="shop-wallet">0</b></span>
-          <label><span data-en="Hats for">帽子给</span> <select id="shop-pack"></select> <span data-en="">戴</span></label></div>
-        <div class="shopgrid" id="shopgrid"></div>
-        <div class="note" data-en="The shop only sells looks; nothing here affects who wins. The season champ's crown covers any hat you equip, and the loser wears a paper hat. Try again next week.">商店只卖外观，不影响任何胜负。赛季冠军的皇冠会盖过你装备的帽子，输了戴纸帽，下周再拼。</div>
+      <section class="shopwrap">
+        <aside class="fitroom">
+          <div class="fithead"><span data-en="Fitting room">试衣间</span><select id="shop-pack" title="给哪只穿" data-en-title="Dress which pet"></select></div>
+          <canvas id="fitcanvas" width="218" height="218"></canvas>
+          <div class="fitworn" id="fitworn"></div>
+          <div class="fitwallet"><span data-en="Coins">金币</span><b id="shop-wallet">0</b></div>
+        </aside>
+        <div class="shopmain">
+          <div class="shopcats" id="shopcats"></div>
+          <div class="shopgrid" id="shopgrid"></div>
+          <div class="note" data-en="The shop only sells looks; nothing here affects who wins. Each pet has its own outfit: a hat, something on the face, the neck, the back, the feet, in hand, and an aura. The season champ's crown covers any hat you equip, and the loser wears a paper hat. Try again next week.">商店只卖外观，不影响任何胜负。每只宠物各穿各的：帽子、脸上、脖子、背后、脚上、手里，再加一圈光效。赛季冠军的皇冠会盖过你装备的帽子，输了戴纸帽，下周再拼。</div>
+        </div>
       </section>
     </div>
     <div id="tab-fish" hidden>

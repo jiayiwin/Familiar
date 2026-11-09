@@ -495,7 +495,7 @@ fn on_menu(h: &AppHandle, id: &str) {
             // The pet lost to you: after the reveal and its sulk, the whip.
             if outcome == "win" {
                 let views = app.petd.hub.lock().unwrap().pets();
-                let outs = sh.world.lock().unwrap().lost_to_user(pet, &views, 2600);
+                let outs = sh.world.lock().unwrap().lost_to_user(pet, &views, 2600, &sh.db);
                 send_outs(sh, outs);
             }
             return;

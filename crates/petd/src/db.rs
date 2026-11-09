@@ -50,6 +50,11 @@ CREATE TABLE IF NOT EXISTS interactions_log (
   attention_active INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS events (
+  id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, day TEXT NOT NULL, kind TEXT NOT NULL,
+  what TEXT NOT NULL DEFAULT '', n INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS events_day ON events(day, kind);
 "#;
 
 /// Local calendar day of a ms timestamp, "YYYY-MM-DD".
@@ -83,6 +88,17 @@ pub struct CatchRow {
     pub source: String,
 }
 
+/// Who stood for a camp on a day: the pack that was on duty, and what it got through.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct Duty {
+    pub camp: String,
+    pub pack: String,
+    /// Display name; the server fills it from the pack library (defaults to the id).
+    pub name: String,
+    pub turns: u32,
+    pub work_ms: u64,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Report {
     pub day: String,
@@ -96,6 +112,21 @@ pub struct Report {
     pub bosses: u32,
     pub coins_earned: i64,
     pub balance: i64,
+    /// Lashes taken that day, and by whom (pet id -> count).
+    pub whips: u32,
+    pub whipped: std::collections::BTreeMap<String, u32>,
+    /// Games played (tug, duo games, races, duels, rock-paper-scissors), by game.
+    pub games: u32,
+    pub games_by: std::collections::BTreeMap<String, u32>,
+    /// Seconds of radio: stations played in the radio window + crosstalk pieces.
+    pub radio_s: u64,
+    pub kegel_sets: u32,
+    pub kegel_reps: u32,
+    pub letters: u32,
+    /// Most agent sessions online at once that day.
+    pub peak_agents: u32,
+    /// The pets on duty (one per camp that worked or was online).
+    pub duty: Vec<Duty>,
 }
 
 impl Db {
@@ -337,6 +368,38 @@ impl Db {
             .query_row("SELECT COALESCE(SUM(delta), 0) FROM wallet_log WHERE day = ?1 AND delta > 0", [day], |r| r.get(0))
             .unwrap_or(0);
         let balance: i64 = c.query_row("SELECT COALESCE(SUM(delta), 0) FROM wallet_log", [], |r| r.get(0)).unwrap_or(0);
+        // Day events: (kind, what) -> (count, sum n).
+        let mut ev: std::collections::BTreeMap<(String, String), (u32, i64)> = Default::default();
+        if let Ok(mut st) = c.prepare("SELECT kind, what, COUNT(*), COALESCE(SUM(n), 0) FROM events WHERE day = ?1 GROUP BY kind, what") {
+            if let Ok(rows) = st.query_map([day], |r| Ok(((r.get::<_, String>(0)?, r.get::<_, String>(1)?), (r.get::<_, u32>(2)?, r.get::<_, i64>(3)?)))) {
+                ev = rows.flatten().collect();
+            }
+        }
+        let kind = |k: &str| ev.iter().filter(|((kk, _), _)| kk == k).map(|((_, w), v)| (w.clone(), *v)).collect::<Vec<_>>();
+        let whipped: std::collections::BTreeMap<String, u32> = kind("whip").into_iter().map(|(w, (n, _))| (w, n)).collect();
+        let games_by: std::collections::BTreeMap<String, u32> = kind("game").into_iter().map(|(w, (n, _))| (w, n)).collect();
+        let radio_s = kind("radio").iter().map(|(_, (_, s))| *s).sum::<i64>().max(0) as u64;
+        let (kegel_sets, kegel_reps) = kind("kegel").iter().fold((0u32, 0i64), |(a, b), (_, (n, s))| (a + n, b + s));
+        let letters = kind("letter").iter().map(|(_, (n, _))| *n).sum();
+        let peak_agents: u32 = c
+            .query_row("SELECT value FROM kv WHERE key = ?1", [format!("peak:{day}")], |r| r.get::<_, String>(0))
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
+        let mut duty = vec![];
+        for camp in ["claude-code", "codex"] {
+            let pack: Option<String> =
+                c.query_row("SELECT value FROM kv WHERE key = ?1", [format!("duty:{day}:{camp}")], |r| r.get(0)).optional().ok().flatten();
+            let d = by_camp.get(camp).cloned().unwrap_or_default();
+            if pack.is_none() && d.turns == 0 {
+                continue;
+            }
+            let ms: i64 = c
+                .query_row("SELECT COALESCE(SUM(ms), 0) FROM turns WHERE day = ?1 AND source = ?2", params![day, camp], |r| r.get(0))
+                .unwrap_or(0);
+            let pack = pack.unwrap_or_default();
+            duty.push(Duty { camp: camp.into(), name: pack.clone(), pack, turns: d.turns, work_ms: ms as u64 });
+        }
         drop(c);
         let (turns, clean, errors) =
             by_camp.values().fold((0, 0, 0), |(a, b, e), d| (a + d.turns, b + d.clean, e + d.errors));
@@ -352,6 +415,44 @@ impl Db {
             bosses,
             coins_earned,
             balance,
+            whips: whipped.values().sum(),
+            whipped,
+            games: games_by.values().sum(),
+            games_by,
+            radio_s,
+            kegel_sets,
+            kegel_reps: kegel_reps.max(0) as u32,
+            letters,
+            peak_agents,
+            duty,
+        }
+    }
+
+    /// One thing that happened: a lash taken (`what` = the pet), a game played
+    /// (`what` = the game), radio time (`n` = seconds), a kegel set (`n` =
+    /// reps), a letter written. The daily report adds them up.
+    pub fn log_event(&self, now: u64, kind: &str, what: &str, n: i64) {
+        let c = self.conn.lock().unwrap();
+        let _ = c.execute(
+            "INSERT INTO events (ts, day, kind, what, n) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![now as i64, day_of(now), kind, what, n],
+        );
+    }
+
+    /// Keep the day's high-water mark of agent sessions online at once.
+    pub fn note_online(&self, now: u64, online: usize) {
+        let key = format!("peak:{}", day_of(now));
+        let best: usize = self.kv_get(&key).and_then(|v| v.parse().ok()).unwrap_or(0);
+        if online > best {
+            self.kv_set(&key, &online.to_string());
+        }
+    }
+
+    /// Remember which pack stood for `camp` today (the report's "on duty").
+    pub fn note_duty(&self, now: u64, camp: &str, pack: &str) {
+        let key = format!("duty:{}:{camp}", day_of(now));
+        if self.kv_get(&key).as_deref() != Some(pack) {
+            self.kv_set(&key, pack);
         }
     }
 

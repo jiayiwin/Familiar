@@ -1,5 +1,6 @@
-// Daily report card (design §7.2): agent work time, turns, fish, bugs and the
-// tug result, drawn on a canvas so it can be copied as an image.
+// Daily report card (design §7.2): who was on duty, agent work time, turns,
+// fish, bugs, lashes taken, games, radio time, kegels, letters, the busiest
+// moment and the tug result, drawn on a canvas so it can be copied as an image.
 
 import { connect, fileUrl, getJson, inTauri, RARITY_COLORS, type CampDay, type Conn, type Report } from "./api";
 import { toast } from "./preview";
@@ -84,18 +85,45 @@ function fishIcon(x: number, y: number, color: string) {
   ctx.fillRect(x + 3, y - 2, 2, 2);
 }
 
+const GAME_NAMES: Record<string, () => string> = {
+  tug: () => tr("拔河", "tug-of-war"),
+  badminton: () => tr("羽毛球", "badminton"),
+  pingpong: () => tr("乒乓球", "ping-pong"),
+  armwrestle: () => tr("掰手腕", "arm wrestling"),
+  race: () => tr("赛跑", "race"),
+  duel: () => tr("擂台", "duel"),
+  rps: () => tr("猜拳", "rock-paper-scissors"),
+  rps_user: () => tr("和你猜拳", "rock-paper-scissors with you"),
+};
+
+const CAMP_NAMES: Record<string, string> = { "claude-code": "Claude Code", codex: "Codex" };
+
 interface Games {
   affinity: number;
   packs: { "claude-code": string | null; codex: string | null };
 }
 let games: Games | null = null;
 const photos: HTMLImageElement[] = [];
+/** pack id -> preview.png, for the pets on duty. */
+const previews = new Map<string, HTMLImageElement>();
+
+/** A pet's display name: the duty list knows camps and packs; otherwise the id. */
+function petName(r: Report, id: string): string {
+  const d = r.duty.find((d) => d.camp === id || d.pack === id);
+  return d ? d.name : id;
+}
 
 function draw(r: Report) {
   const fish = r.catches.filter((c) => c.outcome !== "boot" && c.outcome !== "escape");
   const rows = Math.ceil(Math.min(fish.length, 24) / 2);
   const photo = (games?.affinity ?? 0) >= 80 && photos.length === 2;
-  const H = 396 + rows * 22 + (fish.length ? 10 : 0) + (photo ? 120 : 0);
+  const detail: string[] = [];
+  if (r.whips) detail.push(tr("挨打", "Lashes") + "：" + Object.entries(r.whipped).sort((a, b) => b[1] - a[1]).map(([id, n]) => `${petName(r, id)} ${n}`).join(" · "));
+  if (r.games) detail.push(tr("游戏", "Games") + "：" + Object.entries(r.games_by).sort((a, b) => b[1] - a[1]).map(([g, n]) => `${GAME_NAMES[g]?.() ?? g} ${n}`).join(" · "));
+  const TILES_Y = 178;
+  const tilesEnd = TILES_Y + 3 * 66 + 58;
+  const tugY = tilesEnd + 32 + (detail.length ? detail.length * 16 : 0);
+  const H = tugY + 152 + rows * 22 + (fish.length ? 10 : 0) + (photo ? 120 : 0);
   const dpr = devicePixelRatio || 1;
   canvas.width = W * dpr;
   canvas.height = H * dpr;
@@ -138,8 +166,43 @@ function draw(r: Report) {
   rrect(W - 20 - cw - 96, 24, cw, 26, 13);
   ctx.fill();
   text(coin, W - 20 - 96 - cw / 2, 42, 13, "#2b3275", "serif", "center");
-  const tints = ["#fde4d6", "#dcf1e6", "#e8e2fa", "#dde9fa", "#fdf0c8", "#fde4d6"];
-  [[12, 88], [140, 88], [268, 88], [12, 154], [140, 154], [268, 154]].forEach(([x, y], i) => {
+
+  // On duty: the pet (or two) that stood for the agents today.
+  ctx.fillStyle = "#ffffff";
+  rrect(12, 88, W - 24, 78, 14);
+  ctx.fill();
+  ctx.save();
+  rrect(12, 88, W - 24, 78, 14);
+  ctx.clip();
+  disc(W - 26, 92, 26, "#e8e2fa");
+  ctx.restore();
+  text(tr("今日值班", "On duty today"), 22, 104, 11.5, "#8b8ca6", "600");
+  if (!r.duty.length) {
+    text(tr("今天还没有宠物上岗", "No pet has clocked in yet today"), 22, 142, 12, "#8b8ca6");
+  }
+  r.duty.slice(0, 2).forEach((d, i) => {
+    const x = 22 + i * ((W - 24) / 2);
+    const img = previews.get(d.pack);
+    ctx.imageSmoothingEnabled = false;
+    if (img) ctx.drawImage(img, x, 112, 48, 48);
+    else {
+      ctx.fillStyle = "#efe8dc";
+      rrect(x, 112, 48, 48, 10);
+      ctx.fill();
+    }
+    const color = d.camp === "codex" ? "#2f9a8a" : "#e0794f";
+    text(d.name, x + 56, 132, 13, "#1f2245", "bold", "left", 118);
+    text(CAMP_NAMES[d.camp] ?? d.camp, x + 56, 148, 10.5, color, "bold", "left", 118);
+    text(
+      d.turns ? tr(`${d.turns} 轮 · ${workTime(d.work_ms)}`, `${d.turns} turns · ${workTime(d.work_ms)}`) : tr("在岗，还没完成任务", "On duty, nothing finished yet"),
+      x + 56, 161, 10.5, "#8b8ca6", "normal", "left", 118,
+    );
+  });
+
+  const tints = ["#fde4d6", "#dcf1e6", "#e8e2fa", "#dde9fa", "#fdf0c8", "#fde4d6", "#fde4d6", "#dde9fa", "#e8e2fa", "#dcf1e6", "#fdf0c8", "#dde9fa"];
+  for (let i = 0; i < 12; i++) {
+    const x = 12 + (i % 3) * 128;
+    const y = TILES_Y + Math.floor(i / 3) * 66;
     ctx.fillStyle = "#ffffff";
     rrect(x, y, 120, 58, 12);
     ctx.fill();
@@ -148,19 +211,30 @@ function draw(r: Report) {
     ctx.clip();
     disc(x + 112, y + 6, 20, tints[i]);
     ctx.restore();
-  });
-
-  stat(tr("agent 工作时长", "Agent work time"), r.work_ms ? workTime(r.work_ms) : "0", 22, 118, 104);
-  stat(tr("完成轮数", "Turns done"), String(r.turns), 150, 118, 104);
-  stat(tr("一次通过", "First-try passes"), String(r.clean), 278, 118, 104);
-  stat(tr("钓到的鱼", "Fish caught"), String(fish.length), 22, 184, 104);
-  stat(tr("拍死的虫", "Bugs squashed"), `${r.bugs}${r.bosses ? ` + ${r.bosses} Boss` : ""}`, 150, 184, 104);
-  stat(tr("今日金币", "Coins today"), `+${r.coins_earned}`, 278, 184, 104);
+  }
+  const cell = (i: number) => [22 + (i % 3) * 128, TILES_Y + 30 + Math.floor(i / 3) * 66] as const;
+  const put = (i: number, label: string, value: string) => {
+    const [x, y] = cell(i);
+    stat(label, value, x, y, 104);
+  };
+  put(0, tr("agent 工作时长", "Agent work time"), r.work_ms ? workTime(r.work_ms) : "0");
+  put(1, tr("完成轮数", "Turns done"), String(r.turns));
+  put(2, tr("一次通过", "First-try passes"), String(r.clean));
+  put(3, tr("钓到的鱼", "Fish caught"), String(fish.length));
+  put(4, tr("拍死的虫", "Bugs squashed"), `${r.bugs}${r.bosses ? ` + ${r.bosses} Boss` : ""}`);
+  put(5, tr("今日金币", "Coins today"), `+${r.coins_earned}`);
+  put(6, tr("挨的鞭子", "Lashes taken"), tr(`${r.whips} 下`, `${r.whips}`));
+  put(7, tr("玩的游戏", "Games played"), tr(`${r.games} 局`, `${r.games}`));
+  put(8, tr("听电台", "Radio time"), r.radio_s ? workTime(r.radio_s * 1000) : "0");
+  put(9, tr("提肛", "Kegels"), r.kegel_reps ? tr(`${r.kegel_reps} 组`, `${r.kegel_reps} reps`) : "0");
+  put(10, tr("收到的信", "Letters"), tr(`${r.letters} 封`, `${r.letters}`));
+  put(11, tr("最多同时在线 agent", "Peak agents online"), tr(`${r.peak_agents} 个`, `${r.peak_agents}`));
+  detail.forEach((line, i) => text(line, 20, tilesEnd + 22 + i * 16, 10.5, "#8b8ca6", "normal", "left", W - 40));
 
   // Tug result.
   const cc = r.by_camp["claude-code"];
   const cx = r.by_camp["codex"];
-  let y = 244;
+  let y = tugY;
   ctx.fillStyle = "#e6ddcc";
   ctx.fillRect(20, y - 16, W - 40, 1);
   text(tr("今日拔河", "Today's tug-of-war"), 20, y + 4, 13, "#8b8ca6", "bold");
@@ -228,8 +302,24 @@ function draw(r: Report) {
   );
 }
 
+function loadImage(pack: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img.naturalWidth ? img : null);
+    img.onerror = () => resolve(null);
+    img.src = fileUrl(conn, pack, "preview.png");
+  });
+}
+
 async function load() {
   const r = await getJson<Report>(conn, `/v1/report?day=${ymd(day)}`);
+  for (const d of r.duty) {
+    if (!previews.has(d.pack)) {
+      const img = await loadImage(d.pack);
+      if (img) previews.set(d.pack, img);
+    }
+  }
   draw(r);
   // Fit the window to the card (no empty space under it).
   if (inTauri) {
@@ -247,11 +337,8 @@ async function main() {
   games = await getJson<Games>(conn, "/v1/games").catch(() => null);
   if (games && games.affinity >= 80 && games.packs["claude-code"] && games.packs.codex) {
     for (const p of [games.packs["claude-code"], games.packs.codex]) {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.src = fileUrl(conn, p!, "preview.png");
-      await new Promise((r) => ((img.onload = r), (img.onerror = r)));
-      if (img.naturalWidth) photos.push(img);
+      const img = await loadImage(p!);
+      if (img) photos.push(img);
     }
   }
   await load();

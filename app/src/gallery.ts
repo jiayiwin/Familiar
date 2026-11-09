@@ -6,7 +6,8 @@ import {
   type BrokenPack, type ConfigInfo, type Conn, type PackInfo, type Report,
 } from "./api";
 import { Previews, toast } from "./preview";
-import { drawHat, ropeStyle } from "./decor";
+import { drawHat, drawWearBehind, drawWearFront, fitOf, ropeStyle, SLOT_NAMES, SLOTS } from "./decor";
+import type { Sprites } from "./sprites";
 import { EN, initLang, t as tr } from "./i18n"; // `t` is a common local name here
 import { IMAGE_EXT, setupMaker } from "./maker-ui";
 
@@ -323,6 +324,12 @@ async function renderWallet() {
     <div class="kpi"><span>${tr("agent 工作时长", "Agent work time")}</span><div class="big">${t.work_ms ? duration(t.work_ms) : "0"}</div></div>
     <div class="kpi"><span>${tr("钓到的鱼", "Fish caught")}</span><div class="big">${t.catches.filter((c) => c.outcome !== "boot" && c.outcome !== "escape").length}</div></div>
     <div class="kpi"><span>${tr("拍死的虫", "Bugs squashed")}</span><div class="big">${t.bugs}${t.bosses ? ` + ${t.bosses} Boss` : ""}</div></div>
+    <div class="kpi"><span>${tr("挨的鞭子", "Lashes taken")}</span><div class="big">${t.whips}</div></div>
+    <div class="kpi"><span>${tr("玩的游戏", "Games played")}</span><div class="big">${t.games}</div></div>
+    <div class="kpi"><span>${tr("听电台", "Radio time")}</span><div class="big">${t.radio_s ? duration(t.radio_s * 1000) : "0"}</div></div>
+    <div class="kpi"><span>${tr("提肛", "Kegels")}</span><div class="big">${t.kegel_reps ? tr(`${t.kegel_reps} 组`, `${t.kegel_reps} reps`) : "0"}</div></div>
+    <div class="kpi"><span>${tr("收到的信", "Letters")}</span><div class="big">${t.letters}</div></div>
+    <div class="kpi"><span>${tr("最多同时在线 agent", "Peak agents online")}</span><div class="big">${t.peak_agents}</div></div>
     ${camp("Claude Code", "claude-code")}${camp("Codex", "codex")}`;
 }
 
@@ -465,42 +472,122 @@ async function renderSeason() {
       );
 }
 
+/** Shop sections in rack order: the wearable slots, then the rope and the lines. */
+const SHOP_KINDS = [...SLOTS, "rope", "quips"];
+let shopCat = "all";
+let shop: Shop | null = null;
+let fitSprites: Sprites | null = null;
+let fitLoopOn = false;
+
+/** What `pack` has on, from the equipped list: the hat and the other slots. */
+function outfitOf(s: Shop, pack: string): { hat?: string; wear: Record<string, string> } {
+  const wear: Record<string, string> = {};
+  let hat: string | undefined;
+  for (const e of s.equipped) {
+    if (e.pack !== pack) continue;
+    if (e.slot === "hat") hat = e.item;
+    else if (e.slot !== "rope") wear[e.slot] = e.item;
+  }
+  return { hat, wear };
+}
+
+/**
+ * The pet, dressed, with its bottom-centre near the bottom of a w×h box:
+ * outfit pieces behind, the sprite, pieces in front, the hat.
+ */
+function drawDressed(g: CanvasRenderingContext2D, sp: Sprites, w: number, h: number, wear: Record<string, string>, hat: string | undefined, now: number, fill = 0.7): void {
+  const a = sp.action("idle") ?? Object.values(sp.pack.actions)[0];
+  if (!a) return;
+  const fr = sp.frameAt(a, now);
+  const f = sp.pack.frame;
+  const raw = Math.min(w / f.w, h / f.h) * fill;
+  const sc = f.w >= 96 || f.h >= 96 ? raw : Math.max(1, Math.floor(raw));
+  const cx = w / 2;
+  const bottom = h - Math.round(h * 0.13);
+  const fit = fitOf(sp.body(a, fr.idx), f.w, f.h, cx, bottom, sc);
+  drawWearBehind(g, wear, fit, now);
+  sp.draw(g, a, fr.idx, cx, bottom, sc);
+  drawWearFront(g, wear, fit, now);
+  if (hat) {
+    const hd = sp.head(a, fr.idx);
+    drawHat(g, hat, cx + (hd.x - f.w / 2) * sc, bottom - (f.h - hd.top) * sc, hd.w * sc, now);
+  }
+}
+
+/** A card picture: the chosen pet wearing just this item (static), or the rope / a speech bubble. */
 function itemIcon(it: ShopItem): HTMLCanvasElement {
+  const W = 148, H = 122;
   const cv = document.createElement("canvas");
   const dpr = devicePixelRatio || 1;
-  cv.width = 96 * dpr;
-  cv.height = 72 * dpr;
-  cv.style.width = "96px";
-  cv.style.height = "72px";
+  cv.width = W * dpr;
+  cv.height = H * dpr;
+  cv.style.height = `${H}px`;
   const g = cv.getContext("2d")!;
   g.scale(dpr, dpr);
-  if (it.kind === "hat") {
-    // A plain round head to show the hat on.
+  if (it.kind === "rope") {
+    g.strokeStyle = ropeStyle(g, it.id, 16, W - 16);
+    g.lineWidth = 7;
+    g.lineCap = "round";
     g.beginPath();
-    g.arc(48, 52, 22, 0, Math.PI * 2);
-    g.fillStyle = "#fde4d6";
+    g.moveTo(16, H * 0.42);
+    g.quadraticCurveTo(W / 2, H * 0.72, W - 16, H * 0.42);
+    g.stroke();
+    // A little flag at the middle, like the real one.
+    g.fillStyle = "#ee5b3c";
+    g.fillRect(W / 2 - 1, H * 0.57 - 14, 2, 14);
+    g.beginPath();
+    g.moveTo(W / 2 + 1, H * 0.57 - 13);
+    g.lineTo(W / 2 + 12, H * 0.57 - 9);
+    g.lineTo(W / 2 + 1, H * 0.57 - 5);
     g.fill();
-    g.lineWidth = 2;
+  } else if (it.kind === "quips") {
+    g.fillStyle = "#ffffff";
     g.strokeStyle = "#1f2245";
-    g.stroke();
-    drawHat(g, it.id, 48, 30, 44, performance.now());
-  } else if (it.kind === "rope") {
-    g.strokeStyle = ropeStyle(g, it.id, 8, 88);
-    g.lineWidth = 6;
+    g.lineWidth = 1.5;
     g.beginPath();
-    g.moveTo(8, 36);
-    g.quadraticCurveTo(48, 50, 88, 36);
+    g.roundRect(W / 2 - 50, 26, 100, 40, 14);
+    g.fill();
     g.stroke();
-  } else {
-    g.font = "34px system-ui, sans-serif";
+    g.beginPath();
+    g.moveTo(W / 2 - 14, 65);
+    g.lineTo(W / 2 - 8, 78);
+    g.lineTo(W / 2, 65);
+    g.fill();
+    g.fillStyle = "#1f2245";
+    g.font = `600 12px "Segoe UI", "Microsoft YaHei UI", sans-serif`;
     g.textAlign = "center";
-    g.fillText("💬", 48, 48);
+    g.textBaseline = "middle";
+    g.fillText(it.id === "quips_poet" ? tr("编译如风…", "like wind…") : tr("能跑就行", "ship it"), W / 2, 46);
+  } else if (fitSprites) {
+    const wear = it.kind === "hat" ? {} : { [it.kind]: it.id };
+    drawDressed(g, fitSprites, W, H, wear, it.kind === "hat" ? it.id : undefined, 1234, 0.82);
   }
   return cv;
 }
 
+/** The fitting room: the chosen pet in everything it has on, animated. */
+function fitLoop(): void {
+  if (fitLoopOn) return;
+  fitLoopOn = true;
+  const cv = $("fitcanvas") as HTMLCanvasElement;
+  const dpr = devicePixelRatio || 1;
+  cv.width = 218 * dpr;
+  cv.height = 218 * dpr;
+  const g = cv.getContext("2d")!;
+  const tick = (now: number) => {
+    requestAnimationFrame(tick);
+    if ($("tab-shop").hidden || !shop || !fitSprites) return;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, 218, 218);
+    const { hat, wear } = outfitOf(shop, ($("shop-pack") as HTMLSelectElement).value);
+    drawDressed(g, fitSprites, 218, 218, wear, hat, now);
+  };
+  requestAnimationFrame(tick);
+}
+
 async function renderShop() {
   const s = await getJson<Shop>(conn, "/v1/shop");
+  shop = s;
   $("shop-wallet").textContent = String(s.wallet);
   const sel = $("shop-pack") as HTMLSelectElement;
   const keep = sel.value || cfg.in_use["claude-code"];
@@ -508,31 +595,71 @@ async function renderShop() {
   sel.value = packs.some((p) => p.id === keep) ? keep : (packs[0]?.id ?? "");
   sel.onchange = () => void renderShop();
   const pack = sel.value;
+  fitSprites = pack ? await previews.sprites(pack, rev).catch(() => null) : null;
+  fitLoop();
+  const byId = new Map(s.items.map((i) => [i.id, i]));
   const worn = (it: ShopItem) =>
     s.equipped.some((e) => e.item === it.id && (it.kind === "rope" ? e.pack === "*" : e.pack === pack));
+
+  // What it has on, with a way to take each piece off.
+  const on = s.equipped.filter((e) => (e.pack === pack && e.slot !== "rope") || (e.pack === "*" && e.slot === "rope"));
+  $("fitworn").innerHTML = on.length
+    ? on.map((e) => `<span class="chip" data-slot="${esc(e.slot)}">${esc(byId.get(e.item)?.name ?? e.item)}<button title="${tr("脱下", "Take off")}" data-off="${esc(e.slot)}">✕</button></span>`).join("")
+    : `<span class="empty">${tr("什么都没穿。挑一件试试。", "Nothing on yet. Try something.")}</span>`;
+  $("fitworn").querySelectorAll<HTMLButtonElement>("[data-off]").forEach((b) => {
+    b.onclick = async () => {
+      const r = await postJson(conn, "/v1/shop/equip", { pack, slot: b.dataset.off, item: null });
+      if (!r.ok) toast(r.message);
+      await renderShop();
+    };
+  });
+
+  // Racks.
+  const count = (k: string) => s.items.filter((i) => i.kind === k);
+  const cats = [["all", tr("全部", "All"), s.items.length] as const, ...SHOP_KINDS.map((k) => [k, SLOT_NAMES[k]?.() ?? k, count(k).length] as const)];
+  $("shopcats").innerHTML = cats
+    .filter(([, , n]) => n > 0)
+    .map(([k, name, n]) => `<span class="chip${shopCat === k ? " on" : ""}" data-cat="${k}">${esc(name)}<span class="n">${n}</span></span>`)
+    .join("");
+  $("shopcats").querySelectorAll<HTMLElement>("[data-cat]").forEach((el) => {
+    el.onclick = () => {
+      shopCat = el.dataset.cat!;
+      void renderShop();
+    };
+  });
+
+  const order = (k: string) => SHOP_KINDS.indexOf(k);
+  const items = s.items.filter((i) => shopCat === "all" || i.kind === shopCat).sort((a, b) => order(a.kind) - order(b.kind) || a.price - b.price);
   const grid = $("shopgrid");
   grid.innerHTML = "";
-  for (const it of s.items) {
+  for (const it of items) {
+    const isWorn = worn(it);
+    const locked = !it.owned && s.wallet < it.price;
     const el = document.createElement("div");
-    el.className = `item${worn(it) ? " worn" : ""}`;
+    el.className = `item${isWorn ? " worn" : ""}${locked ? " locked" : ""}`;
+    el.dataset.slot = it.kind;
     el.appendChild(itemIcon(it));
     const info = document.createElement("div");
     let action = "";
     if (!it.owned) {
-      action = `<button class="primary" ${s.wallet < it.price ? "disabled" : ""}>${tr(`买 · ${it.price} 金币`, `Buy · ${it.price} coins`)}</button>`;
+      action = `<button class="primary" ${locked ? "disabled" : ""}>${locked ? tr(`还差 ${it.price - s.wallet} 金币`, `${it.price - s.wallet} coins short`) : tr("买下", "Buy")}</button>`;
     } else if (it.kind === "quips") {
       action = `<small>${tr("已拥有，干活时会用上", "Owned — used while working")}</small>`;
+    } else if (isWorn) {
+      action = `<button>${tr("脱下", "Take off")}</button>`;
     } else {
-      action = worn(it) ? `<button>${tr("取下", "Take off")}</button>` : `<button class="primary">${it.kind === "rope" ? tr("换上", "Use") : tr("戴上", "Wear")}</button>`;
+      action = `<button class="primary">${it.kind === "rope" ? tr("换上", "Use") : tr("穿上", "Wear")}</button>`;
     }
-    info.innerHTML = `<b>${esc(it.name)}</b><br><small>${esc(it.desc)}</small><div style="margin-top:6px">${action}</div>`;
+    const price = it.owned ? `<span class="price owned">${tr("已拥有", "Owned")}</span>` : `<span class="price">${it.price}</span>`;
+    info.innerHTML = `<span class="slot">${esc(SLOT_NAMES[it.kind]?.() ?? it.kind)}</span>${isWorn ? `<span class="wornbadge">${tr("穿着", "On")}</span>` : ""}
+      <div class="ttl"><b>${esc(it.name)}</b>${price}</div><small>${esc(it.desc)}</small><div class="act">${action}</div>`;
     el.appendChild(info);
     const btn = info.querySelector("button");
     if (btn) {
       btn.onclick = async () => {
         let r;
         if (!it.owned) r = await postJson(conn, "/v1/shop/buy", { item: it.id });
-        else if (worn(it)) r = await postJson(conn, "/v1/shop/equip", { pack, slot: it.kind, item: null });
+        else if (isWorn) r = await postJson(conn, "/v1/shop/equip", { pack, slot: it.kind, item: null });
         else r = await postJson(conn, "/v1/shop/equip", { pack, slot: it.kind, item: it.id });
         if (!r.ok) toast(r.message);
         else if (r.message) toast(r.message);

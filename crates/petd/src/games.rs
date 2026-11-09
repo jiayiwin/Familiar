@@ -348,7 +348,7 @@ impl World {
                     // Both free: the winner walks over with the whip.
                     let both_free = matches!((&w, &l), (Some(w), Some(l)) if w.id != l.id && !self.scripts.contains_key(&w.id) && !self.scripts.contains_key(&l.id));
                     if both_free {
-                        self.whip_walkover(w.as_ref().unwrap(), l.as_ref().unwrap(), &text, lose_text, "race", now, out);
+                        self.whip_walkover(w.as_ref().unwrap(), l.as_ref().unwrap(), &text, lose_text, "race", now, db, out);
                     } else {
                         if let Some(w) = w.map(|p| p.id) {
                             if !self.scripts.contains_key(&w) {
@@ -499,7 +499,7 @@ impl World {
                     let both_free = matches!((&w, &l), (Some(w), Some(l)) if w.id != l.id && !self.scripts.contains_key(&w.id) && !self.scripts.contains_key(&l.id));
                     if both_free && !self.frozen {
                         // The loser takes the whip.
-                        self.whip_walkover(w.as_ref().unwrap(), l.as_ref().unwrap(), win_text, lose_text, "duel", now, out);
+                        self.whip_walkover(w.as_ref().unwrap(), l.as_ref().unwrap(), win_text, lose_text, "duel", now, db, out);
                     } else {
                         if let Some(w) = w.map(|p| p.id) {
                             if !self.scripts.contains_key(&w) {
@@ -593,6 +593,7 @@ impl World {
         out.push(Out::Ws(crate::msg("pet.script", &json!({ "pet": w.id, "rule": "rps", "action": "cheer", "bubble": crate::i18n::t("你出慢了。", "You were late."), "ms": 2500, "delay": end }))));
         out.push(Out::Ws(crate::msg("pet.script", &json!({ "pet": l.id, "rule": "rps", "action": "sulk", "bubble": crate::i18n::t("再来！", "Again!"), "ms": 2500, "delay": end }))));
         db.log_interaction(now, &a.id, "rps", false);
+        db.log_event(now, "game", "rps", 1);
         self.bond(db, views, 1, out);
     }
 
@@ -798,6 +799,7 @@ impl World {
     /// outcome for the user: win / lose / tie, coins won).
     pub fn rps_user(&mut self, pick: usize, now: u64, db: &Db) -> (usize, &'static str, i64) {
         let me = (self.rand() * 3.0).min(2.0) as usize;
+        db.log_event(now, "game", "rps_user", 1);
         match rps(pick % 3, me) {
             1 => (me, "win", db.earn(2, "rps", "user", now, self.t.balance.economy.daily_cap)),
             -1 => (me, "lose", 0),
@@ -821,6 +823,9 @@ impl World {
         self.bond(db, views, 1, &mut out);
         let en = crate::i18n::is_en();
         let (bond_text, reward, feed_count) = crate::bond::on_feed(db, &pet.pack, &pet.pack, &pet.id, en);
+        if matches!(reward, crate::bond::BondReward::Letter { .. }) {
+            db.log_event(now, "letter", &pet.id, 1);
+        }
         let text = if bond_text.is_empty() { crate::tr!("……嗯。", "…mm.") } else { bond_text };
         (text, out, reward, feed_count)
     }

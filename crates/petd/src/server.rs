@@ -15,6 +15,7 @@
 //!   POST /v1/world/squash      {id}: one click on a bug
 //!   GET  /v1/stats             wallet + fish collection
 //!   GET  /v1/report?day=       daily report (today by default)
+//!   POST /v1/stat              {kind: "radio", n}: windows report usage for the daily report
 //!   GET  /v1/progress          achievements, totals, seasons
 //!   GET  /v1/shop              catalog, owned, equipped, wallet
 //!   POST /v1/shop/buy          {item}
@@ -88,6 +89,7 @@ pub fn router(sh: Shared) -> Router {
         .route("/v1/world/squash", post(squash))
         .route("/v1/stats", get(stats))
         .route("/v1/report", get(report))
+        .route("/v1/stat", post(stat))
         .route("/v1/progress", get(progress_info))
         .route("/v1/shop", get(shop))
         .route("/v1/shop/buy", post(shop_buy))
@@ -674,7 +676,43 @@ async fn lang() -> Json<serde_json::Value> {
 
 async fn report(Ax(sh): Ax<Shared>, Query(q): Query<HashMap<String, String>>) -> Json<crate::db::Report> {
     let day = q.get("day").cloned().unwrap_or_else(|| crate::db::day_of(crate::now_ms()));
-    Json(sh.db.report(&day))
+    let mut r = sh.db.report(&day);
+    // Pack names for the pets on duty; days before duty was recorded fall
+    // back to whoever stands for the camp now.
+    let hub = sh.hub.lock().unwrap();
+    let views = hub.pets();
+    for d in &mut r.duty {
+        if d.pack.is_empty() {
+            if let Some(v) = views.iter().find(|v| v.camp.as_deref() == Some(d.camp.as_str())) {
+                d.pack = v.pack.clone();
+            }
+        }
+        d.name = hub.lib.get(&d.pack).map(|p| p.name.clone()).unwrap_or_else(|| d.pack.clone());
+    }
+    r.duty.retain(|d| !d.pack.is_empty());
+    Json(r)
+}
+
+#[derive(Deserialize)]
+struct StatBody {
+    kind: String,
+    #[serde(default)]
+    what: String,
+    #[serde(default = "one")]
+    n: i64,
+}
+
+fn one() -> i64 {
+    1
+}
+
+/// Usage a window knows and the daemon cannot see: seconds of radio played.
+async fn stat(Ax(sh): Ax<Shared>, Json(b): Json<StatBody>) -> Response {
+    if b.kind != "radio" || !(0..=3600).contains(&b.n) {
+        return reply(Err(crate::tr!("不认识这个统计项", "Unknown stat")));
+    }
+    sh.db.log_event(crate::now_ms(), &b.kind, &b.what, b.n);
+    reply(Ok(String::new()))
 }
 
 async fn ws(Ax(sh): Ax<Shared>, up: WebSocketUpgrade) -> Response {

@@ -50,6 +50,8 @@ export interface PetView {
   activity?: string;
   size?: number;
   hat?: string;
+  /** The rest of the outfit: slot (face / neck / back / feet / hand / aura) -> item. */
+  wear?: Record<string, string>;
   stage?: number;
 }
 
@@ -252,6 +254,25 @@ export interface Report {
   bosses: number;
   coins_earned: number;
   balance: number;
+  whips: number;
+  whipped: Record<string, number>;
+  games: number;
+  games_by: Record<string, number>;
+  radio_s: number;
+  kegel_sets: number;
+  kegel_reps: number;
+  letters: number;
+  peak_agents: number;
+  duty: Duty[];
+}
+
+/** Who stood for a camp that day. */
+export interface Duty {
+  camp: string;
+  pack: string;
+  name: string;
+  turns: number;
+  work_ms: number;
 }
 
 export const RARITY_NAMES: Record<string, string> = {

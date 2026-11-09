@@ -3,6 +3,18 @@
 
 import type { Action, Pack } from "./api";
 
+/** Landmarks of one frame, in frame px (see `Sprites.body`). */
+export interface Body {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  cx: number;
+  head: { x: number; top: number; w: number };
+  neck: { y: number; x: number; w: number };
+  feet: { y: number; l: number; r: number };
+}
+
 export class Sprites {
   private tinted = new Map<string, HTMLCanvasElement>();
 
@@ -38,18 +50,25 @@ export class Sprites {
     return new Sprites(pack, sheets, url);
   }
 
-  private heads = new Map<string, { x: number; top: number; w: number }>();
+  private bodies = new Map<string, Body>();
 
   /**
-   * Where the head is in a frame (frame px): top-most opaque row, the centre
-   * and width of the body a little below it. Used to put hats on any pack.
+   * Where things are in a frame (frame px): the opaque box, the head (first
+   * reasonably wide row; centre and width a little below it), the neck (the
+   * narrowest row under the head) and the feet row. Lets hats, scarves,
+   * shoes and the rest sit right on any pack.
    */
-  head(a: Action, idx: number): { x: number; top: number; w: number } {
+  body(a: Action, idx: number): Body {
     const key = `${a.sheet}|${idx}`;
-    const hit = this.heads.get(key);
+    const hit = this.bodies.get(key);
     if (hit) return hit;
     const f = this.pack.frame;
-    let res = { x: f.w / 2, top: f.h * 0.1, w: f.w * 0.5 };
+    let res: Body = {
+      left: f.w * 0.25, right: f.w * 0.75, top: f.h * 0.1, bottom: f.h, cx: f.w / 2,
+      head: { x: f.w / 2, top: f.h * 0.1, w: f.w * 0.5 },
+      neck: { y: f.h * 0.42, x: f.w / 2, w: f.w * 0.4 },
+      feet: { y: f.h, l: f.w * 0.3, r: f.w * 0.7 },
+    };
     const img = this.sheets.get(a.sheet);
     if (img && img.complete && img.naturalWidth) {
       try {
@@ -69,19 +88,48 @@ export class Sprites {
           spans.push([l, r]);
           if (l >= 0) widest = Math.max(widest, r - l + 1);
         }
-        // The head starts at the first row that is reasonably wide: thin
-        // things on top (antennae, a hair strand, a hairpin) are skipped.
-        const y = spans.findIndex(([l, r]) => l >= 0 && r - l + 1 >= widest * 0.4);
-        if (y >= 0) {
-          const [l, r] = spans[Math.min(f.h - 1, y + Math.round(f.h * 0.04))];
-          if (l >= 0) res = { x: (l + r + 1) / 2, top: y, w: r - l + 1 };
+        const rows = spans.map((s, y) => (s[0] >= 0 ? y : -1)).filter((y) => y >= 0);
+        if (rows.length) {
+          const top = rows[0];
+          const bottom = rows[rows.length - 1] + 1;
+          const left = Math.min(...rows.map((y) => spans[y][0]));
+          const right = Math.max(...rows.map((y) => spans[y][1])) + 1;
+          // The head starts at the first row that is reasonably wide: thin
+          // things on top (antennae, a hair strand, a hairpin) are skipped.
+          let head = { x: (left + right) / 2, top, w: widest * 0.6 };
+          const y = spans.findIndex(([l, r]) => l >= 0 && r - l + 1 >= widest * 0.4);
+          if (y >= 0) {
+            const [l, r] = spans[Math.min(f.h - 1, y + Math.round(f.h * 0.04))];
+            if (l >= 0) head = { x: (l + r + 1) / 2, top: y, w: r - l + 1 };
+          }
+          // Neck: the narrowest row between half a head down and one head down.
+          let neckY = Math.min(bottom - 2, Math.round(head.top + (bottom - head.top) * 0.42));
+          let best = Infinity;
+          for (let yy = Math.round(head.top + head.w * 0.5); yy <= Math.min(bottom - 2, Math.round(head.top + head.w * 1.05)); yy++) {
+            const [l, r] = spans[yy];
+            if (l >= 0 && r - l + 1 < best) { best = r - l + 1; neckY = yy; }
+          }
+          const [nl, nr] = spans[neckY][0] >= 0 ? spans[neckY] : [left, right - 1];
+          // Feet: the span of the lowest rows.
+          const fy = Math.max(top, bottom - 2);
+          const [fl, fr] = spans[fy][0] >= 0 ? spans[fy] : [left, right - 1];
+          res = {
+            left, right, top, bottom, cx: (left + right) / 2, head,
+            neck: { y: neckY, x: (nl + nr + 1) / 2, w: nr - nl + 1 },
+            feet: { y: bottom, l: fl, r: fr + 1 },
+          };
         }
       } catch {
         // Tainted canvas (no CORS): keep the estimate.
       }
     }
-    this.heads.set(key, res);
+    this.bodies.set(key, res);
     return res;
+  }
+
+  /** The head of a frame (frame px); see `body`. */
+  head(a: Action, idx: number): { x: number; top: number; w: number } {
+    return this.body(a, idx).head;
   }
 
   action(name: string): Action | undefined {

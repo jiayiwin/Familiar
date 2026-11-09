@@ -365,6 +365,7 @@ impl World {
         };
         self.cooldowns.insert(("xs".to_string(), p.id.clone()), now + REPEAT);
         let (lines, ms) = timeline(&p, crate::i18n::is_en());
+        db.log_event(now, "radio", "xiangsheng", (ms / 1000) as i64);
         let lang = p.lang.clone().unwrap_or_else(|| crate::i18n::code().to_string());
         for v in [anchor, mover] {
             self.recent.entry(v.id.clone()).or_default().push_back(now);

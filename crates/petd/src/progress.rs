@@ -228,7 +228,8 @@ pub fn check(db: &Db, now: u64, species_total: u64, daily_cap: i64) -> Vec<(Achi
 pub struct Item {
     pub id: &'static str,
     pub name: &'static str,
-    /// hat | rope | quips
+    /// The slot it goes in: hat | face | neck | back | feet | hand | aura
+    /// (per pet), rope (one for everyone), quips (lines, nothing to wear).
     pub kind: &'static str,
     pub price: i64,
     pub desc: &'static str,
@@ -258,15 +259,62 @@ impl Serialize for Item {
     }
 }
 
+/// Slots a pet wears things in, in drawing order. Everything but `rope` is
+/// per pet; `quips` is not a slot at all.
+pub const WEAR_SLOTS: &[&str] = &["hat", "face", "neck", "back", "feet", "hand", "aura"];
+
 /// Cosmetics only: nothing here changes who wins anything (design §8).
 pub const CATALOG: &[Item] = &[
+    // --- hats
     Item { id: "flower", name: "小红花", kind: "hat", price: 50, desc: "别在头上的一朵小红花", name_en: "Little Flower", desc_en: "A tiny red flower tucked behind the ear" },
     Item { id: "bow", name: "蝴蝶结", kind: "hat", price: 60, desc: "粉色大蝴蝶结", name_en: "Bow", desc_en: "A big pink bow" },
     Item { id: "straw_hat", name: "草帽", kind: "hat", price: 80, desc: "夏天钓鱼专用", name_en: "Straw Hat", desc_en: "For summer fishing trips" },
     Item { id: "party_hat", name: "派对帽", kind: "hat", price: 100, desc: "每天都是庆功宴", name_en: "Party Hat", desc_en: "Every day is a launch party" },
     Item { id: "beanie", name: "毛线帽", kind: "hat", price: 120, desc: "冬天加班也不冷", name_en: "Beanie", desc_en: "Stay warm through winter overtime" },
+    Item { id: "cat_ears", name: "猫耳", kind: "hat", price: 120, desc: "谁都能当猫", name_en: "Cat Ears", desc_en: "Anyone can be a cat" },
+    Item { id: "chef_hat", name: "厨师帽", kind: "hat", price: 130, desc: "今天煮点什么", name_en: "Chef Hat", desc_en: "What's cooking today" },
+    Item { id: "headphones", name: "耳机", kind: "hat", price: 160, desc: "听不见 deadline", name_en: "Headphones", desc_en: "Can't hear the deadline" },
     Item { id: "wizard_hat", name: "法师帽", kind: "hat", price: 200, desc: "写代码就是施法", name_en: "Wizard Hat", desc_en: "Coding is basically spellcasting" },
+    Item { id: "top_hat", name: "礼帽", kind: "hat", price: 220, desc: "体面地出错", name_en: "Top Hat", desc_en: "Fail with dignity" },
     Item { id: "halo", name: "光环", kind: "hat", price: 300, desc: "一次通过的天使", name_en: "Halo", desc_en: "For angels who pass on the first try" },
+    // --- face
+    Item { id: "blush", name: "腮红贴", kind: "face", price: 60, desc: "两块红扑扑", name_en: "Blush Stickers", desc_en: "Two rosy patches" },
+    Item { id: "glasses_round", name: "圆框眼镜", kind: "face", price: 90, desc: "看起来更会写代码", name_en: "Round Glasses", desc_en: "Looks like it knows more code" },
+    Item { id: "eyepatch", name: "眼罩", kind: "face", price: 100, desc: "另一只眼在看日志", name_en: "Eyepatch", desc_en: "The other eye is on the logs" },
+    Item { id: "sunglasses", name: "墨镜", kind: "face", price: 110, desc: "太酷了，看不见 bug", name_en: "Sunglasses", desc_en: "Too cool to see the bugs" },
+    Item { id: "monocle", name: "单片镜", kind: "face", price: 150, desc: "正在审阅你的代码", name_en: "Monocle", desc_en: "Reviewing your code" },
+    // --- neck
+    Item { id: "bowtie", name: "领结", kind: "neck", price: 80, desc: "正式场合专用", name_en: "Bow Tie", desc_en: "For formal occasions" },
+    Item { id: "scarf_red", name: "红围巾", kind: "neck", price: 90, desc: "风里也暖和", name_en: "Red Scarf", desc_en: "Warm in any wind" },
+    Item { id: "tie", name: "领带", kind: "neck", price: 100, desc: "上班的样子", name_en: "Necktie", desc_en: "Dressed for the office" },
+    Item { id: "bell_collar", name: "铃铛项圈", kind: "neck", price: 100, desc: "走哪儿都叮当", name_en: "Bell Collar", desc_en: "Jingles wherever it goes" },
+    Item { id: "pearls", name: "珍珠项链", kind: "neck", price: 180, desc: "优雅地摸鱼", name_en: "Pearls", desc_en: "Slacking off, elegantly" },
+    // --- back
+    Item { id: "backpack", name: "小书包", kind: "back", price: 140, desc: "装着没写完的 TODO", name_en: "Backpack", desc_en: "Full of unfinished TODOs" },
+    Item { id: "cape_red", name: "红披风", kind: "back", price: 160, desc: "飘起来就是英雄", name_en: "Red Cape", desc_en: "A hero when it flutters" },
+    Item { id: "wings_bat", name: "蝙蝠翅膀", kind: "back", price: 260, desc: "夜猫子专属", name_en: "Bat Wings", desc_en: "For night owls" },
+    Item { id: "jetpack", name: "喷气背包", kind: "back", price: 280, desc: "编译时起飞", name_en: "Jetpack", desc_en: "Lifts off while compiling" },
+    Item { id: "wings_angel", name: "天使翅膀", kind: "back", price: 320, desc: "一次通过长出来的", name_en: "Angel Wings", desc_en: "Grown from first-try passes" },
+    // --- feet
+    Item { id: "socks_stripe", name: "条纹袜", kind: "feet", price: 70, desc: "一只红一只绿", name_en: "Striped Socks", desc_en: "One red, one green" },
+    Item { id: "sneakers", name: "运动鞋", kind: "feet", price: 110, desc: "赛跑穿这个", name_en: "Sneakers", desc_en: "For the races" },
+    Item { id: "rain_boots", name: "雨靴", kind: "feet", price: 120, desc: "踩水坑专用", name_en: "Rain Boots", desc_en: "For stomping puddles" },
+    Item { id: "skates", name: "轮滑鞋", kind: "feet", price: 200, desc: "溜过去挨鞭子", name_en: "Roller Skates", desc_en: "Rolls over for the whip" },
+    // --- hand
+    Item { id: "lollipop", name: "棒棒糖", kind: "hand", price: 60, desc: "甜的", name_en: "Lollipop", desc_en: "Sweet" },
+    Item { id: "flag", name: "小旗", kind: "hand", price: 80, desc: "摇旗助威", name_en: "Little Flag", desc_en: "Waves you on" },
+    Item { id: "balloon", name: "气球", kind: "hand", price: 90, desc: "飘着的", name_en: "Balloon", desc_en: "Floats along" },
+    Item { id: "coffee", name: "咖啡", kind: "hand", price: 100, desc: "第三杯了", name_en: "Coffee", desc_en: "Third cup" },
+    Item { id: "umbrella", name: "小伞", kind: "hand", price: 150, desc: "挡一挡 bug", name_en: "Umbrella", desc_en: "Keeps the bugs off" },
+    Item { id: "wand", name: "魔杖", kind: "hand", price: 180, desc: "施法一次通过", name_en: "Wand", desc_en: "Casts first-try passes" },
+    // --- aura (around the whole body)
+    Item { id: "hearts", name: "冒爱心", kind: "aura", price: 180, desc: "头顶飘小心心", name_en: "Hearts", desc_en: "Little hearts drift up" },
+    Item { id: "sparkles", name: "星光", kind: "aura", price: 200, desc: "身边一直闪", name_en: "Sparkles", desc_en: "Glitters all around" },
+    Item { id: "rain_cloud", name: "小雨云", kind: "aura", price: 220, desc: "头顶自带一朵", name_en: "Rain Cloud", desc_en: "Comes with its own cloud" },
+    Item { id: "fireflies", name: "萤火虫", kind: "aura", price: 260, desc: "夜里亮", name_en: "Fireflies", desc_en: "Glows at night" },
+    Item { id: "flames", name: "火焰", kind: "aura", price: 300, desc: "今天很上头", name_en: "Flames", desc_en: "On fire today" },
+    Item { id: "rainbow", name: "彩虹", kind: "aura", price: 350, desc: "背后一道彩虹", name_en: "Rainbow", desc_en: "A rainbow behind" },
+    // --- the rest
     Item { id: "rope_rainbow", name: "彩虹拔河绳", kind: "rope", price: 150, desc: "拔河时用彩虹绳", name_en: "Rainbow Rope", desc_en: "A rainbow rope for tug-of-war" },
     Item { id: "rope_gold", name: "金色拔河绳", kind: "rope", price: 250, desc: "拔河时用金绳", name_en: "Golden Rope", desc_en: "A golden rope for tug-of-war" },
     Item { id: "quips_meme", name: "沙雕吐槽包", kind: "quips", price: 120, desc: "干活时多了一批沙雕台词", name_en: "Silly Quip Pack", desc_en: "A batch of goofy lines while working" },
@@ -316,9 +364,12 @@ pub fn buy(db: &Db, id: &str, now: u64) -> Result<String, String> {
     Ok(crate::tr!("买下了「{}」", "Bought \"{}\"", it.label()))
 }
 
-/// Equip (or with `item = None` take off) a cosmetic. Hats are per pack;
-/// ropes are global (pack "*").
+/// Equip (or with `item = None` take off) a cosmetic. Worn slots are per
+/// pack; ropes are global (pack "*").
 pub fn equip(db: &Db, pack: &str, slot: &str, item_id: Option<&str>) -> Result<(), String> {
+    if slot != "rope" && !WEAR_SLOTS.contains(&slot) {
+        return Err(crate::tr!("这件东西不能戴在这里", "That can't go there"));
+    }
     if let Some(id) = item_id {
         let it = item(id).ok_or_else(|| crate::tr!("没有这件商品", "No such item"))?;
         if it.kind != slot {
@@ -355,6 +406,16 @@ pub fn hat_of(db: &Db, pack: &str) -> Option<String> {
     })
     .ok()
     .flatten()
+}
+
+/// Everything a pack wears besides its hat: slot -> item.
+pub fn wear_of(db: &Db, pack: &str) -> std::collections::BTreeMap<String, String> {
+    db.with(|c| {
+        let mut st = c.prepare("SELECT slot, item FROM equipped WHERE pack = ?1 AND slot != 'hat'")?;
+        let rows = st.query_map([pack], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+        Ok(rows.flatten().collect())
+    })
+    .unwrap_or_default()
 }
 
 pub fn rope(db: &Db) -> Option<String> {
@@ -500,6 +561,28 @@ mod tests {
         equip(&db, "pixel-cat", "hat", None).unwrap();
         assert_eq!(hat_of(&db, "pixel-cat"), None);
         assert_eq!(db.income_on(&day_of(t0)), 200, "spending does not count as income");
+    }
+
+    #[test]
+    fn whole_body_slots() {
+        let db = Db::in_memory();
+        let t0 = 1_793_600_000_000;
+        db.earn(300, "test", "", t0, 1000);
+        buy(&db, "scarf_red", t0).unwrap();
+        buy(&db, "sneakers", t0).unwrap();
+        assert!(equip(&db, "pixel-cat", "hat", Some("scarf_red")).is_err(), "a scarf is not a hat");
+        assert!(equip(&db, "pixel-cat", "tail", Some("scarf_red")).is_err(), "no such slot");
+        equip(&db, "pixel-cat", "neck", Some("scarf_red")).unwrap();
+        equip(&db, "pixel-cat", "feet", Some("sneakers")).unwrap();
+        let w = wear_of(&db, "pixel-cat");
+        assert_eq!(w.get("neck").map(String::as_str), Some("scarf_red"));
+        assert_eq!(w.get("feet").map(String::as_str), Some("sneakers"));
+        assert!(wear_of(&db, "pixel-bot").is_empty());
+        assert!(CATALOG.iter().all(|i| i.kind == "rope" || i.kind == "quips" || WEAR_SLOTS.contains(&i.kind)), "every item has a slot");
+        let mut ids: Vec<&str> = CATALOG.iter().map(|i| i.id).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), CATALOG.len(), "ids are unique");
     }
 
     #[test]

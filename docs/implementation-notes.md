@@ -112,7 +112,8 @@ FAMILIAR_DEBUG=1 familiar-emit --source codex < payload.json   # 把处理过程
 ### M5 对抗与养成
 
 - **成就** 20 个，解锁奖励 10–100 金币（计入每日上限）。
-- **商店**：7 顶帽子（小红花、蝴蝶结、草帽、派对帽、毛线帽、法师帽、光环）、2 种拔河绳（彩虹、金色）、2 个吐槽台词包（沙雕、文艺）；花钱不算收入。
+- **商店**：全身 7 个槽位（hat / face / neck / back / feet / hand / aura，`progress::WEAR_SLOTS`），每个宠物包各穿各的，存在 `equipped (pack, slot, item)`；46 件商品定义在 `progress::CATALOG`，绘制全在 `app/src/decor.ts`（`drawWearBehind` 画翅膀、披风、书包和大光效，`drawWearFront` 画脚、脖子、脸、手里和小光效，帽子仍走 `drawHat`），位置来自 `Sprites.body()` 对每一帧的扫描（头、脖子最窄行、脚）。另有 2 种拔河绳（全局）、2 个吐槽台词包；花钱不算收入。
+- **报告统计**：`events (ts, day, kind, what, n)` 表记录 whip（what = 挨打的宠物）、game（what = 游戏名）、radio（n = 秒，电台窗口每 10 秒 POST `/v1/stat`，相声按段子时长）、kegel（n = 组数）、letter；`kv` 里 `peak:<day>` 记当天最多同时在线会话数、`duty:<day>:<camp>` 记各阵营在岗的宠物包。`/v1/report` 汇总成 whips / games / radio_s / kegel_reps / letters / peak_agents / duty。
 - **周赛季**：每周一结算上周每天拔河效率分的总和；冠军戴皇冠，输家戴"输"字纸帽；赛季帽会盖过装备的帽子。
 - **夜猫子提醒**：23 点以后完成任务提醒一句，每晚一次。
 - **赛跑下注**：两边 2 分钟内先后开始新一轮就开跑；20 秒内下注 10 / 50 / 100，单注不超过余额的一半；赔率 = 0.9 ÷ 最近 20 场胜率，限制在 1.2–5.0，不足 5 场时 1.8；赢了拿回本金加奖金，只有奖金计入每日上限。

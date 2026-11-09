@@ -98,6 +98,11 @@ pub struct PetView {
     /// an equipped shop hat.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hat: Option<String>,
+    /// The rest of the outfit from the shop: slot -> item (face, neck, back,
+    /// feet, hand, aura). Hats have their own field because the season
+    /// crown overrides them.
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub wear: std::collections::BTreeMap<String, String>,
     /// Evolution stage (0 = none; 1–3 at 100 / 500 / 2000 turns of this pack).
     pub stage: u8,
 }
@@ -124,6 +129,8 @@ pub struct Hub {
     pub activities: HashMap<String, String>,
     /// pet id -> hat, owned by the world layer.
     pub hats: HashMap<String, String>,
+    /// pet id -> (slot -> item) for the non-hat slots, owned by the world layer.
+    pub wear: HashMap<String, std::collections::BTreeMap<String, String>>,
     /// pet id -> evolution stage, owned by the world layer.
     pub stages: HashMap<String, u8>,
 }
@@ -179,6 +186,7 @@ impl Hub {
             feed: Vec::new(),
             activities: HashMap::new(),
             hats: HashMap::new(),
+            wear: HashMap::new(),
             stages: HashMap::new(),
         }
     }
@@ -437,6 +445,7 @@ impl Hub {
         for v in &mut views {
             v.activity = self.activities.get(&v.id).cloned();
             v.hat = self.hats.get(&v.id).cloned();
+            v.wear = self.wear.get(&v.id).cloned().unwrap_or_default();
             v.stage = self.stages.get(&v.id).copied().unwrap_or(0);
         }
 
@@ -540,6 +549,7 @@ impl Hub {
             activity: None,
             size: self.cfg.features.size_scale(),
             hat: None,
+            wear: Default::default(),
             stage: 0,
         }
     }

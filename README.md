@@ -215,7 +215,7 @@ None of this gets in the way of the status display. **While any session is waiti
 **Coins, shop and progress.**
 - Coins are global; the balance is the sum of the ledger. Daily income is capped at 300 (spending does not count).
 - 20 achievements (first pass, ten in a row, legend hunter, bug buster, night owl…), each paying 10–100 coins.
-- The shop sells cosmetics only: 7 hats (worn per pet; the head position is detected on every frame, so hats work on custom packs too), 2 tug ropes, 2 quip packs.
+- The shop sells cosmetics only, worn per pet in 7 slots: 11 hats, 5 things for the face (glasses, sunglasses, eyepatch, blush, monocle), 5 for the neck (scarf, bow tie, necktie, bell collar, pearls), 5 for the back (cape, angel / bat wings, backpack, jetpack), 4 pairs of shoes and socks, 6 to hold (balloon, lollipop, coffee, flag, wand, umbrella) and 6 auras (sparkles, hearts, rain cloud, fireflies, flames, rainbow), plus 2 tug ropes and 2 quip packs. Everything snaps to the head, neck and feet of every frame, so it fits custom packs too; the shop has a fitting room that shows the pet dressed, live.
 - Weekly seasons: every Monday the previous week's tug scores are added up; the winning team wears a crown for a week, the loser a paper hat.
 - Feeding (ring menu): uses the newest fish in your basket, mood +3.
 - Affinity between the two pets (0–100) grows with feeding, games, tug and comfort: 20 unlocks a high five after tug, 50 sleeping side by side, 80 a group photo on the daily report.
@@ -233,7 +233,7 @@ None of this gets in the way of the status display. **While any session is waiti
 
 **Kegel reminders**: add daily times in Gallery → Reminders (or right-click a pet → Health → Reminder settings). At each time the pet turns its back to you and leads a set: squeezing and lifting with its tail up, then relaxing with a wag, with "Squeeze ⬆ / Relax ⬇", a countdown and a soft beep; the page explains how to do it. Right-click → Health → Kegel set, or `/pet kegel`, starts one any time.
 
-**Daily report.** Pops up at the end of the workday (18:00 by default): agent working time, finished turns, fish caught, bugs squashed, tug results. Copy it as an image, or open it any time from the tray or ring menu.
+**Daily report.** Pops up at the end of the workday (18:00 by default): the pets on duty (which pet stood for each team, with its turns and time), agent working time, finished turns, first-try passes, fish caught, bugs squashed, coins, then lashes taken (and by whom), games played (by game), radio time (the radio window and comedy bits both count), kegel reps, letters received and the most agents online at once that day, followed by the tug result and the fish basket. Copy it as an image, or open it any time from the tray or ring menu.
 
 Per-turn details are kept for 90 days, then rolled up into daily totals.
 

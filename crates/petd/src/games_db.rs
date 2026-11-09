@@ -43,10 +43,12 @@ pub fn race_odds(db: &Db) -> (f64, f64) {
 
 pub fn record_race(db: &Db, now: u64, winner: &str) {
     let _ = db.with(|c| c.execute("INSERT INTO races (ts, winner) VALUES (?1, ?2)", params![now as i64, winner]));
+    db.log_event(now, "game", "race", 1);
 }
 
 pub fn record_duel(db: &Db, now: u64, project: &str, winner: &str) {
     let _ = db.with(|c| c.execute("INSERT INTO duels (ts, project, winner) VALUES (?1, ?2, ?3)", params![now as i64, project, winner]));
+    db.log_event(now, "game", "duel", 1);
 }
 
 /// Take a stake out of the wallet. At most half the balance (design §8).
