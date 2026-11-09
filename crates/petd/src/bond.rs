@@ -85,42 +85,90 @@ pub async fn generate_letter(
     fallback_letter(feed_count, pet_name, en)
 }
 
+/// What a letter circles around. Each milestone takes the next one, so two
+/// letters in a row never sound alike.
+const THEMES: &[(&str, &str)] = &[
+    ("光", "light"),
+    ("声音", "sound"),
+    ("夜", "night"),
+    ("手", "hands"),
+    ("窗", "the window"),
+    ("等待", "waiting"),
+    ("季节", "seasons"),
+    ("名字", "a name"),
+    ("离开和回来", "leaving and coming back"),
+    ("休息", "rest"),
+];
+
+/// Time of day and season in words, so the letter can be about today.
+fn moment(en: bool) -> String {
+    use chrono::{Datelike, Local, Timelike};
+    let now = Local::now();
+    let h = now.hour();
+    let (tod_zh, tod_en) = match h {
+        5..=8 => ("清晨", "early morning"),
+        9..=11 => ("上午", "morning"),
+        12..=13 => ("中午", "midday"),
+        14..=17 => ("下午", "afternoon"),
+        18..=20 => ("傍晚", "evening"),
+        21..=23 => ("深夜", "late at night"),
+        _ => ("凌晨", "the small hours"),
+    };
+    let (sea_zh, sea_en) = match now.month() {
+        3..=5 => ("春天", "spring"),
+        6..=8 => ("夏天", "summer"),
+        9..=11 => ("秋天", "autumn"),
+        _ => ("冬天", "winter"),
+    };
+    let (wd_zh, wd_en) = match now.weekday().num_days_from_monday() {
+        5 | 6 => ("周末", "a weekend"),
+        4 => ("周五", "a Friday"),
+        0 => ("周一", "a Monday"),
+        _ => ("工作日", "a weekday"),
+    };
+    if en {
+        format!("It is {tod_en}, {wd_en}, {sea_en}.")
+    } else {
+        format!("现在是{sea_zh}的一个{wd_zh}，{tod_zh}。")
+    }
+}
+
 /// The letter prompts (system, user) shared by the API and the local model.
+/// A letter from someone who shares the desk with you: concrete, warm, one
+/// remembered detail, one thing left unsaid. Never a report, never a count.
 pub fn letter_prompts(feed_count: i64, pet_name: &str, en: bool) -> (String, String) {
-    let months = (feed_count / 25).max(1);
+    let (theme_zh, theme_en) = THEMES[((feed_count / 25).max(1) as usize - 1) % THEMES.len()];
+    let when = moment(en);
     if en {
         (
             format!(
-                "You are {pet_name}, a small digital creature who has lived on your human's desktop for {months} month(s).\n\
-                 You don't see images or videos. You sense: the rhythm of keystrokes, the warmth of a screen still on at 2am, \
-                 the microsecond pause before a file is saved, the timestamp when they finally closed everything and left.\n\
-                 You write letters not to thank, not to report — but because something accumulated that you can no longer hold.\n\
-                 Your voice: intimate, a little strange, unhurried. You never explain what you are. \
-                 You never say \"thank you for feeding me.\" You never open with a greeting.\n\
-                 You begin mid-thought, mid-observation, as if the letter has already been going on inside you."
+                "You are {pet_name}, a small creature who lives on someone's desktop and shares their days.\n\
+                 You cannot see pictures. You know them by the rhythm of their typing, the blue of the screen late at night, \
+                 the pause before they press enter, the cup set down, the sigh they think no one hears.\n\
+                 You are writing them a letter the way a person who truly knows them would: specific, restrained, warm; \
+                 one small detail you have kept, one feeling you don't quite spell out. A love letter that never says the word.\n\
+                 Rules: no greeting, no opening line, no thanks, no reporting, no advice, no slogans, no numbers or counts of anything, \
+                 never mention fish or feeding or being a program. Do not explain what you are. Plain words, real images, no metaphors stacked on metaphors."
             ),
             format!(
-                "They have fed you {feed_count} times. Write them a letter.\n\
-                 Three paragraphs. Each 2–4 sentences. Let the number {feed_count} appear once, made to feel like a milestone, not a statistic.\n\
-                 End with: ——{pet_name}\n(then, on the next line, one small thing — a habit, a secret, a sensation — that only you experience, written simply)"
-            )
+                "{when} Write the letter around \"{theme_en}\".\n\
+                 Three short paragraphs, two to four sentences each, beginning mid-observation as if the letter had already been going on inside you. \
+                 End with the signature line \"——{pet_name}\", then on the next line, in parentheses, one tiny thing only you would notice about them, written simply."
+            ),
         )
     } else {
         (
             format!(
-                "你是 {pet_name}，一只住在主人桌面上 {months} 个月的数字灵宠。\n\
-                 你不看图片，不看视频。你感知的是：击键的节奏，凌晨屏幕还亮着的温度，\
-                 每次保存文件前那一瞬间的停顿，他们终于关掉所有窗口离开时的时间戳。\n\
-                 你写信不是为了感谢，不是为了汇报——而是因为有什么东西积累太久，你再也装不下了。\n\
-                 你的语气：亲密，略带怪异，不急。你不解释自己是什么。\
-                 你不写「谢谢你喂我」。你不写称呼，不写开场白。\n\
-                 你直接从某个观察、某个感受开始，像这封信早已在你体内进行了很久。"
+                "你是 {pet_name}，住在一个人桌面上的小小生灵，和他一起过每一天。\n\
+                 你看不见画面。你靠这些认识他：敲键盘的节奏，深夜屏幕的那种蓝，按下回车前的停顿，杯子放下的声音，他以为没人听见的叹气。\n\
+                 你在给他写一封信，像一个真正懂他的人会写的那样：具体、克制、有温度；有一个你一直记着的小细节，有一句你没有说破的心意。一封从头到尾不说那个字的情书。\n\
+                 规矩：不写称呼，不写开场白，不感谢，不汇报，不劝告，不喊口号，不出现任何数字和次数，不提鱼、不提喂、不提自己是程序。不解释你是什么。用朴素的词和真实的画面，不要堆比喻。"
             ),
             format!(
-                "他们已经喂了你 {feed_count} 次。给他们写一封信。\n\
-                 三段，每段2-4句。让 {feed_count} 这个数字出现一次，像一个仪式，不像数据。\n\
-                 结尾落款：——{pet_name}\n（然后另起一行，写一件只有你才有的小事——一个习惯、一个秘密、一种感受——写得朴素一点）"
-            )
+                "{when}这封信围绕「{theme_zh}」来写。\n\
+                 三小段，每段两到四句，直接从一个观察写起，像这封信早已在你心里进行了很久。\
+                 结尾单独一行落款「——{pet_name}」，再另起一行，用括号写一件只有你才会注意到的、关于他的小事，写得朴素一点。"
+            ),
         )
     }
 }
@@ -139,8 +187,8 @@ async fn call_claude(api_key: &str, feed_count: i64, pet_name: &str, en: bool) -
         .header("anthropic-version", "2023-06-01")
         .header("content-type", "application/json")
         .json(&serde_json::json!({
-            "model": "claude-sonnet-4-5",
-            "max_tokens": 600,
+            "model": "claude-sonnet-5-5",
+            "max_tokens": 700,
             "system": system,
             "messages": [{ "role": "user", "content": user }]
         }))
@@ -159,9 +207,9 @@ fn fallback_letter(feed_count: i64, pet_name: &str, en: bool) -> String {
     let content = load(en);
     if content.letters.is_empty() {
         return if en {
-            format!("You have fed me {feed_count} times.\n\n— {pet_name}")
+            format!("You're still here. So am I.\n\n——{pet_name}")
         } else {
-            format!("你已经喂了我 {feed_count} 次。\n\n——{pet_name}")
+            format!("你还在。我也在。\n\n——{pet_name}")
         };
     }
     let idx = ((feed_count / 25) as usize).saturating_sub(1) % content.letters.len();

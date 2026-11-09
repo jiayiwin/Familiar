@@ -17,7 +17,7 @@ const SHAKE_MS = 1200;
 
 interface Hand { kind: "hand"; t0: number; sign: number; reveal: number; until: number; side: "pet" | "user" }
 interface Fish { kind: "fish"; t0: number; dur: number; onArrive?: () => void; arrived?: boolean }
-interface Particles { kind: "hearts" | "confetti" | "coins"; t0: number; dur: number; seed: number; text?: string }
+interface Particles { kind: "hearts" | "confetti" | "coins" | "bite" | "glow"; t0: number; dur: number; seed: number; text?: string }
 interface Chip { kind: "chip"; id: string; text: string; color: string; t0: number; end?: { t0: number; how: "win" | "lose" | "shatter"; text?: string } }
 interface Progress { kind: "progress"; id: string; value: number; target: number }
 /** You vs the pet: a little card over its head. */
@@ -35,7 +35,7 @@ export class Fx {
       if (it.kind === "hand" || it.kind === "versus") return now < it.until;
       if (it.kind === "card") return now < it.t0 + 3000;
       if (it.kind === "fish") return now < it.t0 + it.dur + 50;
-      if (it.kind === "hearts" || it.kind === "confetti" || it.kind === "coins") return now < it.t0 + it.dur;
+      if (it.kind === "hearts" || it.kind === "confetti" || it.kind === "coins" || it.kind === "bite" || it.kind === "glow") return now < it.t0 + it.dur;
       if (it.kind === "chip") return !it.end || now < it.end.t0 + 1600;
       return true;
     });
@@ -60,11 +60,17 @@ export class Fx {
   }
 
   fish(onArrive: () => void): void {
-    this.items.push({ kind: "fish", t0: performance.now(), dur: 800, onArrive });
+    this.items.push({ kind: "fish", t0: performance.now(), dur: 900, onArrive });
   }
 
-  burst(kind: "hearts" | "confetti" | "coins", text?: string, delay = 0): void {
-    this.items.push({ kind, t0: performance.now() + delay, dur: kind === "confetti" ? 1800 : 1500, seed: Math.random() * 1000, text });
+  /**
+   * Particles: hearts drifting up, confetti, coins with an amount, a `bite`
+   * (crunch ring, crumbs and a sparkle at the mouth) or a `glow` (a warm
+   * pulse around the pet, for a secret or a letter).
+   */
+  burst(kind: Particles["kind"], text?: string, delay = 0): void {
+    const dur = kind === "confetti" ? 1800 : kind === "bite" ? 900 : kind === "glow" ? 1600 : 1500;
+    this.items.push({ kind, t0: performance.now() + delay, dur, seed: Math.random() * 1000, text });
   }
 
   chip(id: string, text: string, color: string): void {
@@ -104,7 +110,7 @@ export class Fx {
         case "versus": this.drawVersus(c, a, it, now); break;
         case "card": this.drawCard(c, a, it, now); break;
         case "fish": this.drawFish(c, a, it, now); break;
-        case "hearts": case "confetti": case "coins": this.drawParticles(c, a, it, now); break;
+        case "hearts": case "confetti": case "coins": case "bite": case "glow": this.drawParticles(c, a, it, now); break;
         case "chip": this.drawChip(c, a, it, now, chipRow++); break;
         case "progress": this.drawProgress(c, a, it); break;
       }
@@ -291,19 +297,56 @@ export class Fx {
     }
     const sx = 10, sy = 6;
     const ex = a.cx + a.headW * 0.05, ey = a.top + a.headW * 0.55;
-    const x = sx + (ex - sx) * k;
-    const y = sy + (ey - sy) * k - Math.sin(k * Math.PI) * 40;
+    const at = (q: number) => ({ x: sx + (ex - sx) * q, y: sy + (ey - sy) * q - Math.sin(q * Math.PI) * 44 });
+    const { x, y } = at(k);
     c.save();
+    // A glittering wake behind the fish: droplets and a few sparkles.
+    for (let i = 1; i <= 7; i++) {
+      const q = k - i * 0.045;
+      if (q <= 0) continue;
+      const p = at(q);
+      const fade = (1 - i / 8) * 0.8;
+      c.globalAlpha = fade;
+      c.fillStyle = i % 2 ? "#9ad7ff" : "#fff6c2";
+      const r = i % 2 ? 2.2 - i * 0.15 : 3 - i * 0.25;
+      if (i % 3 === 0) {
+        // Four-point sparkle.
+        c.beginPath();
+        for (let s = 0; s < 8; s++) {
+          const ang = (s / 8) * Math.PI * 2 + k * 6;
+          const rr = s % 2 ? r * 0.4 : r * 1.8;
+          c.lineTo(p.x + Math.cos(ang) * rr, p.y + Math.sin(ang) * rr);
+        }
+        c.closePath();
+        c.fill();
+      } else {
+        c.beginPath();
+        c.arc(p.x, p.y + Math.sin(i * 3 + k * 20) * 3, Math.max(0.8, r), 0, Math.PI * 2);
+        c.fill();
+      }
+    }
+    c.globalAlpha = 1;
     c.translate(x, y);
-    c.rotate(k * Math.PI * 2);
+    // Nose along the arc, spinning once near the end.
+    const d = at(Math.min(1, k + 0.02));
+    c.rotate(Math.atan2(d.y - y, d.x - x) + (k > 0.6 ? ((k - 0.6) / 0.4) * Math.PI * 2 : 0));
+    const sc = 1 + Math.sin(k * Math.PI) * 0.25;
+    c.scale(sc, sc);
+    c.shadowColor = "rgba(255,214,102,0.8)";
+    c.shadowBlur = 8;
     c.fillStyle = "#f4a261";
     c.beginPath();
     c.ellipse(0, 0, 9, 5, 0, 0, Math.PI * 2);
     c.fill();
     c.beginPath();
     c.moveTo(-8, 0);
-    c.lineTo(-14, -5);
-    c.lineTo(-14, 5);
+    c.lineTo(-14, -5 - Math.sin(k * 40) * 2);
+    c.lineTo(-14, 5 + Math.sin(k * 40) * 2);
+    c.fill();
+    c.shadowBlur = 0;
+    c.fillStyle = "rgba(255,255,255,0.75)";
+    c.beginPath();
+    c.ellipse(-1, -1.5, 5, 1.5, 0, 0, Math.PI * 2);
     c.fill();
     c.fillStyle = "#2b1d16";
     c.fillRect(3, -2, 2, 2);
@@ -318,7 +361,66 @@ export class Fx {
     };
     c.save();
     c.globalAlpha = Math.max(0, 1 - k);
-    if (p.kind === "hearts") {
+    if (p.kind === "bite") {
+      // The bite: a ring snaps out from the mouth, crumbs scatter, a star pops.
+      const mx = a.cx + a.headW * 0.05, my = a.top + a.headW * 0.55;
+      c.strokeStyle = "rgba(255,255,255,0.9)";
+      c.lineWidth = 2.5 * (1 - k);
+      c.beginPath();
+      c.arc(mx, my, 6 + k * a.headW * 0.9, 0, Math.PI * 2);
+      c.stroke();
+      c.strokeStyle = "rgba(255,214,102,0.9)";
+      c.lineWidth = 1.5 * (1 - k);
+      c.beginPath();
+      c.arc(mx, my, 3 + k * a.headW * 0.6, 0, Math.PI * 2);
+      c.stroke();
+      for (let i = 0; i < 10; i++) {
+        const ang = rand(i) * Math.PI * 2;
+        const sp = 18 + rand(i + 7) * 26;
+        const t = k;
+        const x = mx + Math.cos(ang) * sp * t;
+        const y = my + Math.sin(ang) * sp * t * 0.7 + 70 * t * t;
+        c.fillStyle = i % 3 === 0 ? "#f4a261" : i % 3 === 1 ? "#ffd166" : "#fff6c2";
+        c.beginPath();
+        c.arc(x, y, 1.6 + rand(i + 3) * 1.4, 0, Math.PI * 2);
+        c.fill();
+      }
+      if (k < 0.5) {
+        const pop = Math.sin((k / 0.5) * Math.PI);
+        c.fillStyle = "#fff6c2";
+        c.beginPath();
+        for (let s = 0; s < 8; s++) {
+          const ang = (s / 8) * Math.PI * 2 - Math.PI / 2;
+          const rr = s % 2 ? 3 * pop : 9 * pop;
+          c.lineTo(mx + a.headW * 0.35 + Math.cos(ang) * rr, my - a.headW * 0.3 + Math.sin(ang) * rr);
+        }
+        c.closePath();
+        c.fill();
+      }
+    } else if (p.kind === "glow") {
+      // A warm pulse around the whole pet, with motes rising through it.
+      const cy = (a.top + a.bottom) / 2;
+      const r = a.headW * 1.6;
+      const pulse = 0.5 + 0.5 * Math.sin(k * Math.PI * 3);
+      const g = c.createRadialGradient(a.cx, cy, r * 0.2, a.cx, cy, r);
+      g.addColorStop(0, `rgba(255,214,120,${0.35 * (1 - k) * (0.7 + 0.3 * pulse)})`);
+      g.addColorStop(1, "rgba(255,214,120,0)");
+      c.globalAlpha = 1;
+      c.fillStyle = g;
+      c.beginPath();
+      c.ellipse(a.cx, cy, r, r * 1.15, 0, 0, Math.PI * 2);
+      c.fill();
+      for (let i = 0; i < 9; i++) {
+        const q = (k + rand(i)) % 1;
+        const x = a.cx + (rand(i + 4) - 0.5) * a.headW * 2.2 + Math.sin(q * 6 + i) * 4;
+        const y = a.bottom - q * (a.bottom - a.top + 30);
+        c.globalAlpha = Math.sin(q * Math.PI) * (1 - k);
+        c.fillStyle = i % 2 ? "#fff6c2" : "#ffd166";
+        c.beginPath();
+        c.arc(x, y, 1.5 + rand(i + 8) * 1.5, 0, Math.PI * 2);
+        c.fill();
+      }
+    } else if (p.kind === "hearts") {
       c.font = "14px 'Segoe UI Emoji', sans-serif";
       c.textAlign = "center";
       for (let i = 0; i < 5; i++) {

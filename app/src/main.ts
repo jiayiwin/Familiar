@@ -370,18 +370,15 @@ function playFx(pet: PetRenderer, p: Record<string, unknown>) {
         break;
       case "feed":
         if (p.ok) {
+          // The fish flies in; when it lands: a bite, a shimmer, and whatever the pet has to say.
+          const bond = String(p.bond ?? "");
           pet.fx.fish(() => {
-            const count = Number(p.count) || 0;
-            const batch = Number(p.batch) || 1;
-            const bond = String(p.bond ?? "");
             const baseText = String(p.text ?? tr("……嗯。", "…mm."));
-            const batchPrefix = batch > 1 ? tr(`×${batch} · `, `×${batch} · `) : "";
-            const countLine = count > 0 ? `${batchPrefix}${tr(`第 ${count} 条`, `#${count}`)}` : "";
-            const milestoneHint =
-              bond === "letter" ? tr(" · 有封信给你", " · a letter for you") :
-              bond === "secret" ? tr(" · 揭晓一个秘密", " · a secret revealed") : "";
-            pet.override("eat", 0, "script", countLine ? `${baseText}\n${countLine}${milestoneHint}` : baseText);
-            pet.fx.burst("hearts");
+            const hint = bond === "letter" ? tr("\n（有封信给你。在右键菜单里。）", "\n(There's a letter for you. In the right-click menu.)") : "";
+            pet.override("eat", 0, "script", baseText + hint);
+            pet.fx.burst("bite");
+            pet.fx.burst("hearts", undefined, 350);
+            if (bond === "letter" || bond === "secret") pet.fx.burst("glow", undefined, 500);
           });
         } else {
           pet.say(String(p.text), 3000);

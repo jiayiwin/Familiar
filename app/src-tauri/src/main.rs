@@ -599,9 +599,14 @@ fn on_menu(h: &AppHandle, id: &str) {
                     let en = petd::i18n::is_en();
                     let home = app.petd.paths.home.clone();
                     let pet_label = format!("pet-{pet}");
+                    // The pet's picture goes on the envelope as the stamp.
+                    let stamp = {
+                        let info = h.state::<Info>();
+                        format!("http://127.0.0.1:{}/v1/packs/{}/files/preview.png?token={}", info.port, pack_id, info.token)
+                    };
                     tauri::async_runtime::spawn(async move {
                         let letter = petd::bond::generate_letter(fc, &display_name, en, Some(home)).await;
-                        let payload = serde_json::json!({ "text": letter, "count": fc, "pet_name": display_name });
+                        let payload = serde_json::json!({ "text": letter, "count": fc, "pet_name": display_name, "pack": pack_id, "stamp": stamp });
                         *PENDING_LETTER.lock().unwrap() = Some(payload);
                         let _ = h2.emit_to(pet_label.as_str(), "letter-notify", ());
                     });
