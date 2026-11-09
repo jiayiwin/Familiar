@@ -111,11 +111,14 @@ function countryName(code: string, fallback = ""): string {
     return fallback || code;
   }
 }
-const tint = (s: string) => {
+const hash = (s: string) => {
   let h = 0;
   for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return `tn-${h % 5}`;
+  return h;
 };
+const tint = (s: string) => `tn-${hash(s) % 5}`;
+/** A hue for a station's art, from its name: the same station always gets the same colours. */
+const hue = (s: string) => hash(s) % 360;
 const initial = (s: string) => [...s.replace(/^[\s\p{P}\p{S}\d]+/u, "")][0]?.toUpperCase() ?? "♪";
 const TAG_ZH: Record<string, string> = {
   crosstalk: "相声", storytelling: "评书", comedy: "喜剧", news: "新闻", music: "音乐", entertainment: "娱乐", culture: "文化", opera: "戏曲",
@@ -158,7 +161,7 @@ let announced = "";
 
 function setState(s: typeof state, note?: string) {
   state = s;
-  player.classList.toggle("playing", s === "playing");
+  for (const k of ["playing", "loading", "error"] as const) player.classList.toggle(k, s === k);
   playBtn.innerHTML = s === "playing" || s === "loading" ? PAUSE : PLAY;
   playBtn.disabled = !cur;
   statusEl.textContent =
@@ -188,6 +191,7 @@ setInterval(() => {
 
 function showCurrent() {
   if (!cur) return;
+  player.style.setProperty("--h", String(hue(cur.name)));
   nameEl.textContent = cur.name;
   const bits = [countryName(cur.countrycode, cur.country), tagLine(cur), cur.bitrate ? `${cur.codec || ""} ${cur.bitrate}k`.trim() : ""].filter(Boolean);
   metaEl.textContent = bits.join(" · ");
@@ -309,22 +313,29 @@ let rows: Station[] = [];
 let loading = false;
 let error = "";
 
-function stationRow(s: Station): HTMLButtonElement {
+const EQ = "<i></i><i></i><i></i><i></i>";
+const isOn = (s: Station) => cur?.stationuuid === s.stationuuid && state === "playing";
+
+function stationRow(s: Station, i = 0): HTMLButtonElement {
   const b = document.createElement("button");
   b.className = "st" + (cur?.stationuuid === s.stationuuid ? " cur" : "");
+  b.style.animationDelay = `${Math.min(i, 12) * 28}ms`;
   const ic = document.createElement("span");
   ic.className = "ic";
   icon(s, ic);
   const tx = document.createElement("span");
   tx.className = "tx";
   const nm = document.createElement("b");
-  if (cur?.stationuuid === s.stationuuid && state === "playing") {
+  if (isOn(s)) {
     const eq = document.createElement("span");
     eq.className = "eq";
-    eq.innerHTML = "<i></i><i></i><i></i>";
+    eq.innerHTML = EQ;
     nm.appendChild(eq);
   }
-  nm.append(s.name.trim());
+  const name = document.createElement("span");
+  name.className = "nm";
+  name.textContent = s.name.trim();
+  nm.appendChild(name);
   const sm = document.createElement("small");
   const cc = document.createElement("span");
   cc.className = "cc";
@@ -338,8 +349,46 @@ function stationRow(s: Station): HTMLButtonElement {
     h.textContent = "♥";
     b.appendChild(h);
   }
-  b.onclick = () => (cur?.stationuuid === s.stationuuid && state === "playing" ? undefined : void play(s));
+  const go = document.createElement("span");
+  go.className = "go";
+  go.innerHTML = '<svg viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>';
+  b.appendChild(go);
+  b.onclick = () => (isOn(s) ? undefined : void play(s));
   return b;
+}
+
+/** A big tile for the top of the popular rack. */
+function featured(s: Station, rank: number): HTMLButtonElement {
+  const b = document.createElement("button");
+  b.className = "ft" + (cur?.stationuuid === s.stationuuid ? " cur" : "");
+  b.style.setProperty("--h", String(hue(s.name)));
+  b.style.animationDelay = `${rank * 60}ms`;
+  const ic = document.createElement("span");
+  ic.className = "ic";
+  icon(s, ic);
+  const rk = document.createElement("span");
+  rk.className = "rank";
+  rk.textContent = String(rank + 1).padStart(2, "0");
+  const nm = document.createElement("b");
+  nm.textContent = s.name.trim();
+  const sm = document.createElement("small");
+  sm.textContent = [countryName(s.countrycode, s.country), tagLine(s)].filter(Boolean).join(" · ");
+  b.append(ic, rk, nm, sm);
+  b.onclick = () => (isOn(s) ? undefined : void play(s));
+  return b;
+}
+
+/** Slide the pill under the active tab. */
+function moveInd() {
+  const on = document.querySelector<HTMLButtonElement>("#tabs button.on");
+  const ind = document.querySelector<HTMLElement>("#tabs .ind");
+  if (!ind) return;
+  if (!on) {
+    ind.style.width = "0";
+    return;
+  }
+  ind.style.left = `${on.offsetLeft}px`;
+  ind.style.width = `${on.offsetWidth}px`;
 }
 
 function sub(text: string, cls = "", back?: () => void): HTMLElement {
@@ -366,6 +415,7 @@ function renderList() {
   const keep = list.scrollTop;
   list.replaceChildren();
   document.querySelectorAll<HTMLButtonElement>("#tabs button").forEach((b) => b.classList.toggle("on", !query && b.dataset.tab === tab));
+  moveInd();
   if (loading) return void list.appendChild(empty(tr("加载中…", "Loading…")));
   if (error) return void list.appendChild(empty(error));
   if (query) list.appendChild(sub(tr(`搜索“${query}”`, `Search “${query}”`), "", () => { q.value = ""; query = ""; void refresh(); }));
@@ -394,14 +444,60 @@ function renderList() {
     return;
   } else if (tab === "world" && country) list.appendChild(sub(countryName(country.iso_3166_1, country.name), "y", () => { country = null; void refresh(); }));
   else if (tab === "xs") list.appendChild(sub(tr("相声 · 评书 · 曲艺", "Chinese crosstalk (相声) and comedy")));
-  else if (tab === "hot") list.appendChild(sub(tr("国内热门", "Most played worldwide")));
+  else if (tab === "hot") list.appendChild(sub(tr("今日推荐", "Featured today")));
   else if (tab === "fav") list.appendChild(sub(tr("我的收藏", "My favorites")));
   if (!rows.length) {
     list.appendChild(empty(tab === "fav" && !query ? tr("还没有收藏。播放时点 ♡ 收藏电台。", "No favorites yet. Tap ♡ while a station plays.") : tr("没找到电台", "No stations found")));
     return;
   }
-  for (const s of rows) list.appendChild(stationRow(s));
+  let rest = rows;
+  if (tab === "hot" && !query && rows.length >= 6) {
+    // The top few as big tiles, the rest as rows.
+    const feat = document.createElement("div");
+    feat.className = "feat";
+    rows.slice(0, 5).forEach((s, i) => feat.appendChild(featured(s, i)));
+    list.appendChild(feat);
+    list.appendChild(sub(tr("更多热门", "More popular")));
+    rest = rows.slice(5);
+  }
+  rest.forEach((s, i) => list.appendChild(stationRow(s, i)));
   list.scrollTop = keep;
+}
+
+// ---------------------------------------------------------------- spectrum
+
+/** Bars behind the station name that move to the music (shaped, not measured:
+ *  most streams forbid reading their audio, so this is a lively impression). */
+function vizLoop() {
+  const cv = document.getElementById("viz") as HTMLCanvasElement | null;
+  if (!cv) return;
+  const dpr = devicePixelRatio || 1;
+  const W = cv.clientWidth, H = cv.clientHeight;
+  if (W && cv.width !== Math.round(W * dpr)) {
+    cv.width = Math.round(W * dpr);
+    cv.height = Math.round(H * dpr);
+  }
+  const g = cv.getContext("2d")!;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, W, H);
+  const t = performance.now() / 1000;
+  const n = 36, gap = 3, bw = (W - gap * (n + 1)) / n;
+  const live = state === "playing" ? 1 : state === "loading" ? 0.35 : 0.12;
+  for (let i = 0; i < n; i++) {
+    const k = i / (n - 1);
+    const env = 0.35 + 0.65 * Math.exp(-((k - 0.42) ** 2) / 0.09); // louder in the middle
+    const wave = 0.5 + 0.5 * Math.sin(t * 2.1 + i * 0.55) * Math.sin(t * 0.7 + i * 0.21) + 0.25 * Math.sin(t * 5.3 + i * 1.7);
+    const h = Math.max(3, (6 + wave * env * (H - 16) * live));
+    const x = gap + i * (bw + gap);
+    const grad = g.createLinearGradient(0, H - h, 0, H);
+    grad.addColorStop(0, "rgba(255,255,255,0.95)");
+    grad.addColorStop(1, "rgba(255,255,255,0.05)");
+    g.fillStyle = grad;
+    g.beginPath();
+    g.roundRect(x, H - h, bw, h, bw / 2);
+    g.fill();
+  }
+  requestAnimationFrame(vizLoop);
 }
 
 let seq = 0;
@@ -465,10 +561,15 @@ async function main() {
     if (tab === "fav") void refresh();
     else renderList();
   };
+  const paintVol = () => vol.style.setProperty("--v", `${vol.value}%`);
+  paintVol();
   vol.oninput = () => {
     audio.volume = Number(vol.value) / 100;
     save("radio.vol", Number(vol.value));
+    paintVol();
   };
+  requestAnimationFrame(vizLoop);
+  window.addEventListener("resize", moveInd);
   document.querySelectorAll<HTMLButtonElement>("#tabs button").forEach((b) => {
     b.onclick = () => {
       tab = b.dataset.tab as Tab;

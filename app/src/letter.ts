@@ -30,8 +30,26 @@ async function init() {
     return;
   }
   const { invoke } = await import("@tauri-apps/api/core");
-  const data = await invoke<LetterData | null>("take_letter");
+  // The newest letter, or the last one read when nothing new is waiting.
+  let data = await invoke<LetterData | null>("take_letter");
+  if (data) {
+    try {
+      localStorage.setItem("letter.last", JSON.stringify(data));
+    } catch {
+      /* no storage */
+    }
+  } else {
+    try {
+      data = JSON.parse(localStorage.getItem("letter.last") ?? "null") as LetterData | null;
+    } catch {
+      data = null;
+    }
+  }
   showEnvelope(data);
+  // Closing only hides this window; when it is opened again, start over with
+  // whatever letter is waiting now.
+  const { getCurrentWebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+  await getCurrentWebviewWindow().listen("letter-show", () => location.reload());
 }
 
 function showEnvelope(data: LetterData | null) {

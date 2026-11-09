@@ -311,6 +311,9 @@ pub fn open_report(h: &AppHandle) {
 /// A letter from the pet: decorated=false, transparent, always on top.
 pub fn open_letter(h: &AppHandle) -> tauri::Result<WebviewWindow> {
     if let Some(w) = h.get_webview_window("letter") {
+        // The window is only hidden on close, so tell the page to pick up the
+        // new letter (it reloads itself).
+        let _ = w.emit("letter-show", ());
         let _ = w.show();
         let _ = w.set_focus();
         return Ok(w);
