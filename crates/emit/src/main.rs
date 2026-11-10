@@ -1,8 +1,9 @@
 //! familiar-emit: called once per agent hook.
 //!
-//! Hard rules: exit code is always 0, nothing is written to stdout in hook
-//! mode, total time stays under ~300 ms. If petd is unreachable the event is
-//! spooled to disk and petd is started detached.
+//! Hard rules: exit code is always 0, total time stays under ~300 ms, and the
+//! only thing ever written to stdout in hook mode is a note petd wants the
+//! agent to read (a whip), as the hook's `additionalContext`. If petd is
+//! unreachable the event is spooled to disk and petd is started detached.
 //!
 //! Usage:
 //!   familiar-emit --source claude-code     (hook mode, payload on stdin)
@@ -74,7 +75,14 @@ fn run(args: &[String]) {
 
     let remaining = HOOK_BUDGET.saturating_sub(start.elapsed());
     match post("/v1/event", &body, remaining) {
-        Ok((200..=299, _)) => trace(&"sent"),
+        Ok((code @ 200..=299, reply)) => {
+            trace(&"sent");
+            if let Some(note) = (code == 200 && source == "claude-code").then(|| agent_note(&input, &reply)).flatten() {
+                let mut so = std::io::stdout().lock();
+                let _ = writeln!(so, "{note}");
+                let _ = so.flush();
+            }
+        }
         Ok((code, _)) => {
             trace(&format!("petd answered {code}, spooled"));
             spool(&body)
@@ -88,6 +96,34 @@ fn run(args: &[String]) {
             spool(&body);
             launch_petd();
         }
+    }
+}
+
+/// petd answered with a note for the agent: the hook output that hands it over
+/// as extra context, on the Claude Code hooks that accept it.
+fn agent_note(input: &serde_json::Value, reply: &str) -> Option<String> {
+    let hook = input.get("hook_event_name")?.as_str()?;
+    if !matches!(hook, "UserPromptSubmit" | "PreToolUse" | "PostToolUse" | "PostToolUseFailure") {
+        return None;
+    }
+    let text = serde_json::from_str::<serde_json::Value>(reply).ok()?.get("nudge")?.as_str()?.to_string();
+    Some(serde_json::json!({ "hookSpecificOutput": { "hookEventName": hook, "additionalContext": text } }).to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn a_note_rides_on_hooks_that_take_context() {
+        let reply = r#"{"nudge":"[Familiar] faster"}"#;
+        let out = agent_note(&json!({ "hook_event_name": "PostToolUse", "session_id": "s" }), reply).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["hookSpecificOutput"]["hookEventName"], "PostToolUse");
+        assert_eq!(v["hookSpecificOutput"]["additionalContext"], "[Familiar] faster");
+        assert!(agent_note(&json!({ "hook_event_name": "Stop", "session_id": "s" }), reply).is_none(), "Stop cannot carry context");
+        assert!(agent_note(&json!({ "hook_event_name": "PreToolUse" }), "").is_none(), "no body, nothing to say");
     }
 }
 

@@ -16,6 +16,18 @@ use std::collections::{HashMap, HashSet};
 
 pub type Key = (String, String);
 
+/// A whip that has not reached the agent yet.
+#[derive(Debug, Clone)]
+pub struct Nudge {
+    /// `user` (from the menu) or `slow` (the other camp came over).
+    pub reason: String,
+    pub count: u32,
+    pub ts: u64,
+}
+
+/// A lash older than this is not worth mentioning any more.
+const NUDGE_TTL: u64 = 20 * 60_000;
+
 /// What happened, for the world layer (drained every tick).
 #[derive(Debug, Clone)]
 pub enum Feed {
@@ -129,6 +141,8 @@ pub struct Hub {
     pub activities: HashMap<String, String>,
     /// pet id -> hat, owned by the world layer.
     pub hats: HashMap<String, String>,
+    /// Lashes waiting to be told to the agent behind a session, on its next hook.
+    pub nudges: HashMap<Key, Nudge>,
     /// pet id -> (slot -> item) for the non-hat slots, owned by the world layer.
     pub wear: HashMap<String, std::collections::BTreeMap<String, String>>,
     /// pet id -> evolution stage, owned by the world layer.
@@ -186,6 +200,7 @@ impl Hub {
             feed: Vec::new(),
             activities: HashMap::new(),
             hats: HashMap::new(),
+            nudges: HashMap::new(),
             wear: HashMap::new(),
             stages: HashMap::new(),
         }
@@ -285,6 +300,59 @@ impl Hub {
             return (id, format!("project:{pat}"), pack.to_string(), Some(s.project_name().to_string()));
         }
         (safe_id(&s.source), camp_target(&s.source), self.cfg.pack_for_source(&s.source), None)
+    }
+
+    /// Queue a lash for every live session behind `pet`; `take_nudge` hands it on.
+    pub fn nudge(&mut self, pet: &str, reason: &str, now: u64) {
+        let keys: Vec<Key> = self
+            .groups()
+            .into_iter()
+            .filter(|g| g.id == pet)
+            .flat_map(|g| g.sessions)
+            .filter(|s| s.state != State::Offline)
+            .map(|s| (s.source.clone(), s.session.clone()))
+            .collect();
+        for k in keys {
+            let n = self.nudges.entry(k).or_insert(Nudge { reason: reason.into(), count: 0, ts: now });
+            n.count += 1;
+            n.ts = now;
+            n.reason = reason.into();
+        }
+    }
+
+    /// The note for the agent behind this session, if a lash is waiting: what
+    /// it meant and what to do about it, by what the session is doing now.
+    pub fn take_nudge(&mut self, source: &str, session: &str, now: u64) -> Option<String> {
+        let key = (source.to_string(), session.to_string());
+        let n = self.nudges.remove(&key)?;
+        if now.saturating_sub(n.ts) > NUDGE_TTL {
+            return None;
+        }
+        let state = self.sessions.get(&key).map(|s| s.state).unwrap_or(State::Idle);
+        let nth = if n.count > 1 { crate::tr!("（已经第 {} 下了）", " (that makes {})", n.count) } else { String::new() };
+        let body = match (n.reason.as_str(), state) {
+            ("slow", _) => crate::tr!(
+                "另一边的宠物嫌你这一轮拖得太久，拿着鞭子过来抽了一下{}。先把手头这一步收个尾，用一句话说明进展，别再开新的摊子。",
+                "The other team's pet came over and cracked the whip: this turn has been dragging{}. Finish the step in hand, say where things stand in one line, and don't open anything new.",
+                nth
+            ),
+            (_, State::Error | State::Stone | State::Aborted) => crate::tr!(
+                "主人对你抽了一鞭子{}。刚才出了错：先修它，别绕开；修好后用一句话说明原因。",
+                "Your user cracked the whip at you{}. Something just failed: fix that first, don't route around it, and give the cause in one line once it works.",
+                nth
+            ),
+            (_, State::Thinking | State::Tool | State::Reading) => crate::tr!(
+                "主人对你抽了一鞭子{}，意思是：快一点。下一条回复开头先用一句话说清做到哪、还剩什么，然后少解释、多动手；卡住了就直说卡在哪。",
+                "Your user cracked the whip at you{}. It means: faster. Open your next reply with one line on where you are and what is left, then do more and explain less; if you are stuck, say where.",
+                nth
+            ),
+            _ => crate::tr!(
+                "主人对你抽了一鞭子{}。他想知道进度。下一条回复先用两三句话汇报：做完了什么，还剩什么，有没有需要他拍板的事。",
+                "Your user cracked the whip at you{}. They want to know where things stand. Open your next reply with two or three lines: what is done, what is left, anything that needs their call.",
+                nth
+            ),
+        };
+        Some(format!("[Familiar] {body}"))
     }
 
     fn groups(&self) -> Vec<Group<'_>> {
@@ -629,6 +697,46 @@ impl Hub {
             ));
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod nudge_tests {
+    use super::*;
+    use crate::config::Config;
+    use crate::pack::Library;
+    use crate::protocol::{Detail, Event, EventKind};
+
+    fn hub_with(sessions: &[(&str, &str)]) -> (Hub, u64) {
+        let mut h = Hub::new(Config::default(), Library::default());
+        let t0 = 1_793_600_000_000;
+        for (source, id) in sessions {
+            let e = Event { v: 1, source: (*source).into(), session: (*id).into(), project: "/w/p".into(), event: EventKind::ToolStart, sub: false, detail: Detail::default(), pid: 0, ts: t0 };
+            h.apply(&e, t0);
+        }
+        (h, t0)
+    }
+
+    #[test]
+    fn a_whip_reaches_every_session_of_the_pet_once() {
+        let (mut h, t0) = hub_with(&[("claude-code", "s1"), ("claude-code", "s2"), ("codex", "c1")]);
+        let pet = h.pets().into_iter().find(|v| v.camp.as_deref() == Some("claude-code")).unwrap().id;
+        h.nudge(&pet, "user", t0);
+        h.nudge(&pet, "user", t0 + 1000);
+        let note = h.take_nudge("claude-code", "s1", t0 + 2000).expect("s1 hears about it");
+        assert!(note.starts_with("[Familiar]"));
+        assert!(note.contains("2") || note.contains("第"), "the second lash is counted: {note}");
+        assert!(h.take_nudge("claude-code", "s1", t0 + 3000).is_none(), "said once");
+        assert!(h.take_nudge("claude-code", "s2", t0 + 2000).is_some());
+        assert!(h.take_nudge("codex", "c1", t0 + 2000).is_none(), "the other camp was not whipped");
+    }
+
+    #[test]
+    fn an_old_lash_is_forgotten() {
+        let (mut h, t0) = hub_with(&[("claude-code", "s1")]);
+        let pet = h.pets()[0].id.clone();
+        h.nudge(&pet, "slow", t0);
+        assert!(h.take_nudge("claude-code", "s1", t0 + NUDGE_TTL + 1).is_none());
     }
 }
 

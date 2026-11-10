@@ -128,12 +128,24 @@ async fn auth(Ax(sh): Ax<Shared>, req: Request, next: Next) -> Response {
     }
 }
 
-async fn event(Ax(sh): Ax<Shared>, Json(ev): Json<Event>) -> StatusCode {
-    let urgent = sh.hub.lock().unwrap().apply(&ev, crate::now_ms());
+/// Takes the emitter's event. When a whip is waiting for this session and the
+/// hook behind the event can carry context, the reply holds the note for the agent.
+async fn event(Ax(sh): Ax<Shared>, Json(ev): Json<Event>) -> Response {
+    use crate::protocol::EventKind;
+    let now = crate::now_ms();
+    let (urgent, nudge) = {
+        let mut hub = sh.hub.lock().unwrap();
+        let urgent = hub.apply(&ev, now);
+        let carries = matches!(ev.event, EventKind::TurnStart | EventKind::ToolStart | EventKind::ToolEnd);
+        (urgent, if carries { hub.take_nudge(&ev.source, &ev.session, now) } else { None })
+    };
     if urgent {
         sh.urgent.notify_one();
     }
-    StatusCode::NO_CONTENT
+    match nudge {
+        Some(text) => Json(serde_json::json!({ "nudge": text })).into_response(),
+        None => StatusCode::NO_CONTENT.into_response(),
+    }
 }
 
 #[derive(Deserialize)]

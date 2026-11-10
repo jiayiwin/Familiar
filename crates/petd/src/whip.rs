@@ -78,6 +78,30 @@ const USER_ERROR: &[(&str, &str)] = &[
 ];
 const USER_ATTENTION: (&str, &str) = ("等你呢。先回话。", "I'm waiting on you. Answer first.");
 
+// The other pet, watching from its own window.
+const WATCH_TAUNT: &[(&str, &str)] = &[
+    ("该。", "Serves you right."),
+    ("我看着呢。再来一下。", "I'm watching. Once more."),
+    ("慢的是你，不是我。", "You're the slow one. Not me."),
+    ("疼吗。我猜疼。", "Hurt? I'd guess so."),
+    ("下回站我后面。", "Stand behind me next time."),
+];
+const WATCH_PITY: &[(&str, &str)] = &[
+    ("……轻点。它在做了。", "…gently. It's working."),
+    ("抽它不如抽我。", "You'd do better whipping me."),
+    ("别看。马上就过去。", "Don't look. It's almost over."),
+    ("它今天没偷懒。", "It didn't slack today."),
+    ("等会儿我陪你坐一会儿。", "I'll sit with you after."),
+];
+const WATCH_NERVOUS: &[(&str, &str)] = &[
+    ("……我没看。", "…I didn't see anything."),
+    ("下一个别是我。", "Not me next. Please."),
+    ("我在干活。真的。", "I'm working. Really."),
+    ("鞭子声有点大。", "That whip is loud."),
+];
+/// How long the onlooker holds its face.
+const WATCH_MS: u64 = 2200;
+
 impl World {
     fn whip_line(&mut self, set: &[(&'static str, &'static str)]) -> &'static str {
         self.pick(set).map(|(zh, en)| crate::i18n::t(zh, en)).unwrap_or("")
@@ -116,6 +140,37 @@ impl World {
             "pet.script",
             &json!({ "pet": to, "rule": "whip", "action": action, "bubble": ouch, "ms": WHIP_MS, "delay": delay + WHIP_HIT }),
         )));
+        // A lost game is between the pets; a whip for slowness, or from the
+        // user's own hand, is something the agent should hear about.
+        if matches!(reason, Reason::User | Reason::Slow) && to_state != State::Attention {
+            out.push(Out::Control(Control::Nudge { pet: to.into(), reason: reason.id().into() }));
+        }
+    }
+
+    /// The pet that was not whipped, watching: a jeer, a kind word or a nervous
+    /// glance, by how much it likes the one being whipped and whether it wears
+    /// the crown. The other camp's main pet if there is one, else any other pet.
+    fn whip_watch(&mut self, victim: &PetView, views: &[PetView], delay: u64, now: u64, db: &crate::db::Db, out: &mut Vec<Out>) {
+        let free = |v: &&PetView| v.id != victim.id && v.label.is_none() && !self.scripts.contains_key(&v.id);
+        let by = views
+            .iter()
+            .filter(free)
+            .find(|v| v.camp.is_some() && v.camp != victim.camp)
+            .or_else(|| views.iter().find(free));
+        let Some(by) = by else { return };
+        let aff = crate::games_db::affinity(db, &victim.pack, &by.pack);
+        let crowned = by.camp.is_some() && crate::progress::champion(db, now) == by.camp;
+        let (set, action) = match () {
+            _ if self.rand() < 0.2 => (WATCH_NERVOUS, "peek"),
+            _ if aff >= 60 => (WATCH_PITY, "comfort"),
+            _ if aff < 30 || crowned => (WATCH_TAUNT, "taunt"),
+            _ => (WATCH_NERVOUS, "peek"),
+        };
+        let line = self.whip_line(set);
+        out.push(Out::Ws(crate::msg(
+            "pet.script",
+            &json!({ "pet": by.id, "rule": "whip_watch", "action": action, "bubble": line, "ms": WATCH_MS, "delay": delay + WHIP_HIT + 350 }),
+        )));
     }
 
     /// After a duel or race: the winner says its piece, walks over and cracks
@@ -138,6 +193,7 @@ impl World {
         let Some(v) = views.iter().find(|v| v.id == pet) else { return vec![] };
         let mut out = vec![];
         self.whip(None, pet, v.state, Reason::Game, delay, db, &mut out);
+        self.whip_watch(v, views, delay, crate::now_ms(), db, &mut out);
         out
     }
 
@@ -147,6 +203,7 @@ impl World {
         let mut out = vec![];
         db.log_interaction(now, pet, "whip", self.frozen);
         self.whip(None, pet, v.state, Reason::User, 0, db, &mut out);
+        self.whip_watch(v, views, 0, now, db, &mut out);
         Ok(out)
     }
 }
@@ -192,10 +249,35 @@ mod tests {
         assert_eq!(lash[0]["to"], "codex");
         assert!(lash[0]["from"].is_null(), "the user holds the whip");
         let lines = ws(&out, "pet.script");
-        assert_eq!(lines.len(), 1);
+        assert_eq!(lines.len(), 2, "the victim's line and the onlooker's");
         assert_eq!(lines[0]["pet"], "codex");
         assert_eq!(lines[0]["delay"], WHIP_HIT);
+        assert_eq!(lines[1]["pet"], "claude-code");
+        assert_eq!(lines[1]["rule"], "whip_watch");
+        assert!(lines[1]["delay"].as_u64().unwrap() > WHIP_HIT, "the onlooker reacts after the lash lands");
+        assert!(["taunt", "comfort", "peek"].contains(&lines[1]["action"].as_str().unwrap()));
+        assert!(
+            out.iter().any(|o| matches!(o, Out::Control(Control::Nudge { pet, reason }) if pet == "codex" && reason == "user")),
+            "the agent hears about a whip from the user"
+        );
         assert!(w.scripts.is_empty(), "a user whip never blocks the pet");
+    }
+
+    #[test]
+    fn a_lost_game_is_not_the_agents_business() {
+        let mut w = World::new(Tables::builtin(), 3);
+        let views = two_pets();
+        let out = w.lost_to_user("codex", &views, 0, &Db::in_memory());
+        assert!(!out.iter().any(|o| matches!(o, Out::Control(Control::Nudge { .. }))));
+        assert!(ws(&out, "pet.script").iter().any(|s| s["rule"] == "whip_watch"), "but the other pet still watches");
+    }
+
+    #[test]
+    fn alone_nobody_watches() {
+        let mut w = World::new(Tables::builtin(), 3);
+        let views: Vec<PetView> = two_pets().into_iter().filter(|v| v.id == "codex").collect();
+        let out = w.user_whip("codex", &views, 1_793_600_000_000, &Db::in_memory()).unwrap();
+        assert_eq!(ws(&out, "pet.script").len(), 1);
     }
 
     #[test]

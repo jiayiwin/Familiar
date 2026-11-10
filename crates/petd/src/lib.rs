@@ -50,6 +50,8 @@ pub enum Control {
     ConfigChanged,
     /// Walk a pet next to another pet, or back home when `target` is None.
     Move { pet: String, target: Option<String> },
+    /// A lash the agent behind `pet` should hear about, on its next hook.
+    Nudge { pet: String, reason: String },
     /// Tug of war: `mover` walks up to `anchor`, windows edge to edge, so the
     /// rope each pet draws to its window edge joins up.
     Tug { mover: String, anchor: String },

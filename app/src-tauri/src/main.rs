@@ -979,6 +979,7 @@ fn main() {
                             Control::Layout { ids } => windows::sync_pets(&h2, &st, &ids),
                             Control::LibraryChanged | Control::ConfigChanged => refresh_tray(&h2, &st),
                             Control::Move { pet, target } => physics::walk(st.clone(), &h2, &pet, target.as_deref()),
+                            Control::Nudge { pet, reason } => st.petd.hub.lock().unwrap().nudge(&pet, &reason, petd::now_ms()),
                             Control::Tug { mover, anchor } => physics::walk_tug(st.clone(), &h2, &mover, &anchor),
                             Control::Duo { mover, anchor, gap } => physics::walk_pair(st.clone(), &h2, &mover, &anchor, gap, "duo"),
                             Control::Report => windows::open_report(&h2),
