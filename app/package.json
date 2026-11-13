@@ -1,7 +1,7 @@
 {
-  "name": "familiar-app",
+  "name": "rillbuddy-app",
   "private": true,
-  "version": "0.1.16",
+  "version": "0.1.17",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,9 +10,8 @@
   },
   "dependencies": {
     "@tauri-apps/api": "~2.11.0",
-    "@tauri-apps/plugin-dialog": "~2.7.0",
     "hls.js": "1.7.3",
-    "onnxruntime-web": "1.29.0"
+    "tone": "^15.1.22"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.1.0",

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>睿洱</title>
+    <style>
+      /* The one window everything opens in: each page is a tab, and the frame
+         is drawn here (no system title bar). It wears the colours of the page
+         in front, which wears the skin of its pet; these are 紫梦's until then. */
+      :root {
+        --ground: #faf6f0; --paper: #fffaf2; --ink: #5b4a57; --ink-2: #6d5d6a; --muted: #776775; --line: #d9cbc8; --rule: #efe6e2; --well: #f0e9e4;
+        --accent: #7a5fc0; --accent-soft: #ece4ff; --shade: 91, 74, 87; --alert: #b3432e;
+        --ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+        color-scheme: light;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
+      /* Room around the card for its shadow: the window itself is see-through. */
+      body { padding: 10px 14px 18px; font-family: var(--ui); color: var(--ink); -webkit-font-smoothing: antialiased; user-select: none; }
+      button { font: inherit; color: inherit; cursor: pointer; }
+      .win { height: 100%; display: flex; flex-direction: column; border-radius: 20px; background: var(--ground); border: 1px solid var(--line);
+        box-shadow: 0 8px 20px rgba(var(--shade), 0.26), 0 1px 3px rgba(var(--shade), 0.22); overflow: hidden; }
+
+      /* ── the bar: tabs, a place to hold the window by, and its two buttons ── */
+      .bar { flex: none; height: 48px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 10px; background: var(--well); border-bottom: 1px solid var(--rule); }
+      .tabs { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 4px; }
+      .tab { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 5px 0 12px; border: 0; border-radius: 12px; background: transparent;
+        font-size: 13px; font-weight: 700; color: var(--ink-2); white-space: nowrap; transition: background 0.15s, color 0.15s; }
+      .tab:hover { background: rgba(255, 255, 255, 0.5); color: var(--ink); }
+      .tab.on { background: var(--paper); color: var(--ink); font-weight: 800; box-shadow: 0 1px 4px rgba(var(--shade), 0.2); }
+      .tab > svg { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+      .tab.on > svg { stroke: var(--accent); }
+      .tab .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+      .tab .dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+      .tab .x { flex: none; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; color: var(--muted); opacity: 0; transition: opacity 0.15s, background 0.15s; }
+      .tab:hover .x, .tab.on .x, .tab:focus-visible .x { opacity: 1; }
+      .tab .x:hover { background: var(--well); color: var(--ink); }
+      .x svg, .wbtn svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+      .room-to-hold { flex: 1; align-self: stretch; min-width: 24px; }
+      .wbtn { flex: none; width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: var(--ink-2); transition: background 0.15s, color 0.15s; }
+      .wbtn:hover { background: var(--paper); color: var(--ink); }
+      .wbtn.close:hover { background: var(--alert); color: #fff; }
+      :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+      /* ── the pages ── */
+      .views { position: relative; flex: 1; min-height: 0; background: var(--ground); }
+      .views iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; }
+      /* A page behind another stays alive (the radio keeps playing); it is only out of sight. */
+      .views iframe.back { visibility: hidden; pointer-events: none; }
+      .none { position: absolute; inset: 0; display: grid; place-items: center; font-size: 14px; color: var(--muted); }
+      /* The corner to pull it bigger by. */
+      .grip { position: absolute; right: 16px; bottom: 20px; z-index: 5; width: 18px; height: 18px; cursor: nwse-resize; opacity: 0.55; }
+      .grip:hover { opacity: 1; }
+      .grip svg { width: 100%; height: 100%; fill: none; stroke: var(--muted); stroke-width: 1.6; stroke-linecap: round; }
+      /* Filling the screen: no margin for a shadow, no rounded corners. */
+      body.max { padding: 0; }
+      body.max .win { border-radius: 0; border: 0; box-shadow: none; }
+      body.max .grip { display: none; }
+    </style>
+  </head>
+  <body>
+    <div class="win">
+      <header class="bar" data-tauri-drag-region>
+        <nav class="tabs" id="tabs" role="tablist"></nav>
+        <div class="room-to-hold" id="hold" data-tauri-drag-region></div>
+        <button class="wbtn" id="min" type="button" title="最小化" data-en-title="Minimize"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h8" /></svg></button>
+        <button class="wbtn close" id="close" type="button" title="关闭窗口" data-en-title="Close window"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.500 2.500l7 7M9.500 2.500l-7 7" /></svg></button>
+      </header>
+      <main class="views" id="views"></main>
+    </div>
+    <div class="grip" id="grip" title="拖动改变大小" data-en-title="Drag to resize"><svg viewBox="0 0 18 18" aria-hidden="true"><path d="M16 7 7 16M16 12l-4 4" /></svg></div>
+    <script type="module" src="/src/shell.ts"></script>
+  </body>
+</html>

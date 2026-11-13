@@ -1,13 +1,13 @@
 [package]
-name = "familiar-emit"
+name = "rillbuddy-emit"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Translates agent hook payloads into Familiar events. Never blocks, never fails."
+description = "Translates agent hook payloads into Rill events. Never blocks, never fails."
 
 [[bin]]
-name = "familiar-emit"
+name = "rillbuddy-emit"
 path = "src/main.rs"
 
 [dependencies]

@@ -5,7 +5,7 @@
 //! check the newest logs once a minute so the Codex pet can say when the
 //! quota runs low and celebrate when a reset card (banked reset) is used.
 //! Using the card itself is an account action in Codex (`/usage`, or
-//! Settings → Usage); Familiar never does it.
+//! Settings → Usage); Rill never does it.
 
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -30,7 +30,10 @@ pub struct Limits {
 
 impl Limits {
     pub fn used(&self) -> f64 {
-        [&self.primary, &self.secondary].iter().filter_map(|w| w.as_ref().map(|w| w.used_percent)).fold(0.0, f64::max)
+        [&self.primary, &self.secondary]
+            .iter()
+            .filter_map(|w| w.as_ref().map(|w| w.used_percent))
+            .fold(0.0, f64::max)
     }
 }
 
@@ -58,7 +61,8 @@ pub fn until_text(resets_at: u64, now_s: u64) -> String {
     }
 }
 
-fn homes() -> Vec<PathBuf> {
+/// Codex config folders on this machine: `$CODEX_HOME`, then `~/.codex`.
+pub fn homes() -> Vec<PathBuf> {
     let mut out = vec![];
     if let Some(h) = std::env::var_os("CODEX_HOME").filter(|h| !h.is_empty()) {
         out.push(PathBuf::from(h));
@@ -135,11 +139,20 @@ pub fn read_latest() -> Option<(Limits, SystemTime)> {
         }
     }
     files.sort_by(|a, b| b.0.cmp(&a.0));
-    files.into_iter().take(12).find_map(|(t, p)| last_in_file(&p).map(|l| (l, t)))
+    files
+        .into_iter()
+        .take(12)
+        .find_map(|(t, p)| last_in_file(&p).map(|l| (l, t)))
 }
 
 fn dirs(p: &Path) -> Vec<PathBuf> {
-    let mut v: Vec<PathBuf> = std::fs::read_dir(p).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+    let mut v: Vec<PathBuf> = std::fs::read_dir(p)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .collect();
     v.sort();
     v
 }
@@ -156,7 +169,10 @@ pub enum Change {
 
 pub fn judge(prev: &Limits, cur: &Limits, now_s: u64) -> Option<Change> {
     let mut refreshed = false;
-    for (p, c) in [(&prev.primary, &cur.primary), (&prev.secondary, &cur.secondary)] {
+    for (p, c) in [
+        (&prev.primary, &cur.primary),
+        (&prev.secondary, &cur.secondary),
+    ] {
         let (Some(p), Some(c)) = (p, c) else { continue };
         let dropped = p.used_percent - c.used_percent >= 20.0;
         let early = p.resets_at > now_s + 60;
@@ -177,7 +193,12 @@ struct State {
 
 fn state() -> &'static Mutex<State> {
     static S: OnceLock<Mutex<State>> = OnceLock::new();
-    S.get_or_init(|| Mutex::new(State { last: None, warned_at: 0 }))
+    S.get_or_init(|| {
+        Mutex::new(State {
+            last: None,
+            warned_at: 0,
+        })
+    })
 }
 
 /// Latest reading (for the menu).
@@ -187,7 +208,9 @@ pub fn current() -> Option<Limits> {
 
 /// One check: returns the WS messages for the Codex pet, if any.
 pub fn poll(codex_pet: Option<&str>, now_ms: u64) -> Vec<String> {
-    let Some((cur, _)) = read_latest() else { return vec![] };
+    let Some((cur, _)) = read_latest() else {
+        return vec![];
+    };
     let now_s = now_ms / 1000;
     let mut st = state().lock().unwrap();
     let mut out = vec![];
@@ -206,7 +229,10 @@ pub fn poll(codex_pet: Option<&str>, now_ms: u64) -> Vec<String> {
     }
     if cur.used() >= 90.0 && now_ms.saturating_sub(st.warned_at) >= 2 * 3_600_000 {
         st.warned_at = now_ms;
-        out.push(crate::msg("codex.limits", &json!({ "pet": pet, "kind": "low", "used": cur.used() })));
+        out.push(crate::msg(
+            "codex.limits",
+            &json!({ "pet": pet, "kind": "low", "used": cur.used() }),
+        ));
     }
     st.last = Some(cur);
     out
@@ -218,8 +244,16 @@ mod tests {
 
     fn l(p: f64, p_reset: u64, s: f64, s_reset: u64) -> Limits {
         Limits {
-            primary: Some(Window { used_percent: p, window_minutes: 300, resets_at: p_reset }),
-            secondary: Some(Window { used_percent: s, window_minutes: 10080, resets_at: s_reset }),
+            primary: Some(Window {
+                used_percent: p,
+                window_minutes: 300,
+                resets_at: p_reset,
+            }),
+            secondary: Some(Window {
+                used_percent: s,
+                window_minutes: 10080,
+                resets_at: s_reset,
+            }),
             plan: None,
         }
     }
@@ -230,18 +264,42 @@ mod tests {
         let got = parse_line(line).unwrap();
         assert_eq!(got.primary.unwrap().used_percent, 81.0);
         assert!(got.secondary.is_none());
-        assert!(parse_line(r#"{"payload":{"rate_limits":{"primary":null,"secondary":null}}}"#).is_none());
+        assert!(
+            parse_line(r#"{"payload":{"rate_limits":{"primary":null,"secondary":null}}}"#)
+                .is_none()
+        );
     }
 
     #[test]
     fn tells_a_reset_card_from_a_scheduled_reset() {
         let now = 1_000_000;
         // Weekly quota drops days before its reset: a card.
-        assert_eq!(judge(&l(30.0, now + 100, 95.0, now + 3 * 86_400), &l(0.0, now + 18_000, 0.0, now + 7 * 86_400), now), Some(Change::Card));
+        assert_eq!(
+            judge(
+                &l(30.0, now + 100, 95.0, now + 3 * 86_400),
+                &l(0.0, now + 18_000, 0.0, now + 7 * 86_400),
+                now
+            ),
+            Some(Change::Card)
+        );
         // 5-hour window reset on time after heavy use: a refresh.
-        assert_eq!(judge(&l(80.0, now - 10, 40.0, now + 86_400), &l(0.0, now + 18_000, 40.0, now + 86_400), now), Some(Change::Refresh));
+        assert_eq!(
+            judge(
+                &l(80.0, now - 10, 40.0, now + 86_400),
+                &l(0.0, now + 18_000, 40.0, now + 86_400),
+                now
+            ),
+            Some(Change::Refresh)
+        );
         // Small drift: nothing.
-        assert_eq!(judge(&l(30.0, now + 100, 40.0, now + 86_400), &l(25.0, now + 100, 40.0, now + 86_400), now), None);
+        assert_eq!(
+            judge(
+                &l(30.0, now + 100, 40.0, now + 86_400),
+                &l(25.0, now + 100, 40.0, now + 86_400),
+                now
+            ),
+            None
+        );
         assert_eq!(window_name(10080), "每周");
     }
 }

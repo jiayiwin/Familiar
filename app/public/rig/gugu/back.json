@@ -1,0 +1,48 @@
+{
+  "layers": [
+    {
+      "name": "back_body",
+      "file": "back_body.png",
+      "x": 134,
+      "y": 321,
+      "w": 239,
+      "h": 135
+    },
+    {
+      "name": "back_head",
+      "file": "back_head.png",
+      "x": 123,
+      "y": 228,
+      "w": 264,
+      "h": 122,
+      "pivot": [
+        254.25,
+        344.0
+      ]
+    },
+    {
+      "name": "back_cap",
+      "file": "back_cap.png",
+      "x": 62,
+      "y": 53,
+      "w": 385,
+      "h": 263,
+      "pivot": [
+        254.19,
+        268.0
+      ]
+    },
+    {
+      "name": "back_tail",
+      "file": "back_tail.png",
+      "x": 228,
+      "y": 397,
+      "w": 52,
+      "h": 48,
+      "pivot": [
+        254.0,
+        417.16
+      ]
+    }
+  ]
+}

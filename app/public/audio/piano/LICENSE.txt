@@ -1,0 +1,7 @@
+Piano samples: Salamander Grand Piano V3, by Alexander Holm.
+Licensed under Creative Commons Attribution 3.0 Unported (CC BY 3.0):
+https://creativecommons.org/licenses/by/3.0/
+
+These files are the MP3 set published with Tone.js
+(https://tonejs.github.io/audio/salamander/): one note every minor third,
+A1 to A6, unmodified.

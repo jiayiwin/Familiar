@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-en="Rill · Room">睿洱 · 小屋</title>
+  <style>
+/* Colours come from the pet's skin (src/skin.ts); these are 紫梦's, until the skin is on. */
+:root { --accent: #7a5fc0; --accent-deep: #6a50b0; --accent-soft: #ece4ff; --accent-text: #5b4696; --accent-off: #cfc3e6; --hover: #f5eefc; --room: #f3ecf9; --room-night: #ebe3f4; --room-line: #e3d8ea; --cushion: #e0d4ff; --stage: #e9eff8; --stage-ink: #5d6c85; --stage-line: #cfd9e8; --shade: 110, 88, 140; --motif-fill: #f3e9cf; --motif-line: #cdbdba; }
+html:not([data-skin]) body { visibility: hidden; }
+/* Where it lives. The colours are the pet's own: paper ground, warm-grey line,
+   the plum of its ears. Only "waiting for you" is loud. */
+:root{
+  --ground:#faf6f0;--paper:#fffaf2;--ink:#5b4a57;--ink-2:#6d5d6a;--muted:#776775;--line:#d9cbc8;--rule:#efe6e2;--well:#f0e9e4;
+  --alert:#c24e38;--alert-ink:#b3432e;
+  --ui:"Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI","PingFang SC",system-ui,sans-serif;
+  --ease:cubic-bezier(.22,.61,.36,1);
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--ground)}
+body{font-family:var(--ui);color:var(--ink);-webkit-font-smoothing:antialiased;user-select:none}
+button{font:inherit;color:inherit;cursor:pointer}
+.room{display:flex;width:100%;height:100vh}
+
+/* ---- where it sits */
+.side{position:relative;flex:0 0 330px;display:flex;flex-direction:column;align-items:center;gap:12px;padding:24px 22px;background:var(--room);border-right:1px solid var(--room-line);transition:background 1.2s}
+.room.night .side{background:var(--room-night)}
+.pill{align-self:flex-start;max-width:100%;display:flex;align-items:center;gap:7px;padding:5px 13px 5px 10px;border-radius:999px;background:var(--paper);border:1px solid var(--line);font-size:12px;font-weight:700;transition:background .4s,color .4s,border-color .4s}
+.pill i{flex:none;width:7px;height:7px;border-radius:50%;background:var(--accent);transition:background .4s}
+.pill span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill.wait{background:var(--alert);border-color:var(--alert);color:#fff;box-shadow:0 4px 12px rgba(194,78,56,.35)}
+.pill.wait i{background:#fff}
+.pill.rest i{background:#b9aab5}
+.pill.done i{background:#d2a13c}
+.pill.worry i{background:var(--alert)}
+.stage{position:relative;flex:1;min-height:0;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end}
+.say{position:relative;max-width:100%;margin-bottom:14px;padding:9px 16px;border-radius:16px;background:var(--paper);border:1px solid var(--line);font-size:14px;font-weight:700;line-height:1.5;text-align:center;box-shadow:0 4px 12px rgba(var(--shade), .18);transition:opacity .25s,transform .25s var(--ease)}
+.say::after{content:"";position:absolute;left:50%;bottom:-6px;width:11px;height:11px;margin-left:-6px;background:var(--paper);border-right:1px solid var(--line);border-bottom:1px solid var(--line);transform:rotate(45deg)}
+.say.swap{opacity:0;transform:translateY(4px)}
+/* The pet has the width of the room to run about in; the toy is drawn over all of it. */
+.pf{position:relative;z-index:1;width:100%;height:196px;flex:none}
+/* The pet is drawn over the whole of the stage, so it can jump as high as the room is; the space above it is where its bubble sits. */
+#rpet{position:absolute;inset:0;z-index:2;display:block;width:100%;height:100%;pointer-events:none}
+.stage.playing .pex{opacity:0;transition:opacity .3s}
+/* What it says stays in front of it, however high it jumps. */
+.say{z-index:4}
+.stage{touch-action:none;cursor:default}
+.stage.teasing{cursor:grab}
+.toy{position:absolute;inset:0;z-index:3;width:100%;height:100%;pointer-events:none}
+.toys{position:absolute;z-index:4;top:24px;right:22px;display:flex;gap:6px}
+.chip{height:28px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:var(--paper);font:inherit;font-size:12px;font-weight:700;color:var(--ink-2);cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+.chip:hover{color:var(--ink);background:var(--hover)}
+.chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-text)}
+.pill{max-width:calc(100% - 138px)}
+
+.pex{position:absolute;left:50%;top:0;width:230px;height:100%;margin-left:-115px;pointer-events:none}
+.pex g{opacity:0;transition:opacity .5s}
+.pex g.on{opacity:1}
+.cushion{flex:none;width:240px;height:34px;margin-top:-22px;border-radius:50%;background:var(--cushion)}
+.acts{position:relative;display:flex;gap:8px;width:100%}
+.btn{flex:1;min-height:44px;padding:0 10px;border-radius:999px;font-size:14px;font-weight:700;white-space:nowrap;transition:background .15s}
+.btn.go{border:0;background:var(--accent);color:#fff}
+.btn.go:hover{background:var(--accent-deep)}
+.btn.go:disabled{background:var(--accent-off);cursor:default}
+.btn.alt{border:1.5px solid var(--line);background:var(--paper)}
+.btn.alt:hover,.btn.alt[aria-expanded="true"]{background:var(--hover)}
+/* what "keep me company" means */
+.pop{position:absolute;right:0;bottom:52px;z-index:5;width:160px;display:none;flex-direction:column;gap:2px;padding:8px;border-radius:20px;background:var(--paper);border:1px solid var(--line);box-shadow:0 14px 34px rgba(var(--shade), .26)}
+.pop.open{display:flex}
+.pop button{min-height:40px;padding:0 12px;border:0;border-radius:12px;background:transparent;text-align:left;font-size:14px;font-weight:700}
+.pop button:hover{background:var(--hover)}
+
+/* ---- what it knows about today */
+.main{flex:1;min-width:0;display:flex;flex-direction:column;gap:14px;padding:20px 24px 22px}
+.tabs{align-self:flex-start;display:flex;gap:4px;padding:4px;border-radius:999px;background:var(--well)}
+.tabs button{min-height:36px;padding:0 16px;border:0;border-radius:999px;background:transparent;font-size:13px;font-weight:700;color:var(--ink-2)}
+.tabs button:hover{color:var(--ink)}
+.tabs button.on{background:var(--paper);box-shadow:0 1px 4px rgba(var(--shade), .2);font-weight:800;color:var(--ink)}
+.stats{display:flex;gap:12px}
+.card{border-radius:22px;background:var(--paper);border:1px solid var(--line)}
+.stat{flex:1;min-width:0;padding:14px 16px;display:flex;flex-direction:column;gap:2px}
+.lbl{font-size:12px;font-weight:700;color:var(--muted)}
+.stat.go{font:inherit;color:inherit;text-align:left;cursor:pointer;transition:border-color .15s,transform .15s}
+.stat.go:hover{border-color:var(--ink);transform:translateY(-1px)}
+.stat.go .lbl{display:flex;justify-content:space-between;gap:8px}
+.stat.go .more{opacity:.55}
+.stat.go:hover .more{opacity:1;color:var(--ink)}
+.stat b{font-size:24px;font-weight:800;line-height:1.25;white-space:nowrap}
+.stat small{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bond{display:flex;align-items:center;gap:14px;padding:10px 16px}
+.bond .m{flex:1;min-width:0;display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--muted)}
+.bond .bar{flex:1;height:6px;border-radius:999px;background:var(--well);overflow:hidden}
+.bond .bar i{display:block;height:100%;width:0;border-radius:999px;background:var(--accent);transition:width 1s var(--ease)}
+.bond .m b{min-width:18px;text-align:right;color:var(--ink);font-weight:800}
+.diary{flex:1;min-height:0;display:flex;flex-direction:column;gap:10px;padding:14px 6px 8px 16px}
+.diary .list{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:0 10px 6px 0;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.it{display:flex;gap:12px;align-items:baseline}
+.it time{flex:none;width:40px;font-size:12px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums}
+.it span{flex:1;font-size:14px;line-height:1.5;user-select:text}
+.none{font-size:14px;line-height:1.6;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+  </style>
+</head>
+<body>
+<div class="room" id="room">
+  <div class="side">
+    <div class="pill" id="pill"><i></i><span id="ptxt" data-en="Connecting…">连接中…</span></div>
+    <div class="toys">
+      <button type="button" class="chip" id="tease" aria-pressed="false" data-en="Tease it" title="拿它的小挂件逗它，它会追" data-en-title="Dangle its own charm: it chases">逗它</button>
+      <button type="button" class="chip" id="spin" data-en="Spin" title="让它转一圈；也可以按住它左右拖" data-en-title="One turn on the spot; or drag across it">转一圈</button>
+      <button type="button" class="chip" id="game" aria-pressed="false" data-en="Catch sweets" title="30 秒：糖从上面掉下来，它跟着你的鼠标跑，点一下跳。接住 20 颗，罐里多一颗（一天最多两颗）" data-en-title="30 seconds: sweets fall, it runs where your pointer is, click to jump. Catch 20 and one goes in the jar (two a day at most)">接糖</button>
+    </div>
+    <div class="stage" id="stage">
+      <canvas class="toy" id="toy" aria-hidden="true"></canvas>
+      <div class="say" id="say">……</div>
+      <canvas id="rpet"></canvas>
+      <div class="pf">
+        <!-- little signs around the pet: Zz, a sweat drop -->
+        <svg class="pex" viewBox="0 0 230 196" fill="none" aria-hidden="true">
+          <g id="ex-zzz" fill="#a996c4" font-family="Segoe UI,sans-serif" font-weight="800">
+            <text x="176" y="52" font-size="20">Z</text><text x="194" y="34" font-size="14">z</text>
+          </g>
+          <g id="ex-sweat"><path d="M48 62c5 7 8 11 8 15a8 8 0 0 1-16 0c0-4 3-8 8-15z" fill="#bcd3ec" stroke="#9db9d8" stroke-width="1.2"/></g>
+        </svg>
+      </div>
+      <div class="cushion" aria-hidden="true"></div>
+    </div>
+    <div class="acts">
+      <button type="button" class="btn go" id="feed" data-en="Feed it">喂它</button>
+      <button type="button" class="btn alt" id="company" aria-haspopup="menu" aria-expanded="false" data-en="Keep me company">陪我一下</button>
+      <div class="pop" id="pop" role="menu">
+        <button type="button" role="menuitem" data-act="dance" data-en="Dance">跳支舞</button>
+        <button type="button" role="menuitem" data-act="play" data-en="Play a piece">奏首曲子</button>
+        <button type="button" role="menuitem" data-act="radio" data-en="Radio">放电台</button>
+        <button type="button" role="menuitem" data-act="kegel" data-en="A kegel set">做一组提肛</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="tabs">
+      <button type="button" class="on" data-en="Today">今天</button>
+      <button type="button" data-go="gallery" data-en="Gallery">图鉴</button>
+      <button type="button" data-go="settings" data-en="Settings">设置</button>
+    </div>
+    <div class="stats">
+      <div class="card stat"><span class="lbl" data-en="You, at the desk">你在桌前</span><b id="desk-v">—</b><small id="desk-s">&nbsp;</small></div>
+      <button type="button" class="card stat go" id="work-card"><span class="lbl"><span data-en="The agents' day">agent 的一天</span><span class="more" data-en="Report ›">日报 ›</span></span><b id="work-v">—</b><small id="work-s">&nbsp;</small></button>
+    </div>
+    <div class="card bond">
+      <div class="m"><span data-en="Familiar">熟悉</span><div class="bar"><i id="bb-fam"></i></div><b id="bv-fam">—</b></div>
+      <div class="m"><span data-en="Trust">信任</span><div class="bar"><i id="bb-trust"></i></div><b id="bv-trust">—</b></div>
+      <div class="m"><span data-en="Energy">活力</span><div class="bar"><i id="bb-vit"></i></div><b id="bv-vit">—</b></div>
+    </div>
+    <div class="card diary">
+      <span class="lbl" data-en="What it noticed today">它今天注意到的</span>
+      <div class="list" id="noticed"></div>
+    </div>
+  </div>
+</div>
+<script src="/embed.js"></script>
+<script type="module" src="/src/room.ts"></script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-en="Rill · approval">睿洱 · 批准</title>
+    <style>
+      /* Colours come from the pet's skin (src/skin.ts); these are 紫梦's, until the skin is on. */
+      :root { --accent: #7a5fc0; --accent-deep: #6a50b0; --accent-soft: #ece4ff; --accent-text: #5b4696; --accent-off: #cfc3e6; --hover: #f5eefc; --room: #f3ecf9; --room-night: #ebe3f4; --room-line: #e3d8ea; --cushion: #e0d4ff; --stage: #e9eff8; --stage-ink: #5d6c85; --stage-line: #cfd9e8; --shade: 110, 88, 140; --motif-fill: #f3e9cf; --motif-line: #cdbdba; }
+      html:not([data-skin]) body { visibility: hidden; }
+      /* The pet's paper. This card is the one place that waits on you, so it wears the coral. */
+      :root {
+        --bg: #fffaf2;
+        --ink: #5b4a57;
+        --muted: #776775;
+        --line: #d9cbc8;
+        --code: #f0e9e4;
+        --indigo: #7a5fc0;
+        --green: #7a5fc0;
+        --display: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+      }
+      html, body { margin: 0; background: transparent; overflow: hidden; color: var(--ink); user-select: none; -webkit-font-smoothing: antialiased;
+        font: 12.5px/1.5 "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif; }
+      #card { margin: 8px; background: var(--bg); border-radius: 16px; overflow: hidden;
+        border: 1px solid var(--line); box-shadow: 0 10px 26px rgba(var(--shade), 0.28); }
+      h1 { margin: 0; padding: 9px 14px; display: flex; align-items: baseline; gap: 8px; color: #fff; background: var(--accent);
+        font-family: var(--display); font-size: 13.5px; font-weight: 700; }
+      h1 small { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 11px "Segoe UI", "Microsoft YaHei UI", sans-serif; opacity: 0.85; }
+      h1 em { font-style: normal; font-size: 11px; padding: 0 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.24); }
+      .left { height: 3px; background: var(--line); }
+      .left i { display: block; height: 100%; background: var(--accent); transition: width 0.5s linear; }
+      .body { padding: 10px 14px 12px; }
+      .tool { display: inline-block; padding: 1px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-text); font-family: var(--display); font-size: 11.5px; font-weight: 700; }
+      .note { margin: 6px 0 0; color: var(--muted); }
+      pre { margin: 8px 0 0; padding: 8px 10px; max-height: 132px; overflow: auto; border-radius: 10px; background: var(--code); user-select: text;
+        font: 12px/1.5 "Cascadia Mono", Consolas, "Microsoft YaHei UI", monospace; white-space: pre-wrap; word-break: break-all; }
+      .btns { display: flex; gap: 8px; margin-top: 10px; }
+      button { flex: 1; padding: 7px 0; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer;
+        font: 600 12.5px "Segoe UI", "Microsoft YaHei UI", sans-serif; }
+      button:hover { border-color: var(--indigo); }
+      button.yes { background: var(--green); border-color: var(--green); color: #fff; }
+      button.no { color: #b3432e; border-color: var(--line); }
+      button.term { flex: 1.2; color: var(--muted); }
+      .hint { margin-top: 8px; color: var(--muted); font-size: 11px; }
+    </style>
+  </head>
+  <body>
+    <div id="card"></div>
+    <script type="module" src="/src/approve.ts"></script>
+  </body>
+</html>

@@ -1,32 +1,60 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-sheet="ui">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title data-en="Welcome to Familiar">欢迎使用 Familiar</title>
+    <title data-en="Welcome to RillBuddy">欢迎使用睿洱</title>
     <link rel="stylesheet" href="/src/ui.css" />
     <style>
-      body { padding: 20px 24px; }
-      .step { color: var(--muted); font-size: 12px; }
-      h1 { font-size: 20px; margin: 4px 0 4px; }
-      p.lead { color: var(--muted); margin: 0 0 16px; }
-      .card { cursor: pointer; align-items: center; text-align: center; }
-      .rec { position: absolute; top: 8px; right: 8px; font-size: 11px; color: var(--accent); font-weight: bold; }
-      footer { display: flex; justify-content: space-between; margin-top: 18px; }
+      /* Colours come from the pet's skin (src/skin.ts); these are 紫梦's, until the skin is on. */
+      :root { --accent: #7a5fc0; --accent-deep: #6a50b0; --accent-soft: #ece4ff; --accent-text: #5b4696; --accent-off: #cfc3e6; --hover: #f5eefc; --room: #f3ecf9; --room-night: #ebe3f4; --room-line: #e3d8ea; --cushion: #e0d4ff; --stage: #e9eff8; --stage-ink: #5d6c85; --stage-line: #cfd9e8; --shade: 110, 88, 140; --motif-fill: #f3e9cf; --motif-line: #cdbdba; }
+      html:not([data-skin]) body { visibility: hidden; }
+      /* First start: 紫梦 shows what it does when an agent works, then you hook an agent up. */
+      body { padding: 26px 30px; font-size: 14px; }
+      h1 { margin: 0 0 4px; font: 800 24px/1.3 var(--sans); }
+      p.lead { margin: 0 0 18px; color: var(--muted); line-height: 1.6; max-width: 620px; }
+      .tour { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 20px; align-items: stretch; }
+      .actor { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; min-height: 300px; padding: 20px 16px 22px; border-radius: 22px; background: var(--room); }
+      .actor canvas { position: relative; z-index: 1; display: block; width: 220px; height: 188px; }
+      .actor .cushion { width: 230px; height: 32px; margin-top: -20px; border-radius: 50%; background: var(--cushion); }
+      .say { position: relative; max-width: 100%; margin-bottom: 14px; padding: 9px 16px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line-2); font-size: 14px; font-weight: 700; line-height: 1.5; text-align: center;
+        box-shadow: 0 4px 12px rgba(var(--shade), 0.18); opacity: 0; transform: translateY(4px); transition: opacity 0.25s var(--ease), transform 0.25s var(--ease); }
+      .say::after { content: ""; position: absolute; left: 50%; bottom: -6px; width: 11px; height: 11px; margin-left: -6px; background: var(--panel); border-right: 1px solid var(--line-2); border-bottom: 1px solid var(--line-2); transform: rotate(45deg); }
+      .say.on { opacity: 1; transform: none; }
+      .legend { list-style: none; margin: 0; padding: 4px 6px; display: grid; align-content: start; border-radius: 22px; background: var(--panel); border: 1px solid var(--line-2); }
+      .legend li { display: grid; grid-template-columns: 52px 1fr; gap: 12px; align-items: baseline; padding: 12px 12px; border-radius: 14px; color: var(--ink-2); font-size: 13px; line-height: 1.5; transition: background 0.25s var(--ease), color 0.25s var(--ease); }
+      .legend li + li { border-top: 1px solid var(--line); }
+      .legend b { font-size: 14px; font-weight: 800; color: var(--ink); }
+      .legend li.on { background: var(--t-lilac); color: var(--ink); border-top-color: transparent; }
+      .legend li.on + li { border-top-color: transparent; }
+      .hook { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+      .hook p { margin: 0 0 4px; flex: 1 1 100%; color: var(--ink-2); font-size: 13px; line-height: 1.6; }
+      .hook button, footer button { min-height: 40px; padding: 0 18px; font-size: 14px; font-weight: 700; }
+      footer { display: flex; justify-content: flex-end; margin-top: 18px; }
+      @media (max-width: 620px) { .tour { grid-template-columns: 1fr; } }
     </style>
   </head>
   <body>
-    <div class="step" id="step"></div>
-    <h1 id="title"></h1>
-    <p class="lead" id="lead"></p>
-    <div class="grid" id="grid"></div>
-    <footer>
-      <button id="skip" class="ghost" data-en="Skip, use the recommended">跳过，用推荐的</button>
-      <span>
-        <button id="back" class="ghost" data-en="Back">上一步</button>
-        <button id="next" class="primary" data-en="Next">下一步</button>
-      </span>
-    </footer>
+    <h1 id="hello">&nbsp;</h1>
+    <p class="lead" data-en="It lives on your desktop and watches your coding agents for you. Twenty seconds of what that looks like; the one on your desktop is acting along.">它住在你的桌面上，替你看着写代码的 agent。先演二十秒给你看，桌面上那只也在一起演。</p>
+    <div class="tour">
+      <div class="actor"><div class="say" id="say"></div><canvas id="actor"></canvas><div class="cushion" aria-hidden="true"></div></div>
+      <ul class="legend" id="legend">
+        <li data-state="thinking"><b data-en="Thinking">思考</b><span data-en="The agent is thinking. It watches.">agent 在想。它看着。</span></li>
+        <li data-state="tool"><b data-en="Working">动手</b><span data-en="Tools and files. It keeps watching, and says so when a long job ends.">调工具、读文件。它接着看，长活做完会说一声。</span></li>
+        <li data-state="attention"><b data-en="Needs you">等你</b><span data-en="The agent stopped for your answer: it looks up at once, in coral. Double-click it to go to that terminal.">agent 停下来等你回话：它马上抬头，标成珊瑚色。双击它，回到那个终端。</span></li>
+        <li data-state="done"><b data-en="Done">完成</b><span data-en="The turn ended well. It hops.">这一轮顺利结束。它跳一下。</span></li>
+        <li data-state="error"><b data-en="Error">出错</b><span data-en="Something failed. It frowns.">失败了。它皱眉。</span></li>
+      </ul>
+    </div>
+    <div class="hook">
+      <p data-en="Nothing is running right now, so that was acted. Hook up an agent and it follows the real sessions. You can also do this later, in the settings.">现在没有 agent 在跑，刚才是演的。接入以后，它跟着真实的会话动。以后也可以在设置里接入。</p>
+      <button id="hook-cc" class="primary" data-en="Hook up Claude Code…">接入 Claude Code…</button>
+      <button id="hook-cx" data-en="Hook up Codex…">接入 Codex…</button>
+      <button id="replay" class="ghost" data-en="Play it again">再演一遍</button>
+    </div>
+    <footer><button id="done" class="primary" data-en="Done">好了</button></footer>
+    <script src="/embed.js"></script>
     <script type="module" src="/src/welcome.ts"></script>
   </body>
 </html>

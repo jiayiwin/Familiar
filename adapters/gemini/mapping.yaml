@@ -1,0 +1,31 @@
+# Gemini CLI hook -> 睿洱统一事件（协议 v1）。
+#
+# 核对依据：Gemini CLI 官方 hooks 文档（docs/hooks/index.md、reference.md，2026-11）。
+# 这份文件在构建时编进 rillbuddy-emit；把修改后的副本放到
+# ~/.rillbuddy/adapters/gemini.yaml 可以不重新编译直接覆盖。
+#
+# 隐私：detail 里只会出现工具名、文件 basename 和"是否读取类命令"的判断结果，
+# 命令原文、提示词、输出都不会离开 emitter。
+
+source: gemini
+session: session_id
+project: cwd
+file_keys: [file_path, dir_path, path]
+
+# Gemini CLI 要求 hook 的 stdout 是一个 JSON 对象：空对象表示"照常继续"。
+stdout: "{}"
+
+# run_shell_command 的命令第一个词在这个列表里时，宠物显示"看书"而不是"敲电脑"。
+read_commands: [cat, type, get-content, gc, head, tail, less, more, rg, grep, select-string, sls, findstr, ls, dir, get-childitem, gci, tree, find, fd, wc, git-log, git-show, git-diff, git-status]
+
+events:
+  SessionStart: { event: session.start }
+  SessionEnd:   { event: session.end }
+  BeforeAgent:  { event: turn.start }
+  BeforeTool:   { event: tool.start, tool: true }
+  # 工具失败时 tool_response 里会带 error。
+  AfterTool:    { event: tool.end, tool: true, ok: true }
+  # 目前只有 ToolPermission 一种通知：在等你批准一个工具调用。
+  Notification: { event: attention, kind: permission, when: { notification_type: ToolPermission } }
+  AfterAgent:   { event: turn.done, result: ok }
+  # BeforeModel / AfterModel（每个分片都触发）/ BeforeToolSelection / PreCompress 不接。

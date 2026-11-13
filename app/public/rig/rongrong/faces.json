@@ -1,0 +1,68 @@
+{
+  "layers": [
+    {
+      "name": "smile_l",
+      "file": "smile_l.png",
+      "x": 164.79,
+      "y": 232.65,
+      "w": 30.5,
+      "h": 12.5
+    },
+    {
+      "name": "smile_r",
+      "file": "smile_r.png",
+      "x": 257.7,
+      "y": 242.1,
+      "w": 34.0,
+      "h": 14.5
+    },
+    {
+      "name": "smile_mouth",
+      "file": "smile_mouth.png",
+      "x": 201.8,
+      "y": 258.81,
+      "w": 30.5,
+      "h": 13.25
+    },
+    {
+      "name": "lid_l",
+      "file": "lid_l.png",
+      "x": 163.79,
+      "y": 236.65,
+      "w": 32.5,
+      "h": 10.5
+    },
+    {
+      "name": "lid_r",
+      "file": "lid_r.png",
+      "x": 255.7,
+      "y": 245.1,
+      "w": 38.0,
+      "h": 12.5
+    },
+    {
+      "name": "mouth_o",
+      "file": "mouth_o.png",
+      "x": 209.8,
+      "y": 262.43,
+      "w": 12.5,
+      "h": 12.0
+    },
+    {
+      "name": "brow_l",
+      "file": "brow_l.png",
+      "x": 165.0,
+      "y": 208.0,
+      "w": 29.0,
+      "h": 17.0
+    },
+    {
+      "name": "brow_r",
+      "file": "brow_r.png",
+      "x": 258.0,
+      "y": 215.0,
+      "w": 37.0,
+      "h": 20.0
+    }
+  ]
+}

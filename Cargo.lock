@@ -371,7 +371,7 @@ dependencies = [
  "thiserror 1.0.69",
  "ug",
  "yoke 0.7.5",
- "zip 1.3.1",
+ "zip",
 ]
 
 [[package]]
@@ -1182,59 +1182,6 @@ name = "fallible-streaming-iterator"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
-
-[[package]]
-name = "familiar"
-version = "0.1.16"
-dependencies = [
- "chrono",
- "familiar-petd",
- "serde",
- "serde_json",
- "serde_yaml",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-global-shortcut",
- "tokio",
- "windows-sys 0.59.0",
-]
-
-[[package]]
-name = "familiar-emit"
-version = "0.1.16"
-dependencies = [
- "serde",
- "serde_json",
- "serde_yaml",
- "windows-sys 0.59.0",
-]
-
-[[package]]
-name = "familiar-petd"
-version = "0.1.16"
-dependencies = [
- "axum",
- "candle-core",
- "candle-nn",
- "candle-transformers",
- "chrono",
- "encoding_rs",
- "fs4",
- "getrandom 0.3.4",
- "reqwest 0.12.28",
- "rusqlite",
- "serde",
- "serde_json",
- "serde_yaml",
- "sys-locale",
- "tempfile",
- "tokenizers",
- "tokio",
- "tower-http",
- "windows-sys 0.59.0",
- "zip 2.6.1",
-]
 
 [[package]]
 name = "fancy-regex"
@@ -3850,6 +3797,61 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "windows-sys 0.60.2",
+]
+
+[[package]]
+name = "rillbuddy"
+version = "0.1.33"
+dependencies = [
+ "rillbuddy-petd",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-global-shortcut",
+ "tokio",
+ "windows",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "rillbuddy-emit"
+version = "0.1.33"
+dependencies = [
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "rillbuddy-petd"
+version = "0.1.33"
+dependencies = [
+ "axum",
+ "candle-core",
+ "candle-nn",
+ "candle-transformers",
+ "chrono",
+ "encoding_rs",
+ "fs4",
+ "getrandom 0.3.4",
+ "memchr",
+ "reqwest 0.12.28",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sys-locale",
+ "tempfile",
+ "tokenizers",
+ "tokio",
+ "tower-http",
+ "walkdir",
+ "windows-sys 0.59.0",
+ "zip",
 ]
 
 [[package]]
@@ -6503,22 +6505,9 @@ dependencies = [
  "crc32fast",
  "crossbeam-utils",
  "displaydoc",
- "indexmap 2.14.2",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "zip"
-version = "2.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1dcb24d0152526ae49b9b96c1dcf71850ca1e0b882e4e28ed898a93c41334744"
-dependencies = [
- "arbitrary",
- "crc32fast",
- "crossbeam-utils",
  "flate2",
  "indexmap 2.14.2",
- "memchr",
+ "thiserror 1.0.69",
  "zopfli",
 ]
 

@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/emit", "crates/petd", "app/src-tauri"]
 
 [workspace.package]
-version = "0.1.16"
+version = "0.1.33"
 edition = "2021"
 license = "MIT"
 rust-version = "1.88"
@@ -19,5 +19,5 @@ codegen-units = 1
 strip = true
 
 # The emitter runs on every hook call; keep it tiny and fast even in dev builds.
-[profile.dev.package.familiar-emit]
+[profile.dev.package.rillbuddy-emit]
 opt-level = 2

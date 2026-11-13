@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>灵宠 · 拆层绑定试验</title>
+<style>
+  :root { --ink:#3b3348; --mute:#8a8198; --line:#e4dfec; --accent:#8f7bd6; --page:#faf8fc; }
+  * { box-sizing: border-box; margin: 0; }
+  body { font: 14px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; color: var(--ink); background: var(--page); padding: 28px max(16px, 4vw); }
+  h1 { font-size: 20px; }
+  .sub { color: var(--mute); margin: 2px 0 20px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; margin-bottom: 18px; }
+  .group { display: flex; gap: 6px; align-items: center; }
+  .group span { color: var(--mute); font-size: 12px; margin-right: 2px; }
+  button { font: inherit; padding: 6px 16px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer; }
+  button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .wrap { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+  .stage { border-radius: 20px; border: 1px solid var(--line); background: #f1eef6; padding: 10px; }
+  .stage.dark { background: #23222b; border-color: #23222b; }
+  .side { display: flex; flex-direction: column; gap: 14px; }
+  .chip { border-radius: 16px; border: 1px solid var(--line); padding: 12px 16px 8px; text-align: center; }
+  .chip small { display: block; color: var(--mute); font-size: 12px; }
+  .chip.white { background: #fff; }
+  .chip.dark { background: #1f1f26; border-color: #1f1f26; }
+  .chip.dark small { color: #9b97a8; }
+  canvas { display: block; }
+  #status { color: var(--mute); font-size: 12px; margin-top: 14px; }
+  a.pick { padding: 6px 16px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--ink); text-decoration: none; }
+  a.pick.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  /* Inside the duet page: only the pet, on nothing. */
+  body.embed { padding: 0; background: transparent; }
+  body.embed > :not(.wrap), body.embed .side { display: none; }
+  body.embed .stage { border: 0; background: transparent; padding: 0; }
+</style>
+</head>
+<body>
+<h1 id="title">紫梦 · 拆层绑定试验</h1>
+<p class="sub" id="sub">正面切成 7 层（身体、两耳、双眼、嘴、星星），背面切成 4 层（身体、两耳、尾巴），程序驱动。耳朵是弹簧物理，不是关键帧。</p>
+
+<div class="bar">
+  <div class="group" id="pets"><span>谁</span>
+    <a class="pick" data-pet="zimeng" href="?pet=zimeng">紫梦</a>
+    <a class="pick" data-pet="mashu" href="?pet=mashu">麻薯</a>
+    <a class="pick" data-pet="paopao" href="?pet=paopao">泡泡</a>
+    <a class="pick" data-pet="gugu" href="?pet=gugu">菇菇</a>
+    <a class="pick" data-pet="rongrong" href="?pet=rongrong">茸茸</a>
+    <a class="pick" href="duo.html">两只一起</a>
+    <a class="pick" href="duo.html?all">五只一起</a>
+  </div>
+  <div class="group" id="modes"><span>动作</span>
+    <button data-mode="idle" class="on">待机</button>
+    <button data-mode="play" id="play">弹琴</button>
+    <button data-mode="dance">跳舞</button>
+  </div>
+  <div class="group" id="exprs"><span>待机表情</span>
+    <button data-expr="neutral" class="on">委屈</button>
+    <button data-expr="happy">开心</button>
+    <button data-expr="sleepy">困</button>
+    <button data-expr="asleep">睡着</button>
+    <button data-expr="worried">担心</button>
+  </div>
+  <div class="group" id="reacts"><span>待机反应</span>
+    <button data-react="poke">戳一下</button>
+    <button data-react="perk">竖耳</button>
+    <button data-react="cheer">开心跳</button>
+  </div>
+  <div class="group"><span>背景</span>
+    <button id="bg">切换深色</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="stage" id="stage"><canvas id="big" data-size="520"></canvas></div>
+  <div class="side">
+    <div class="chip white"><canvas class="small" data-size="190"></canvas><small>桌面实际大小 · 浅色窗口上</small></div>
+    <div class="chip dark"><canvas class="small" data-size="190"></canvas><small>桌面实际大小 · 深色窗口上</small></div>
+  </div>
+</div>
+<p id="status">音色加载中…（没加载完也能看动作，只是没声音）</p>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<script type="module">
+import { loadRig } from "./rig.js";
+import { createPerformer } from "./perform.js";
+
+const params = new URLSearchParams(location.search);
+// Who is on the page: its layers, its instrument, and where its samples come from (online, for this preview).
+const CAST = {
+  zimeng: {
+    zh: "紫梦", instrument: "piano", play: "弹琴", samples: "https://tonejs.github.io/audio/salamander/",
+    sub: "正面切成 7 层（身体、两耳、双眼、嘴、星星），背面切成 4 层（身体、两耳、尾巴），程序驱动。耳朵是弹簧物理，不是关键帧。",
+  },
+  mashu: {
+    zh: "麻薯", instrument: "cello", play: "拉琴", samples: "https://nbrosowsky.github.io/tonejs-instruments/samples/cello/",
+    sub: "正面切成 9 层（尾巴、身体、领结、两耳、头、双眼、嘴），背面切成 3 层。头绕脖子转，尾巴是弓：每一弓的长短跟着那个音的时值走。",
+  },
+  paopao: {
+    zh: "泡泡", instrument: "flute", play: "吹笛", samples: "https://nbrosowsky.github.io/tonejs-instruments/samples/flute/",
+    sub: "正面切成 6 层（身体、卷须、头、双眼、嘴），背面 3 层。头顶的卷须是弹簧；它吹的每个音是一个泡泡，音越长泡泡越大。",
+  },
+  gugu: {
+    zh: "菇菇", instrument: "xylophone", play: "敲琴", samples: "https://nbrosowsky.github.io/tonejs-instruments/samples/xylophone/",
+    sub: "正面切成 7 层（身体、菌盖里侧、头、双眼、嘴、菌盖），背面 3 层。菌盖会晃；菌盖上的五个斑点就是琴键，敲到哪个哪个亮。",
+  },
+  rongrong: {
+    zh: "茸茸", instrument: "harp", play: "拨琴", samples: "https://nbrosowsky.github.io/tonejs-instruments/samples/harp/",
+    sub: "正面切成 7 层（身体、两耳、头、双眼、嘴），背面 3 层。两只耳朵垂着会甩；胸前那团卷毛上有七根弦，拨到哪根哪根亮。",
+  },
+};
+const who = CAST[params.get("pet")] ? params.get("pet") : "zimeng";
+const me = CAST[who];
+document.getElementById("title").textContent = `${me.zh} · 拆层绑定试验`;
+document.getElementById("sub").textContent = me.sub;
+document.getElementById("play").textContent = me.play;
+document.querySelector(`[data-pet="${who}"]`).classList.add("on");
+if (params.has("embed")) document.body.classList.add("embed");
+if (params.has("size")) document.getElementById("big").dataset.size = params.get("size");
+const pet = await loadRig(`../${who}/rig/`);
+// The pet's motion needs air around it: raised ears, side steps, jumps.
+const VIEW = { size: 660, ox: 74, oy: 112 };
+const canvases = [...document.querySelectorAll("canvas")].map((c) => {
+  const size = Number(c.dataset.size);
+  const dpr = window.devicePixelRatio || 1;
+  c.width = c.height = Math.round(size * dpr);
+  c.style.width = c.style.height = size + "px";
+  return { ctx: c.getContext("2d"), scale: c.width / VIEW.size };
+});
+const status = (s) => (document.getElementById("status").textContent = s);
+
+// ---- Music: real instrument samples (Salamander Grand; "Real Cello Notes"; VSCO 2 CE), loaded online for this preview ----
+const show = createPerformer(params.has("freeze") ? null : window.Tone, pet, {
+  instrument: me.instrument,
+  baseUrl: me.samples,
+  onReady: () => {
+    status(`音色已就绪。点「${me.play}」或「跳舞」听效果。`);
+    if (parent !== window) parent.postMessage({ ready: who }, location.origin);
+  },
+  onError: () => status("音色加载失败（需要联网），动作仍可预览。"),
+});
+// The duet page tells each pet when to begin, on the wall clock, as the app does.
+window.addEventListener("message", (e) => {
+  if (e.origin !== location.origin || !e.data?.mode) return;
+  if (e.data.mode === "idle") show.stop();
+  else void show.start(e.data.mode, { at: e.data.at, bars: e.data.mode === "dance" ? 8 : 0 });
+});
+if (!window.Tone) status("没加载到音频库（需要联网），动作仍可预览。");
+
+const start = (mode) => show.start(mode, { loop: true });
+
+function render() {
+  for (const { ctx, scale } of canvases) {
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.save();
+    ctx.translate(VIEW.ox * scale, VIEW.oy * scale);
+    show.draw(ctx, scale);
+    ctx.restore();
+  }
+}
+
+if (params.has("freeze")) {
+  // Deterministic still for checking a pose: ?mode=dance&freeze=1.37
+  const mode = params.get("mode") || "idle";
+  if (params.get("expr")) pet.expr = params.get("expr");
+  if (params.has("back")) pet.setBack(true, Number(params.get("clench") || 0));  // the kegel pose
+  if (params.has("dark")) document.getElementById("stage").classList.add("dark");
+  await show.start(mode, { silent: true });
+  const until = Number(params.get("freeze"));
+  const react = (params.get("react") || "").split("@");   // ?react=poke@1.8: a reaction starting at 1.8 s
+  for (let t = -0.15; t < until; t += 1 / 60) {  // start below zero, as the audio clock does
+    if (react[0] && t >= Number(react[1]) && t - 1 / 60 < Number(react[1])) pet.react(react[0]);
+    show.tick(1 / 60, t);
+  }
+  render();
+  status(`静帧：${mode} @ ${until}s`);
+} else {
+  let last = performance.now();
+  const frame = (now) => {
+    const dt = (now - last) / 1000;
+    last = now;
+    show.tick(dt);
+    render();
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}
+
+const pick = (group, btn) => { group.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b === btn)); };
+document.getElementById("modes").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  pick(e.currentTarget, b);
+  start(b.dataset.mode);
+});
+document.getElementById("exprs").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  pick(e.currentTarget, b);
+  pet.expr = b.dataset.expr;
+});
+document.getElementById("reacts").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (b) pet.react(b.dataset.react);
+});
+document.getElementById("bg").addEventListener("click", (e) => {
+  const dark = document.getElementById("stage").classList.toggle("dark");
+  e.target.textContent = dark ? "切换浅色" : "切换深色";
+});
+</script>
+</body>
+</html>

@@ -1,107 +1,91 @@
-// First start: pick a pet for Claude Code, then one for Codex (design §5.1).
-// Skipping keeps the recommended defaults already in config.yaml.
+// First start: 紫梦 acts an agent's states out (here and on the desktop, where
+// the daemon scripts the real pet), then you hook the agents up.
 
-import { connect, getJson, inTauri, postJson, type Conn, type PackInfo } from "./api";
-import { Previews, toast } from "./preview";
+import { closeSelf, connect, inTauri, postJson, type Conn } from "./api";
 import { initLang, t } from "./i18n";
-
-const STEPS = [
-  { target: "claude-code", title: () => t("给 Claude Code 选一只宠物", "Pick a pet for Claude Code"), rec: "pixel-cat" },
-  { target: "codex", title: () => t("给 Codex 选一只宠物", "Pick a pet for Codex"), rec: "pixel-bot" },
-] as const;
+import { faceFor, mountPortrait, type Mood } from "./rig/portrait";
+import type { RigPet } from "./rig/rig.js";
+import { applySkin, followSkin, skinFor } from "./skin";
 
 const $ = (id: string) => document.getElementById(id)!;
 let conn: Conn;
-let previews: Previews;
-let packs: PackInfo[] = [];
-let rev = 0;
-let step = 0;
-const picks: string[] = [];
+let actor: RigPet | null = null;
 
-function esc(s: string): string {
-  return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+interface Beat {
+  at: number;
+  ms: number;
+  state: string;
+  who: number;
+  action: string;
+  bubble: string;
 }
+let timers: number[] = [];
 
-async function render() {
-  const s = STEPS[step];
-  const rec = packs.some((p) => p.id === s.rec) ? s.rec : packs[0]?.id;
-  picks[step] ??= rec;
-  $("step").textContent = t(`第 ${step + 1} 步，共 ${STEPS.length} 步`, `Step ${step + 1} of ${STEPS.length}`);
-  $("title").textContent = s.title();
-  $("lead").textContent =
-    step === 0
-      ? t(
-          "宠物会跟着 agent 的真实状态动：思考、敲代码、等你批准、完成。之后随时可以在托盘的「宠物图鉴」里换。",
-          "Your pet acts out what the agent is really doing: thinking, coding, waiting for your approval, done. You can switch anytime from the tray's Gallery.",
-        )
-      : picks[0]
-        ? t(
-            `两边选同一只也可以，Codex 那只会换个颜色，脚下标 CC / CX 区分。`,
-            "Picking the same pet for both is fine — the Codex one gets a different color and a CC / CX tag under its feet.",
-          )
-        : "";
-  ($("back") as HTMLButtonElement).hidden = step === 0;
-  $("next").textContent = step === STEPS.length - 1 ? t("完成", "Done") : t("下一步", "Next");
+/** The face that goes with a state on stage. */
+const MOODS: Record<string, Mood> = { thinking: "work", tool: "work", attention: "wait", done: "done", error: "worry" };
 
-  previews.clear();
-  const grid = $("grid");
-  grid.innerHTML = "";
-  for (const p of packs) {
-    const card = document.createElement("div");
-    card.className = `card${picks[step] === p.id ? " picked" : ""}`;
-    const sameAsFirst = step === 1 && picks[0] === p.id;
-    card.appendChild(await previews.mount(p.id, rev, 112, sameAsFirst ? 180 : 0));
-    card.insertAdjacentHTML(
-      "beforeend",
-      `${p.id === s.rec ? `<span class="rec">${t("推荐", "Recommended")}</span>` : ""}<b>${esc(p.name || p.id)}</b><div class="meta">${p.tags.map(esc).join(" · ")}</div>`,
+/** Play the show: the daemon scripts the desktop pet, this window follows the same beats. */
+async function play() {
+  timers.forEach(clearTimeout);
+  timers = [];
+  const legend = [...document.querySelectorAll<HTMLLIElement>("#legend li")];
+  const say = $("say");
+  legend.forEach((li) => li.classList.remove("on"));
+  say.classList.remove("on");
+  const replay = $("replay") as HTMLButtonElement;
+  replay.disabled = true;
+  const { beats } = await postJson<{ beats: Beat[] }>(conn, "/v1/demo", {}).catch(() => ({ beats: [] as Beat[] }));
+  let end = 0;
+  // One actor here: the beats of the states in the legend, in order.
+  const mine = (beats ?? []).filter((b) => b.state in MOODS).sort((a, b) => a.at - b.at);
+  for (const b of mine) {
+    end = Math.max(end, b.at + b.ms);
+    timers.push(
+      window.setTimeout(() => {
+        legend.forEach((li) => li.classList.toggle("on", li.dataset.state === b.state));
+        if (actor) {
+          actor.expr = faceFor(MOODS[b.state], b.state);
+          if (b.state === "done") actor.react("cheer");
+          else if (b.state === "attention") actor.react("perk");
+        }
+        say.textContent = b.bubble;
+        say.classList.add("on");
+      }, b.at),
     );
-    card.onclick = () => {
-      picks[step] = p.id;
-      void render();
-    };
-    grid.appendChild(card);
   }
+  timers.push(
+    window.setTimeout(() => {
+      legend.forEach((li) => li.classList.remove("on"));
+      say.classList.remove("on");
+      if (actor) actor.expr = "neutral";
+      replay.disabled = false;
+    }, end + 400),
+  );
 }
 
-async function close() {
+const close = () => closeSelf();
+
+/** Same confirm-and-install as the settings' 接入 entries. */
+async function hookUp(which: "claude-code" | "codex") {
   if (!inTauri) return;
-  const { getCurrentWindow } = await import("@tauri-apps/api/window");
-  await getCurrentWindow().close();
-}
-
-async function finish() {
-  for (let i = 0; i < STEPS.length; i++) {
-    const pack = picks[i];
-    if (!pack) continue;
-    const r = await postJson(conn, "/v1/select", { target: STEPS[i].target, pack });
-    if (!r.ok) return toast(r.message);
-  }
-  await close();
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("connect_agent", { which });
 }
 
 async function main() {
   conn = await connect();
   await initLang(conn);
-  previews = new Previews(conn);
-  const res = await getJson<{ packs: PackInfo[]; rev: number }>(conn, "/v1/packs");
-  packs = res.packs;
-  rev = res.rev;
-  $("skip").onclick = () => void close();
-  $("back").onclick = () => {
-    step = Math.max(0, step - 1);
-    void render();
-  };
-  $("next").onclick = () => {
-    if (step < STEPS.length - 1) {
-      step++;
-      void render();
-    } else {
-      void finish();
-    }
-  };
-  await render();
+  const sk = applySkin((await skinFor(conn)).skin.id);
+  followSkin(conn);
+  $("hello").textContent = t(`这是${sk.zh}`, `This is ${sk.en}`);
+  actor = await mountPortrait($("actor") as HTMLCanvasElement, sk.rig ?? undefined).catch(() => null);
+  $("done").onclick = () => void close();
+  $("replay").onclick = () => void play();
+  $("hook-cc").onclick = () => void hookUp("claude-code");
+  $("hook-cx").onclick = () => void hookUp("codex");
+  await play();
 }
 
 main().catch((e) => {
-  document.body.innerHTML = `<div class="banner">${t("加载失败：", "Failed to load: ")}${String(e)}</div>`;
+  document.body.textContent = t("加载失败：", "Failed to load: ") + String(e);
 });

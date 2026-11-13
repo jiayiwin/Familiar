@@ -1,0 +1,9 @@
+Harp samples: from the Versilian Studios Chamber Orchestra 2 Community
+Edition (VSCO 2 CE, https://github.com/sgossner/VSCO-2-CE), released by
+Versilian Studios under CC0 1.0.
+
+These files are the edited MP3 set published in tonejs-instruments by
+Nicholaus Brosowsky (https://github.com/nbrosowsky/tonejs-instruments;
+samples under CC BY 3.0, https://creativecommons.org/licenses/by/3.0/):
+trimmed, levelled and pitch-corrected there. 9 notes of that set are
+included here, unmodified: D2 A2 E3 B3 F4 C5 G5 D6 F6.

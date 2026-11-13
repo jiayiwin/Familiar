@@ -1,8 +1,10 @@
 // No console window in release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod desktop;
 mod physics;
 mod radial;
+mod selection;
 mod setup;
 mod tray;
 mod windows;
@@ -10,7 +12,6 @@ mod windows;
 use petd::{Control, Options, StartError};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -52,7 +53,10 @@ pub struct App {
     pub fullscreen: AtomicBool,
     pub positions: windows::Positions,
     pub motion: physics::Motion,
-    hotkeys: Mutex<(Option<Shortcut>, Option<Shortcut>, Option<Shortcut>)>,
+    /// Boss key, focus toggle.
+    hotkeys: Mutex<(Option<Shortcut>, Option<Shortcut>)>,
+    /// 记一件事 (with what is selected, if anything).
+    note_key: Mutex<Option<Shortcut>>,
 }
 
 /// The pet windows ask for this to reach petd's HTTP/WS API.
@@ -116,7 +120,7 @@ async fn pet_menu(window: WebviewWindow, app: tauri::State<'_, Arc<App>>, pet: S
     r
 }
 
-/// A pick in the ring menu: same ids as the tray.
+/// A pick in the right-click menu: same ids as the tray.
 /// Async: picks may open windows (gallery, report), and a sync command runs
 /// on the main thread, where creating a window deadlocks.
 #[tauri::command]
@@ -157,21 +161,81 @@ fn drag_start(window: WebviewWindow, app: tauri::State<'_, Arc<App>>) {
     physics::drag(app.inner().clone(), window);
 }
 
-/// Double-click: bring the terminal / IDE of a session to the front.
+/// The overlay sends a pet after a bug: run along the floor to `x` (logical screen px), or home when `x` is None.
 #[tauri::command]
-fn focus_session(pid: u32) -> bool {
-    pid != 0 && windows::focus_process_window(pid)
+fn pet_chase(h: AppHandle, app: tauri::State<'_, Arc<App>>, pet: String, x: Option<f64>) {
+    physics::chase(app.inner().clone(), &h, &pet, x);
+}
+
+/// Walk a pet over to stand beside another (onto that one's floor, on whatever screen it is), or home with None.
+#[tauri::command]
+fn pet_visit(h: AppHandle, app: tauri::State<'_, Arc<App>>, pet: String, target: Option<String>) {
+    physics::walk(app.inner().clone(), &h, &pet, target.as_deref());
+}
+
+/// The sweep: a pet rides its broom until its window's top-left is at (x, y), physical px.
+#[tauri::command]
+fn pet_fly(h: AppHandle, app: tauri::State<'_, Arc<App>>, pet: String, x: f64, y: f64, ms: f64) {
+    physics::fly_to(app.inner().clone(), &h, &pet, x, y, ms);
+}
+
+/// The desktop's icons and where each goes (None: nothing to tidy, icons hidden or auto-arranged).
+#[tauri::command]
+async fn desk_plan() -> Option<desktop::Plan> {
+    desktop::plan()
+}
+
+/// The put-away sweep: the old files' icons fly into the folder `drawer`
+/// (already made, its icon on the desktop); everything else is packed around it.
+#[tauri::command]
+async fn desk_stow_plan(paths: Vec<String>, drawer: String) -> Option<desktop::Plan> {
+    desktop::stow_plan(paths, drawer)
+}
+
+/// The sweep starts: every icon's place is kept for "put them back".
+#[tauri::command]
+async fn desk_begin() -> bool {
+    desktop::begin()
+}
+
+/// Icons on their way, a frame at a time: [key, x, y] in physical px.
+#[tauri::command]
+async fn desk_move(moves: Vec<(String, i32, i32)>) {
+    desktop::moves(moves)
+}
+
+/// The sweep is over: the grid as it was, and a line in the diary (`who`: which of the five swept, `n`: icons put away).
+#[tauri::command]
+async fn desk_end(h: AppHandle, who: String, n: u32) {
+    desktop::end();
+    if n > 0 {
+        petd::tidy::noted(&h.state::<Arc<App>>().petd.shared, &who, n);
+    }
+}
+
+/// Every icon back where it was before the last sweep; how many went back.
+#[tauri::command]
+async fn desk_undo() -> u32 {
+    desktop::undo()
+}
+
+/// A pet clinging to a screen edge lets go (it was clicked, or its agent needs you).
+#[tauri::command]
+fn pet_let_go(window: WebviewWindow, app: tauri::State<'_, Arc<App>>, why: String) {
+    physics::let_go(&app, window.label(), &why);
+}
+
+/// Double-click: bring the terminal / IDE of a session to the front
+/// (`project`: picks among an app's windows when it has several).
+#[tauri::command]
+fn focus_session(pid: u32, project: Option<String>) -> bool {
+    pid != 0 && windows::focus_process_window(pid, project.as_deref().unwrap_or(""))
 }
 
 /// Annoyed pets hop away (logical px/s).
 #[tauri::command]
 fn pet_hop(window: WebviewWindow, app: tauri::State<'_, Arc<App>>, vx: f64, vy: f64) {
-    physics::throw(app.inner().clone(), window, vx, vy);
-}
-
-#[tauri::command]
-fn open_pets_dir(app: tauri::State<'_, Arc<App>>) {
-    open_path(&app.petd.paths.pets());
+    physics::throw(app.inner().clone(), window, vx, vy, false);
 }
 
 #[tauri::command]
@@ -179,41 +243,10 @@ fn open_config(app: tauri::State<'_, Arc<App>>) {
     open_path(&app.petd.paths.config());
 }
 
-/// Install a pet pack from a folder or .zip (gallery button or drag and drop).
-// Commands that create windows or do slow work are async: sync commands run
-// on the main thread, and building a webview there deadlocks on Windows.
+/// The welcome window's "hook up" buttons: same confirm-and-install as the tray.
 #[tauri::command]
-async fn import_pack(app: tauri::State<'_, Arc<App>>, path: String, overwrite: bool) -> Result<petd::install::Outcome, String> {
-    petd::install::import(&app.petd.shared, std::path::Path::new(&path), overwrite)
-}
-
-/// Install a pack generated in the gallery from a picture.
-#[tauri::command]
-async fn create_pack(app: tauri::State<'_, Arc<App>>, files: Vec<(String, Vec<u8>)>, overwrite: bool) -> Result<petd::install::Outcome, String> {
-    petd::install::create(&app.petd.shared, files, overwrite)
-}
-
-/// Bytes of a picture the user chose (dialog or drag and drop) for the pet maker.
-#[tauri::command]
-async fn read_image(path: String) -> Result<Vec<u8>, String> {
-    let p = std::path::Path::new(&path);
-    let ok = p
-        .extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|e| ["png", "jpg", "jpeg", "webp", "bmp", "gif"].contains(&e.to_ascii_lowercase().as_str()));
-    if !ok {
-        return Err(petd::i18n::t("请选择 PNG、JPG 或 WebP 图片", "Choose a PNG, JPG or WebP picture").into());
-    }
-    let len = std::fs::metadata(p).map_err(|e| e.to_string())?.len();
-    if len > 30 * 1024 * 1024 {
-        return Err(petd::i18n::t("图片太大了（超过 30 MB）", "The picture is too big (over 30 MB)").into());
-    }
-    std::fs::read(p).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn remove_pack(app: tauri::State<'_, Arc<App>>, id: String) -> Result<String, String> {
-    petd::install::remove(&app.petd.shared, &id)
+async fn connect_agent(h: AppHandle, which: String) {
+    connect(&h, &which);
 }
 
 #[tauri::command]
@@ -227,18 +260,6 @@ fn quiet(app: tauri::State<'_, Arc<App>>) -> bool {
     !windows::visible(&app)
 }
 
-fn builtin_pets(app: &AppHandle) -> Option<PathBuf> {
-    if let Ok(dir) = app.path().resource_dir() {
-        let p = dir.join("pets");
-        if p.is_dir() {
-            return Some(p);
-        }
-    }
-    // `cargo run` from the repo.
-    let dev = setup::repo_root()?.join("pets");
-    dev.is_dir().then_some(dev)
-}
-
 fn open_path(p: &std::path::Path) {
     #[cfg(windows)]
     let _ = std::process::Command::new("explorer").arg(p).spawn();
@@ -248,68 +269,58 @@ fn open_path(p: &std::path::Path) {
     let _ = std::process::Command::new("xdg-open").arg(p).spawn();
 }
 
-/// Routing modes: (id, Chinese, English). Pick the label with `mode_name`.
-const MODES: [(&str, &str, &str); 4] = [
-    ("per-camp", "按阵营（主宠物 + 分身）", "By team (main pet + minis)"),
-    ("single", "单宠物", "Single pet"),
-    ("per-rule", "按规则", "By rule"),
-    ("per-session", "按会话", "Per session"),
-];
-
-/// Language choices for the tray and ring menu: (id, Chinese, English).
+/// Language choices for the tray and the right-click menu: (id, Chinese, English).
 const LANGS: [(&str, &str, &str); 3] = [("auto", "跟随系统", "Auto"), ("zh", "中文", "中文"), ("en", "English", "English")];
 
 fn current_language(app: &App) -> String {
     app.petd.hub.lock().unwrap().cfg.language.to_ascii_lowercase()
 }
 
-fn target_name(t: &str) -> String {
-    petd::ops::target_name(t)
-}
-
 /// Everything the tray panel shows (tray.html renders it in the app's style).
 fn tray_state(app: &App) -> serde_json::Value {
-    let (broken, mode, focus) = {
+    let (focus, size, sounds, chatter, hidden, views) = {
         let hub = app.petd.hub.lock().unwrap();
-        (hub.lib.broken.len(), hub.cfg.mode, hub.cfg.features.focus_mode)
+        let f = &hub.cfg.features;
+        (f.focus_mode, f.size.to_lowercase(), f.sounds, f.chatter.clone(), hub.hidden, hub.pets())
     };
-    let (boss, focus_key) = hotkey_names(app);
-    let modes: Vec<_> = MODES.iter().map(|(id, zh, en)| serde_json::json!({ "id": id, "label": petd::i18n::t(zh, en) })).collect();
-    let langs: Vec<_> = LANGS.iter().map(|(id, zh, en)| serde_json::json!({ "id": id, "label": petd::i18n::t(zh, en) })).collect();
-    let model_ready = petd::local_llm::is_ready(&app.petd.paths.home);
-    let dl_done = MODEL_DL_DONE.load(Ordering::Relaxed);
-    let dl_total = MODEL_DL_TOTAL.load(Ordering::Relaxed);
-    let habit_data = |ht: &str| {
-        let db = &app.petd.shared.db;
-        let streak: i64 = db.kv_get(&format!("habit:{}:streak", ht)).and_then(|v| v.parse().ok()).unwrap_or(0);
-        let best: i64 = db.kv_get(&format!("habit:{}:best", ht)).and_then(|v| v.parse().ok()).unwrap_or(0);
-        let today_v = db.kv_get(&format!("habit:{}:today", ht)).unwrap_or_default();
-        let last_date = db.kv_get(&format!("habit:{}:last_date", ht)).unwrap_or_default();
-        let today_s = chrono::Local::now().format("%Y-%m-%d").to_string();
-        let today_checked = !last_date.is_empty() && last_date == today_s;
-        serde_json::json!({
-            "streak": streak, "best": best,
-            "today": if today_checked { today_v } else { String::new() },
-            "active": !last_date.is_empty(),
+    // Who is here: each pet, whose agent it stands for, and what that agent is doing.
+    let now = petd::now_ms();
+    let pets: Vec<_> = views
+        .iter()
+        .map(|v| {
+            let waiting = v.state == petd::session::State::Attention;
+            let state = if waiting {
+                let m = now.saturating_sub(v.since) / 60_000;
+                if m >= 1 { petd::tr!("等你 {m} 分钟", "waiting {m} min") } else { petd::i18n::t("等你", "waiting for you").to_string() }
+            } else {
+                v.state.label().to_string()
+            };
+            let name = petd::cast::by_id(&v.skin).map(|f| f.name()).unwrap_or("");
+            serde_json::json!({ "id": v.id, "camp": v.camp, "agent": v.marker, "state": state, "waiting": waiting, "skin": v.skin, "name": name })
         })
-    };
+        .collect();
+    let (boss, focus_key) = hotkey_names(app);
+    let langs: Vec<_> = LANGS.iter().map(|(id, zh, en)| serde_json::json!({ "id": id, "label": petd::i18n::t(zh, en) })).collect();
+    // The panel belongs to no one pet: it wears the main pet's skin.
+    let skin = petd::cast::main(&app.petd.hub.lock().unwrap().cfg).id;
     serde_json::json!({
+        "skin": skin,
         "version": env!("CARGO_PKG_VERSION"),
-        "en": petd::i18n::t("zh", "en") == "en",
-        "coins": app.petd.shared.db.balance(),
-        "broken": broken,
-        "mode": mode.as_str(),
+        "en": petd::i18n::is_en(),
         "lang": current_language(app),
+        "langs": langs,
         "focus": focus,
+        "size": size,
+        "sounds": sounds,
+        "initiative": chatter != "quiet",
+        "hidden": hidden,
+        "pets": pets,
         "autostart": setup::autostart_on(),
         "boss": boss,
         "focusKey": focus_key,
-        "modes": modes,
-        "langs": langs,
-        "modelReady": model_ready,
-        "modelDlDone": dl_done,
-        "modelDlTotal": dl_total,
-        "habits": { "smoking": habit_data("smoking"), "sugar": habit_data("sugar") },
+        "modelReady": petd::local_llm::is_ready(&app.petd.paths.home),
+        "modelDlDone": MODEL_DL_DONE.load(Ordering::Relaxed),
+        "modelDlTotal": MODEL_DL_TOTAL.load(Ordering::Relaxed),
     })
 }
 
@@ -339,34 +350,59 @@ fn toggle_boss(h: &AppHandle, app: &App) {
     }
 }
 
-/// Hotkeys from config.yaml (`hotkeys.boss_key`, `hotkeys.focus_toggle`, `hotkeys.cycle_pet`).
-fn read_hotkeys(home: &std::path::Path) -> (String, String, String) {
+/// Hotkeys from config.yaml (`hotkeys.boss_key`, `hotkeys.focus_toggle`).
+fn read_hotkeys(home: &std::path::Path) -> (String, String) {
     let v: serde_yaml::Value = std::fs::read_to_string(home.join("config.yaml"))
         .ok()
         .and_then(|t| serde_yaml::from_str(&t).ok())
         .unwrap_or(serde_yaml::Value::Null);
     let get = |k: &str, d: &str| v.get("hotkeys").and_then(|h| h.get(k)).and_then(|x| x.as_str()).unwrap_or(d).to_string();
-    (get("boss_key", "Ctrl+Alt+H"), get("focus_toggle", "Ctrl+Alt+F"), get("cycle_pet", "Ctrl+Alt+P"))
+    (get("boss_key", "Ctrl+Alt+H"), get("focus_toggle", "Ctrl+Alt+F"))
 }
 
 fn hotkey_names(app: &App) -> (String, String) {
-    let k = app.hotkeys.lock().unwrap();
+    let k = *app.hotkeys.lock().unwrap();
     let name = |s: &Option<Shortcut>| s.map(|s| s.into_string()).unwrap_or_else(|| petd::i18n::t("未设置", "not set").into());
-    let k = (k.0, k.1);
     (name(&k.0).replace("control", "Ctrl").replace("alt", "Alt").replace("shift", "Shift").replace("Key", ""), name(&k.1).replace("control", "Ctrl").replace("alt", "Alt").replace("shift", "Shift").replace("Key", ""))
 }
 
 fn register_hotkeys(h: &AppHandle, app: &App) {
-    let (boss, focus, cycle) = read_hotkeys(&app.petd.paths.home);
+    let (boss, focus) = read_hotkeys(&app.petd.paths.home);
     let gs = h.global_shortcut();
     let parse = |s: &str| s.parse::<Shortcut>().map_err(|e| app.petd.paths.log(&format!("hotkey {s}: {e}"))).ok();
-    let (b, f, c) = (parse(&boss), parse(&focus), parse(&cycle));
-    for s in [b, f, c].into_iter().flatten() {
+    let (b, f) = (parse(&boss), parse(&focus));
+    for s in [b, f].into_iter().flatten() {
         if let Err(e) = gs.register(s) {
             app.petd.paths.log(&format!("hotkey {}: {e}", s.into_string()));
         }
     }
-    *app.hotkeys.lock().unwrap() = (b, f, c);
+    *app.hotkeys.lock().unwrap() = (b, f);
+    let v: serde_yaml::Value = std::fs::read_to_string(app.petd.paths.home.join("config.yaml"))
+        .ok()
+        .and_then(|t| serde_yaml::from_str(&t).ok())
+        .unwrap_or(serde_yaml::Value::Null);
+    let note = v.get("hotkeys").and_then(|h| h.get("note")).and_then(|x| x.as_str()).unwrap_or("Ctrl+Alt+N").to_string();
+    let n = parse(&note);
+    if let Some(s) = n {
+        if let Err(e) = gs.register(s) {
+            app.petd.paths.log(&format!("hotkey {}: {e}", s.into_string()));
+        }
+    }
+    *app.note_key.lock().unwrap() = n;
+}
+
+/// 记一件事 over a pet's head (the first pet when none is named), starting from `text`.
+fn open_note(h: &AppHandle, app: &App, pet: Option<String>, text: Option<String>) -> Result<(), String> {
+    let pet = pet.or_else(|| app.petd.shared.hub.lock().unwrap().pets().first().map(|p| p.id.clone())).ok_or("no pet")?;
+    let win = h.get_webview_window(&format!("pet-{pet}")).ok_or("no pet window")?;
+    let model = radial::build(app, &pet, false).ok_or("no such pet")?;
+    radial::open_note(h, &win, model, text)
+}
+
+/// The card's 「记一件事…」: the line to write in, over that pet's head.
+#[tauri::command]
+async fn note_open(h: AppHandle, app: tauri::State<'_, Arc<App>>, pet: Option<String>, text: Option<String>) -> Result<(), String> {
+    open_note(&h, app.inner(), pet, text)
 }
 
 /// Share-toolbar windows of common meeting apps (title or class contains
@@ -423,107 +459,46 @@ fn spawn_fullscreen_guard(h: AppHandle, app: Arc<App>) {
     });
 }
 
-/// Every menu (tray and right-click) lands here.
 /// A line from the pet that was right-clicked (optionally with an action).
 fn pet_say(h: &AppHandle, pet: &str, text: &str, action: Option<&str>) {
     let _ = h.emit_to(format!("pet-{pet}").as_str(), "say", serde_json::json!({ "text": text, "action": action }));
 }
 
+/// Every menu (tray and right-click) lands here. Entries about one pet carry its id: kind|pet|…
 fn on_menu(h: &AppHandle, id: &str) {
     let app = h.state::<Arc<App>>().inner().clone();
     let sh = &app.petd.shared;
-    // Game entries carry the pet id: kind|pet|...
     let g: Vec<&str> = id.split('|').collect();
     match g.as_slice() {
-        ["bet", pet, game, pick, stake] => {
-            let stake_n: i64 = stake.parse().unwrap_or(0);
-            let r = sh.world.lock().unwrap().bet(game, pick, stake_n, petd::now_ms(), &sh.db);
-            // The chip hangs on the pet that was bet on (race) or the one clicked (bookmaker).
-            let (target, odds, label) = if *game == "race" {
-                let views = app.petd.hub.lock().unwrap().pets();
-                let t = views.iter().find(|v| v.id == *pick).or_else(|| views.iter().find(|v| v.camp.as_deref() == Some(*pick))).map(|v| v.id.clone());
-                let odds = sh.world.lock().unwrap().offers(petd::now_ms(), &sh.db).race.map(|r| if *pick == "claude-code" { r.0 } else { r.1 });
-                (t.unwrap_or_else(|| pet.to_string()), odds.unwrap_or(0.0), String::new())
-            } else {
-                let p = petd::games::BOOK_PICKS.iter().find(|(id, _, _)| id == pick);
-                (pet.to_string(), p.map(|x| x.2).unwrap_or(0.0), p.map(|x| petd::games::book_pick_name(x.0).to_string()).unwrap_or_default())
-            };
-            let ok = r.is_ok();
-            let text = r.unwrap_or_else(|e| e);
-            let _ = h.emit_to(
-                format!("pet-{target}").as_str(),
-                "fx",
-                serde_json::json!({ "kind": "bet", "ok": ok, "text": text, "game": game, "pick": pick, "stake": stake_n, "odds": odds, "label": label }),
-            );
-            return;
-        }
-        // 小皮鞭: the user holds the whip; the pet answers to its state.
-        ["whip", pet] => {
-            let views = app.petd.hub.lock().unwrap().pets();
-            let r = sh.world.lock().unwrap().user_whip(pet, &views, petd::now_ms(), &sh.db);
-            match r {
-                Ok(outs) => send_outs(sh, outs),
-                Err(e) => pet_say(h, pet, &e, None),
-            }
-            return;
-        }
-        ["duel", pet] => {
-            let r = {
-                let hub = app.petd.hub.lock().unwrap();
-                sh.world.lock().unwrap().request_duel(&hub, petd::now_ms())
-            };
-            match r {
-                Ok((_, outs)) => send_outs(sh, outs), // the pets explain the rules themselves
-                Err(e) => pet_say(h, pet, &e, None),
-            }
-            return;
-        }
-        ["duelcancel", pet] => {
-            let outs = sh.world.lock().unwrap().cancel_duel();
-            send_outs(sh, outs);
-            pet_say(h, pet, &petd::tr!("擂台取消了", "Duel called off"), None);
-            return;
-        }
-        ["rps", pet, pick] => {
-            let user: usize = pick.parse().unwrap_or(0);
-            let (me, outcome, coins) = sh.world.lock().unwrap().rps_user(user, petd::now_ms(), &sh.db);
-            let _ = h.emit_to(
-                format!("pet-{pet}").as_str(),
-                "fx",
-                serde_json::json!({ "kind": "rps", "user": user, "pet": me, "outcome": outcome, "coins": coins }),
-            );
-            // The pet lost to you: after the reveal and its sulk, the whip.
-            if outcome == "win" {
-                let views = app.petd.hub.lock().unwrap().pets();
-                let outs = sh.world.lock().unwrap().lost_to_user(pet, &views, 2600, &sh.db);
-                send_outs(sh, outs);
-            }
-            return;
-        }
-        // 相声: from a pet's ring menu (xs|pet) or the tray (xs: the Claude Code pet, or any).
-        ["xs", rest @ ..] => {
-            let views = app.petd.hub.lock().unwrap().pets();
-            let pet = match rest.first() {
-                Some(p) => p.to_string(),
-                None => petd::world::World::camp_pet(&views, "claude-code").or_else(|| views.first()).map(|v| v.id.clone()).unwrap_or_default(),
-            };
-            let r = {
-                let mut w = sh.world.lock().unwrap();
-                w.reload_xs(&app.petd.paths.home);
-                w.request_xs(rest.get(1).copied(), &pet, petd::now_ms(), &views, &sh.db)
-            };
-            match r {
-                Ok(outs) => send_outs(sh, outs),
-                Err(e) => pet_say(h, &pet, &e, None),
-            }
-            return;
-        }
-        ["duo", pet, game] => {
-            let views = app.petd.hub.lock().unwrap().pets();
-            let r = sh.world.lock().unwrap().request_duo(Some(game), pet, petd::now_ms(), &views, &sh.db);
-            match r {
-                Ok(outs) => send_outs(sh, outs),
-                Err(e) => pet_say(h, pet, &e, None),
+        // A "yes" on something a pet offered: offer|pet|radio:shelf, or offer|pet|storeroom.
+        ["offer", pet, what] => {
+            match what.split_once(':') {
+                Some(("radio", shelf)) => windows::open_radio_playing(h, pet, shelf),
+                // The storeroom on one of its views: desktop, downloads, or "disk" (where most could be freed).
+                Some(("storeroom", view)) => windows::open_tab(h, "storeroom", None, Some(view)),
+                _ if *what == "storeroom" => windows::open_storeroom(h),
+                // 收工曲: today's, played in the window's own tab.
+                _ if *what == "song" => {
+                    let today = petd::db::day_of(petd::now_ms());
+                    windows::open_tab(h, "song", Some(pet), Some(&format!("play:{today}")));
+                }
+                // After the rename: Claude Code (and the rest) move over to the new names.
+                _ if *what == "rehook" => {
+                    let (h, pet) = (h.clone(), pet.to_string());
+                    std::thread::spawn(move || {
+                        let Some(root) = setup::plugin_root(h.path().resource_dir().ok()) else { return };
+                        pet_say(&h, &pet, &setup::move_hookups(&root), None);
+                    });
+                }
+                // The pet sweeps the desktop: its own window runs the sweep.
+                _ if *what == "tidy" => {
+                    let _ = h.emit_to(format!("pet-{pet}"), "sweep", serde_json::json!({ "stow": false }));
+                }
+                // ...and puts the files nobody touched in weeks into 桌面收纳 as it goes.
+                _ if *what == "stow" => {
+                    let _ = h.emit_to(format!("pet-{pet}"), "sweep", serde_json::json!({ "stow": true }));
+                }
+                _ => {}
             }
             return;
         }
@@ -533,8 +508,8 @@ fn on_menu(h: &AppHandle, id: &str) {
                 h,
                 pet,
                 &petd::tr!(
-                    "在 Codex 里输入 /usage 选「使用重置卡」（桌面版：设置 → 用量）。用掉了我会知道的～",
-                    "In Codex, type /usage and pick \"Use reset card\" (desktop app: Settings → Usage). I'll know when you've used it~"
+                    "在 Codex 里输入 /usage 选「使用重置卡」（桌面版：设置 → 用量）。用掉了我会知道的。",
+                    "In Codex, type /usage and pick \"Use reset card\" (desktop app: Settings → Usage). I'll know when you've used it."
                 ),
                 None,
             );
@@ -544,73 +519,53 @@ fn on_menu(h: &AppHandle, id: &str) {
             let _ = h.emit_to(format!("pet-{pet}").as_str(), "fx", serde_json::json!({ "kind": "card", "from": 96.0, "used": 0.0 }));
             return;
         }
+        // 喂它: `feed|pet` one fish, `feed|pet|n` up to n. A milestone (a secret, a letter) ends the batch.
         ["feed", pet] | ["feed", pet, _] => {
+            use petd::bond::BondReward;
             let n: usize = g.get(2).and_then(|s| s.parse().ok()).unwrap_or(1).min(50);
-            let views = app.petd.hub.lock().unwrap().pets();
-            if let Some(v) = views.iter().find(|v| v.id == *pet).cloned() {
-                let mut last_bond_tier = "none";
-                let mut last_text = String::new();
-                let mut last_count = 0i64;
-                let mut batch_fed = 0i64;
-                let mut letter_data: Option<(i64, String)> = None;
-                for _ in 0..n {
-                    let (text, outs, reward, feed_count) = sh.world.lock().unwrap().feed(&v, &views, petd::now_ms(), &sh.db);
-                    for o in outs {
-                        if let petd::world::Out::Ws(m) = o {
-                            let _ = sh.ws_tx.send(m);
-                        }
-                    }
-                    let no_fish = matches!(reward, petd::bond::BondReward::NoFish);
-                    let milestone = matches!(reward, petd::bond::BondReward::Letter { .. } | petd::bond::BondReward::Secret(_));
-                    if !no_fish {
-                        last_text = text;
-                        last_count = feed_count;
-                        batch_fed += 1;
-                    } else {
-                        last_text = text; // "鱼篓是空的" message
-                    }
-                    let (bond_str, ldata) = match reward {
-                        petd::bond::BondReward::NoFish => ("none", None),
-                        petd::bond::BondReward::Whisper(_) => ("whisper", None),
-                        petd::bond::BondReward::Secret(_) => ("secret", None),
-                        petd::bond::BondReward::Letter { feed_count: fc, pet_name, .. } => ("letter", Some((fc, pet_name))),
-                    };
-                    last_bond_tier = bond_str;
-                    if ldata.is_some() { letter_data = ldata; }
-                    if milestone || no_fish { break; }
+            let (mut text, mut bond, mut count, mut fed, mut letter) = (String::new(), "none", 0i64, 0i64, None);
+            // Whoever is fed answers, and writes, as itself.
+            let fellow = { let hub = sh.hub.lock().unwrap(); petd::cast::of(&hub.cfg, pet) };
+            for _ in 0..n {
+                let (said, reward, feeds) = sh.world.lock().unwrap().feed(pet, fellow.id, petd::now_ms(), &sh.db);
+                text = said;
+                if matches!(reward, BondReward::NoFish) {
+                    break;
                 }
-                // If batch partially succeeded then ran out of fish, report what was fed
-                let report_ok = batch_fed > 0;
-                let report_count = last_count;
-                let _ = h.emit_to(format!("pet-{pet}").as_str(), "fx", serde_json::json!({
-                    "kind": "feed", "ok": report_ok, "text": last_text, "bond": last_bond_tier,
-                    "count": report_count, "batch": batch_fed
-                }));
-                if let Some((fc, pack_id)) = letter_data {
-                    // Resolve display name from pack library (pack_id comes from bond::on_feed)
-                    let display_name = {
-                        let hub = sh.hub.lock().unwrap();
-                        hub.lib.packs.get(&pack_id)
-                            .map(|p| p.name.clone())
-                            .filter(|n| !n.is_empty())
-                            .unwrap_or_else(|| pack_id.clone())
-                    };
-                    let h2 = h.clone();
-                    let en = petd::i18n::is_en();
-                    let home = app.petd.paths.home.clone();
-                    let pet_label = format!("pet-{pet}");
-                    // The pet's picture goes on the envelope as the stamp.
-                    let stamp = {
-                        let info = h.state::<Info>();
-                        format!("http://127.0.0.1:{}/v1/packs/{}/files/preview.png?token={}", info.port, pack_id, info.token)
-                    };
-                    tauri::async_runtime::spawn(async move {
-                        let letter = petd::bond::generate_letter(fc, &display_name, en, Some(home)).await;
-                        let payload = serde_json::json!({ "text": letter, "count": fc, "pet_name": display_name, "pack": pack_id, "stamp": stamp });
-                        *PENDING_LETTER.lock().unwrap() = Some(payload);
-                        let _ = h2.emit_to(pet_label.as_str(), "letter-notify", ());
-                    });
+                (count, fed) = (feeds, fed + 1);
+                bond = match reward {
+                    BondReward::NoFish => "none",
+                    BondReward::Whisper(_) => "whisper",
+                    BondReward::Secret(_) => "secret",
+                    BondReward::Letter { feed_count } => {
+                        letter = Some(feed_count);
+                        "letter"
+                    }
+                };
+                if bond != "whisper" {
+                    break;
                 }
+            }
+            // What it ate, so the window can show that very one flying in.
+            let treat = {
+                let w = sh.world.lock().unwrap();
+                w.last_fed.as_ref().and_then(|id| w.t.fish.iter().find(|f| &f.id == id)).map(|f| serde_json::json!({ "shape": f.shape, "colors": f.colors }))
+            };
+            let _ = h.emit_to(format!("pet-{pet}").as_str(), "fx", serde_json::json!({ "kind": "feed", "ok": fed > 0, "text": text, "bond": bond, "count": count, "batch": fed, "treat": treat }));
+            // Fed while it clings to a screen edge: heavier now, it slips off.
+            if fed > 0 {
+                physics::let_go(&app, &format!("pet-{pet}"), "fed");
+            }
+            if let Some(fc) = letter {
+                // The letter is from the pet that was fed: its name, its paper.
+                let (name, skin) = (fellow.name().to_string(), fellow.id);
+                let (h2, en, home, label) = (h.clone(), petd::i18n::is_en(), app.petd.paths.home.clone(), format!("pet-{pet}"));
+                let moments = sh.db.recent_bond_moments(5);
+                tauri::async_runtime::spawn(async move {
+                    let letter = petd::bond::generate_letter(fc, &name, en, Some(home), moments).await;
+                    *PENDING_LETTER.lock().unwrap() = Some(serde_json::json!({ "text": letter, "count": fc, "pet_name": name, "skin": skin }));
+                    let _ = h2.emit_to(label.as_str(), "letter-notify", ());
+                });
             }
             return;
         }
@@ -618,13 +573,13 @@ fn on_menu(h: &AppHandle, id: &str) {
     }
     let mut parts = id.splitn(3, '|');
     match (parts.next(), parts.next(), parts.next()) {
-        (Some("switch"), Some(target), Some(pack)) => {
-            if let Err(e) = petd::ops::select(sh, target, pack) {
-                app.petd.paths.log(&e);
-            }
+        (Some("act"), Some(pet), Some(kind)) => {
+            petd::ops::perform(sh, pet, kind);
         }
-        (Some("mode"), Some(mode), _) => {
-            let _ = petd::ops::set_mode(sh, mode);
+        (Some("kegel"), pet, _) => {
+            if let Err(e) = petd::ops::kegel_now(sh, pet) {
+                app.petd.paths.log(&format!("kegel: {e}"));
+            }
         }
         (Some("lang"), Some(lang), _) => {
             if let Err(e) = petd::ops::set_language(sh, lang) {
@@ -632,52 +587,32 @@ fn on_menu(h: &AppHandle, id: &str) {
             }
             refresh_tray(h, &app);
         }
-        (Some("hide"), Some(pet), _) => petd::ops::hide_pet(sh, pet),
-        (Some("unproj"), Some(pat), _) => {
-            let _ = petd::ops::clear_project(sh, pat);
-        }
         (Some("focus"), _, _) => toggle_focus(&app),
-        (Some("tug"), _, _) => {
-            let r = {
-                let hub = app.petd.hub.lock().unwrap();
-                app.petd.shared.world.lock().unwrap().request_tug(&hub)
-            };
-            if let Err(e) = r {
-                // Tell the user through the pet that was right-clicked.
-                let _ = h.emit("tug-refused", e);
-            }
+        (Some("sounds"), _, _) => {
+            let on = !app.petd.hub.lock().unwrap().cfg.features.sounds;
+            let _ = petd::ops::set_setting(sh, "sounds", &serde_json::Value::Bool(on));
         }
         (Some("size"), Some(s), _) => {
             let _ = petd::ops::set_size(sh, s);
         }
+        (Some("chatter"), Some(s), _) => {
+            let _ = petd::ops::set_chatter(sh, s);
+        }
+        (Some("hide"), Some(pet), _) => petd::ops::hide_pet(sh, pet),
         (Some("show"), _, _) => {
             app.boss.store(false, Ordering::SeqCst);
             petd::ops::show_all(sh)
         }
         (Some("hideall"), _, _) => petd::ops::hide_all(sh),
+        (Some("room"), pet, _) => windows::open_room(h, pet),
         (Some("gallery"), _, _) => windows::open_gallery(h),
-        (Some("reminders"), _, _) => windows::open_reminders(h),
-        (Some("kegel"), pet, _) => {
-            if let Err(e) = petd::ops::kegel_now(sh, pet) {
-                app.petd.paths.log(&format!("kegel: {e}"));
-            }
-        }
+        // The kegel reps live with the other settings now.
+        (Some("settings" | "reminders"), _, _) => windows::open_settings(h),
         (Some("report"), _, _) => windows::open_report(h),
-        (Some("spring"), _, _) => windows::open_spring(h),
-        (Some("radio"), _, _) => windows::open_radio(h),
-        (Some("shop"), _, _) => windows::open_shop(h),
+        (Some("storeroom"), _, _) => windows::open_storeroom(h),
+        (Some("radio"), pet, _) => windows::open_radio(h, pet),
         (Some("config"), _, _) => open_path(&app.petd.paths.config()),
         (Some("folder"), _, _) => open_path(&app.petd.paths.home),
-        (Some("xsdir"), _, _) => {
-            let dir = petd::xiangsheng::dir(&app.petd.paths.home);
-            let _ = std::fs::create_dir_all(&dir);
-            open_path(&dir)
-        }
-        (Some("musicdir"), _, _) => {
-            let dir = petd::spring::music_dir(&app.petd.paths.home);
-            let _ = std::fs::create_dir_all(&dir);
-            open_path(&dir)
-        }
         (Some("autostart"), _, _) => {
             let want = !setup::autostart_on();
             if let Err(e) = setup::set_autostart(want) {
@@ -688,7 +623,7 @@ fn on_menu(h: &AppHandle, id: &str) {
         (Some("connect"), Some(which), _) => connect(h, which),
         (Some("read_letter"), _, _) => {
             if PENDING_LETTER.lock().unwrap().is_some() {
-                let _ = crate::windows::open_letter(h);
+                crate::windows::open_letter(h);
             }
         }
         (Some("quit"), _, _) => {
@@ -699,108 +634,19 @@ fn on_menu(h: &AppHandle, id: &str) {
     }
 }
 
-fn send_outs(sh: &petd::server::Shared, outs: Vec<petd::world::Out>) {
-    for o in outs {
-        match o {
-            petd::world::Out::Ws(m) => {
-                let _ = sh.ws_tx.send(m);
-            }
-            petd::world::Out::Control(c) => {
-                let _ = sh.control.send(c);
-            }
-        }
-    }
-}
-
-/// The first pet window's id, for lines the tray wants a pet to say.
-fn first_pet(h: &AppHandle) -> Option<String> {
-    let mut labels: Vec<String> = h.webview_windows().keys().filter(|l| l.starts_with("pet-")).cloned().collect();
-    labels.sort();
-    labels.first().map(|l| l["pet-".len()..].to_string())
-}
-
-#[tauri::command]
-// Async on purpose: creating a window from a sync command deadlocks on Windows.
-async fn habit_craving(h: tauri::AppHandle, habit_type: String) {
-    use chrono::Datelike;
-    let _ = habit_type;
-    let zh = ["先别动。我放段相声，你听着。", "我这儿有段相声，正好。", "来。听完这段再说。"];
-    let en = ["Hold still. I'll put on a xiangsheng bit — just listen.", "I've got a bit queued up. Good timing.", "Come on. Hear this one out first."];
-    let i = chrono::Local::now().ordinal() as usize % zh.len();
-    if let Some(pet) = first_pet(&h) {
-        pet_say(&h, &pet, petd::i18n::t(zh[i], en[i]), None);
-    }
-    windows::open_radio_tab(&h, "xs");
-}
-
-#[tauri::command]
-fn habit_checkin(h: tauri::AppHandle, app: tauri::State<'_, Arc<App>>, habit_type: String, status: String) -> serde_json::Value {
-    let db = &app.petd.shared.db;
-    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-    let yesterday = (chrono::Local::now() - chrono::Duration::days(1)).format("%Y-%m-%d").to_string();
-    let streak_key = format!("habit:{}:streak", habit_type);
-    let best_key = format!("habit:{}:best", habit_type);
-    let last_key = format!("habit:{}:last_date", habit_type);
-    let today_key = format!("habit:{}:today", habit_type);
-    let last_date = db.kv_get(&last_key).unwrap_or_default();
-    let streak: i64 = db.kv_get(&streak_key).and_then(|v| v.parse().ok()).unwrap_or(0);
-    let best: i64 = db.kv_get(&best_key).and_then(|v| v.parse().ok()).unwrap_or(0);
-    let new_streak: i64 = match status.as_str() {
-        "relapsed" => 0,
-        "clean" | "resisted" => {
-            if last_date == today { streak }
-            else if last_date == yesterday || streak == 0 { streak + 1 }
-            else { 1 }
-        }
-        _ => streak,
-    };
-    let new_best = new_streak.max(best);
-    db.kv_set(&streak_key, &new_streak.to_string());
-    db.kv_set(&best_key, &new_best.to_string());
-    db.kv_set(&last_key, &today);
-    db.kv_set(&today_key, &status);
-    let n = new_streak;
-    let pick = |zh: &[&str], en: &[&str]| -> String {
-        let i = (n.max(1) as usize - 1) % zh.len();
-        petd::i18n::t(zh[i], en[i.min(en.len() - 1)]).to_string()
-    };
-    let msg: String = match (status.as_str(), n) {
-        ("relapsed", _) => pick(
-            &["我知道的。今天晚一点再喂我一次吧。", "嗯。明天我还在这儿。", "没什么好说的。我把今天记下了，没记别的。"],
-            &["I know. Feed me a little later tonight.", "Mm. I'll still be here tomorrow.", "Nothing to say. I wrote today down, nothing else."],
-        ),
-        ("resisted", _) => pick(
-            &["过去了。它来的时候我也在。", "我知道。刚才那几分钟键盘很安静。", "这种时候我帮不上什么。但我看见了。"],
-            &["It passed. I was here when it came.", "I know. The keyboard went quiet for a few minutes there.", "I can't do much at times like that. But I saw."],
-        ),
-        ("clean", 3) => petd::i18n::t("第三天最难。你过来了。", "Day three is the hard one. You're through it.").into(),
-        ("clean", 7) => petd::i18n::t("七天。我数了七次日落，屏幕上的那种。", "Seven days. I counted seven sunsets — the on-screen kind.").into(),
-        ("clean", 14) => petd::i18n::t("两个星期。你最近存文件的节奏变了，我说不清是哪里。", "Two weeks. The rhythm of your saves has changed. I can't say where.").into(),
-        ("clean", 30) => petd::i18n::t("一个月。我不打算说什么。就是想让你知道我在数。", "A month. I'm not going to say anything. I just want you to know I'm counting.").into(),
-        ("clean", 100) => petd::i18n::t("一百天。这个数我留着，不告诉别人。", "A hundred days. I'm keeping this number. Not telling anyone.").into(),
-        ("clean", _) => pick(
-            &["记下了。", "嗯。今天的键盘声比昨天稳。", "我把今天也叠上去了。", "今天的光线没抖。"],
-            &["Noted.", "Mm. The keyboard sounded steadier than yesterday.", "I stacked today on top of the others.", "The light didn't flicker today."],
-        ),
-        _ => String::new(),
-    };
-    if !msg.is_empty() {
-        if let Some(pet) = first_pet(&h) {
-            pet_say(&h, &pet, &msg, None);
-        }
-    }
-    serde_json::json!({ "streak": new_streak, "best": new_best, "today": status, "msg": msg })
-}
-
 /// A terminal running `codex`, where `/usage` spends a banked reset.
 fn open_codex_usage() {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        let _ = std::process::Command::new("cmd")
-            .args(["/C", "start", "Codex", "cmd", "/K", "echo Type /usage in Codex to use a reset card && codex"])
-            .creation_flags(0x0800_0000)
-            .spawn();
+        // `start` reads its first argument as the new window's title: give it an empty one, so `cmd` is the program.
+        let home = std::env::var_os("USERPROFILE").map(std::path::PathBuf::from);
+        let mut cmd = std::process::Command::new("cmd");
+        cmd.args(["/C", "start", "", "cmd", "/K", "echo Type /usage in Codex to use a reset card && codex"]).creation_flags(0x0800_0000);
+        if let Some(h) = home.filter(|h| h.is_dir()) {
+            cmd.current_dir(h);
+        }
+        let _ = cmd.spawn();
     }
 }
 
@@ -808,42 +654,74 @@ fn open_codex_usage() {
 fn connect(h: &AppHandle, which: &str) {
     use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
     let Some(root) = setup::plugin_root(h.path().resource_dir().ok()) else {
-        h.dialog().message(petd::i18n::t("找不到随安装包附带的插件文件。", "Could not find the plugin files that ship with the installer.")).title("Familiar").kind(MessageDialogKind::Error).show(|_| {});
+        h.dialog().message(petd::i18n::t("找不到随安装包附带的插件文件。", "Could not find the plugin files that ship with the installer.")).title("Rill").kind(MessageDialogKind::Error).show(|_| {});
         return;
     };
-    let codex = which == "codex";
-    let ask = if codex {
-        petd::i18n::t(
-            "会在 Codex 的 hooks.json 里追加 Familiar 的 hook（原有 hook 保留，写入前备份为 hooks.json.familiar-bak）。",
-            "This adds the Familiar hooks to Codex's hooks.json (your existing hooks stay; a backup is saved as hooks.json.familiar-bak first).",
-        )
-    } else {
-        petd::i18n::t(
-            "会运行 claude plugin marketplace add 和 claude plugin install，把 Familiar 插件装进 Claude Code。",
-            "This runs claude plugin marketplace add and claude plugin install to put the Familiar plugin into Claude Code.",
-        )
+    // (what to tell the user first, the dialog title, the agent the installer names)
+    let which = which.to_string();
+    let other = petd::config::OTHER_AGENTS.iter().find(|a| a.0 == which).map(|a| a.1);
+    let (ask, title) = match (which.as_str(), other) {
+        ("usage", _) => (
+            petd::i18n::t(
+                "会把 Claude Code 的状态栏命令（settings.json 里的 statusLine）接到睿洱：这是 Claude Code 在本机报告 5 小时和每周额度的唯一位置。你原来的状态栏命令会保留并照常显示；写入前备份为 settings.json.rillbuddy-bak。只有订阅账号才有这些数字。",
+                "This points Claude Code's status line command (statusLine in settings.json) at Rill: it is the only place Claude Code reports the 5-hour and weekly limits locally. A status line you already have is kept and still shown; a backup is saved as settings.json.rillbuddy-bak first. Only subscription accounts have these numbers.",
+            )
+            .to_string(),
+            petd::i18n::t("接上用量显示", "Hook up the usage display").to_string(),
+        ),
+        ("codex", _) => (
+            petd::i18n::t(
+                "会在 Codex 的 hooks.json 里追加睿洱的 hook（原有 hook 保留，写入前备份为 hooks.json.rillbuddy-bak）。",
+                "This adds the Rill hooks to Codex's hooks.json (your existing hooks stay; a backup is saved as hooks.json.rillbuddy-bak first).",
+            )
+            .to_string(),
+            petd::i18n::t("接入 Codex", "Hook up Codex").to_string(),
+        ),
+        (_, Some(name)) => (
+            petd::tr!(
+                "会在 {name} 自己的配置里追加睿洱的 hook（原有的保留，写入前备份）。它会有一只自己的宠物，显示它的状态。",
+                "This adds the Rill hooks to {name}'s own config (yours stay; a backup is saved first). It gets a pet of its own that shows what it is doing."
+            ),
+            petd::tr!("接入 {name}", "Hook up {name}"),
+        ),
+        _ => (
+            petd::i18n::t(
+                "会运行 claude plugin marketplace add 和 claude plugin install，把睿洱插件装进 Claude Code。",
+                "This runs claude plugin marketplace add and claude plugin install to put the Rill plugin into Claude Code.",
+            )
+            .to_string(),
+            petd::i18n::t("接入 Claude Code", "Hook up Claude Code").to_string(),
+        ),
     };
     let h2 = h.clone();
     h.dialog()
         .message(ask)
-        .title(if codex { petd::i18n::t("接入 Codex", "Hook up Codex") } else { petd::i18n::t("接入 Claude Code", "Hook up Claude Code") })
+        .title(title)
         .buttons(MessageDialogButtons::OkCancelCustom(petd::i18n::t("接入", "Hook up").into(), petd::i18n::t("取消", "Cancel").into()))
         .show(move |ok| {
             if !ok {
                 return;
             }
             std::thread::spawn(move || {
-                let r = if codex { setup::connect_codex(&root) } else { setup::connect_claude(&root) };
+                let r = match which.as_str() {
+                    "usage" => setup::connect_usage(&root),
+                    "codex" => setup::connect_codex(&root),
+                    id if other.is_some() => setup::connect_other(&root, id),
+                    _ => setup::connect_claude(&root),
+                };
                 let (text, kind) = match r {
                     Ok(t) => (t, MessageDialogKind::Info),
-                    Err(e) => (petd::tr!("没接上：\n{e}", "Could not hook it up:\n{e}"), MessageDialogKind::Error),
+                    Err(e) => (petd::tr!("没接上：
+{e}", "Could not hook it up:
+{e}"), MessageDialogKind::Error),
                 };
-                h2.dialog().message(text).title("Familiar").kind(kind).show(|_| {});
+                h2.dialog().message(text).title("Rill").kind(kind).show(|_| {});
             });
         });
 }
 
 fn main() {
+    setup::adopt_old_webview_data();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(
@@ -853,15 +731,21 @@ fn main() {
                         return;
                     }
                     let app = h.state::<Arc<App>>().inner().clone();
-                    let (boss, focus, cycle) = *app.hotkeys.lock().unwrap();
+                    let (boss, focus) = *app.hotkeys.lock().unwrap();
                     if Some(*shortcut) == boss {
                         toggle_boss(h, &app);
                     } else if Some(*shortcut) == focus {
                         toggle_focus(&app);
-                    } else if Some(*shortcut) == cycle {
-                        if let Err(e) = petd::ops::cycle_favorite(&app.petd.shared) {
-                            app.petd.paths.log(&e);
-                        }
+                    } else if Some(*shortcut) == *app.note_key.lock().unwrap() {
+                        // What you selected, read off the main thread (a slow window must not freeze the pets).
+                        let h = h.clone();
+                        std::thread::spawn(move || {
+                            let text = selection::selected();
+                            let app = h.state::<Arc<App>>().inner().clone();
+                            if let Err(e) = open_note(&h, &app, None, text) {
+                                app.petd.paths.log(&format!("note: {e}"));
+                            }
+                        });
                     }
                 })
                 .build(),
@@ -872,24 +756,29 @@ fn main() {
             pet_menu,
             menu_pick,
             menu_close,
+            note_open,
             tray_info,
             tray_pick,
             drag_start,
+            pet_let_go,
+            pet_chase,
+            pet_visit,
+            pet_fly,
+            desk_plan,
+            desk_begin,
+            desk_stow_plan,
+            desk_move,
+            desk_end,
+            desk_undo,
             pet_hop,
             focus_session,
-            open_pets_dir,
             open_config,
             open_report_window,
-            import_pack,
-            create_pack,
-            read_image,
-            remove_pack,
+            connect_agent,
             quiet,
             model_state,
             start_model_download,
-            take_letter,
-            habit_checkin,
-            habit_craving
+            take_letter
         ])
         .on_menu_event(|h, ev| on_menu(h, ev.id().as_ref()))
         .on_window_event(|w, ev| {
@@ -902,8 +791,7 @@ fn main() {
         })
         .setup(|app| {
             let handle = app.handle().clone();
-            let opts = Options { builtin_pets: builtin_pets(&handle), ..Default::default() };
-            let daemon = match tauri::async_runtime::block_on(petd::start(opts)) {
+            let daemon = match tauri::async_runtime::block_on(petd::start(Options::default())) {
                 Ok(d) => d,
                 // An emitter raced us or the user double-clicked: the other copy wins.
                 Err(StartError::AlreadyRunning) => std::process::exit(0),
@@ -924,7 +812,8 @@ fn main() {
                 fullscreen: AtomicBool::new(false),
                 positions,
                 motion: physics::Motion::default(),
-                hotkeys: Mutex::new((None, None, None)),
+                hotkeys: Mutex::new((None, None)),
+                note_key: Mutex::new(None),
             });
             app.manage(state.clone());
             register_hotkeys(&handle, &state);
@@ -934,7 +823,7 @@ fn main() {
             let st_tray = state.clone();
             TrayIconBuilder::with_id("main")
                 .icon(tray_icon)
-                .tooltip("Familiar")
+                .tooltip(petd::i18n::t("睿洱", "Rill"))
                 .on_tray_icon_event(move |t, ev| {
                     if let tauri::tray::TrayIconEvent::Click { button_state: tauri::tray::MouseButtonState::Up, position, .. } = ev {
                         let h = t.app_handle();
@@ -945,6 +834,7 @@ fn main() {
             tray::create(&handle)?;
 
             windows::create_card(&handle)?;
+            windows::create_approve(&handle)?;
             radial::create(&handle)?;
             windows::create_overlays(&handle);
             windows::sync_pets(&handle, &state, &ids);
@@ -952,9 +842,30 @@ fn main() {
                 windows::open_welcome(&handle);
             }
             windows::spawn_click_through(handle.clone(), state.clone());
+            // After the rename: old hook-ups keep working; a pet offers to move them over.
+            {
+                let (h, st) = (handle.clone(), state.clone());
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(40));
+                    let home = st.petd.paths.home.clone();
+                    let root = setup::plugin_root(h.path().resource_dir().ok());
+                    if !setup::after_rename(root.as_deref(), &home) {
+                        return;
+                    }
+                    let sh = &st.petd.shared;
+                    let Some((pet, _)) = petd::drawer::asker(sh) else { return };
+                    setup::mark_asked(&home);
+                    let text = petd::tr!(
+                        "我改了名字，Claude Code 那边还叫我旧名字。帮你改过来？",
+                        "I go by a new name now, and Claude Code still knows me by the old one. Switch it over?"
+                    );
+                    let _ = sh.ws_tx.send(petd::msg("pet.act", &serde_json::json!({ "pet": pet, "act": "offer", "text": text, "why": "rename", "offer": "rehook" })));
+                });
+            }
             windows::spawn_position_saver(state.clone());
             spawn_fullscreen_guard(handle.clone(), state.clone());
             physics::spawn_separator(handle.clone(), state.clone());
+            desktop::watch(state.clone());
 
             let h = handle.clone();
             tauri::async_runtime::spawn(async move {
@@ -977,14 +888,10 @@ fn main() {
                                 windows::apply_visibility(&h2, &st);
                             }
                             Control::Layout { ids } => windows::sync_pets(&h2, &st, &ids),
-                            Control::LibraryChanged | Control::ConfigChanged => refresh_tray(&h2, &st),
+                            Control::ConfigChanged => refresh_tray(&h2, &st),
                             Control::Move { pet, target } => physics::walk(st.clone(), &h2, &pet, target.as_deref()),
-                            Control::Nudge { pet, reason } => st.petd.hub.lock().unwrap().nudge(&pet, &reason, petd::now_ms()),
-                            Control::Tug { mover, anchor } => physics::walk_tug(st.clone(), &h2, &mover, &anchor),
-                            Control::Duo { mover, anchor, gap } => physics::walk_pair(st.clone(), &h2, &mover, &anchor, gap, "duo"),
                             Control::Report => windows::open_report(&h2),
-                            Control::Spring => windows::open_spring(&h2),
-                            Control::Radio => windows::open_radio(&h2),
+                            Control::Radio => windows::open_radio(&h2, None),
                             Control::Menu { pet } => {
                                 let has_letter = PENDING_LETTER.lock().unwrap().is_some();
                                 if let (Some(w), Some(model)) = (h2.get_webview_window(&format!("pet-{pet}")), radial::build(&st, &pet, has_letter)) {
@@ -993,14 +900,14 @@ fn main() {
                             }
                             Control::Fling { pet, vx, vy } => {
                                 if let Some(w) = h2.get_webview_window(&format!("pet-{pet}")) {
-                                    physics::throw(st.clone(), w, vx, vy);
+                                    physics::throw(st.clone(), w, vx, vy, true);
                                 }
                             }
                         }
                     });
                 }
             });
-            // Coins change often; keep the tray label roughly current.
+            // "Waiting N min" moves on; keep an open tray panel roughly current.
             let (h3, st3) = (handle.clone(), state.clone());
             std::thread::spawn(move || loop {
                 std::thread::sleep(Duration::from_secs(30));
@@ -1010,7 +917,7 @@ fn main() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("failed to build Familiar")
+        .expect("failed to build Rill")
         // Closing the last pet window must not quit petd; only the tray does.
         .run(|_app, ev| {
             if let tauri::RunEvent::ExitRequested { api, code, .. } = ev {

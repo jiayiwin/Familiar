@@ -14,7 +14,11 @@ pub fn is_en() -> bool {
 
 /// "zh" or "en".
 pub fn code() -> &'static str {
-    if is_en() { "en" } else { "zh" }
+    if is_en() {
+        "en"
+    } else {
+        "zh"
+    }
 }
 
 /// Apply a `language:` value. Returns true when the language changed.
@@ -36,7 +40,11 @@ pub fn system_is_en() -> bool {
 }
 
 pub fn t<'a>(zh: &'a str, en: &'a str) -> &'a str {
-    if is_en() { en } else { zh }
+    if is_en() {
+        en
+    } else {
+        zh
+    }
 }
 
 /// `tr!("中文 {x}", "English {x}")`: a formatted String in the current language.
@@ -59,9 +67,9 @@ mod tests {
         // Other tests check Chinese replies, so stay on zh here (the switch is global).
         set_from("zh");
         let n = 3;
-        assert_eq!(crate::tr!("{n} 条鱼", "{n} fish"), "3 条鱼");
-        assert_eq!(crate::tr!("{} 条鱼", "{} fish", n + 1), "4 条鱼");
-        assert_eq!(t("鱼", "fish"), "鱼");
+        assert_eq!(crate::tr!("{n} 颗糖", "{n} sweets"), "3 颗糖");
+        assert_eq!(crate::tr!("{} 颗糖", "{} sweets", n + 1), "4 颗糖");
+        assert_eq!(t("糖", "sweet"), "糖");
         assert_eq!(code(), "zh");
     }
 }

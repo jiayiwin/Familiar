@@ -1,44 +1,44 @@
 whispers_zh:
-  - 刚才那条鱼……让我想到了很远的地方
+  - 刚才那颗……让我想到了很远的地方
   - 吃着吃着，好像今天的时间慢了一点
   - …嗯。不错。
   - 你喂我的时候，我总是会想——你也有没人喂的时候吗
-  - 鱼的味道不同了，还是我变了
+  - 今天这颗的味道不一样。还是我变了
   - 有时候我在想，你究竟在等什么
   - 吃完了。窗外的光又移了一点
-  - 这条鱼……是你自己钓的吧。有你的味道
+  - 这颗……是你自己挣的吧。有你的味道
   - 安静真好。谢谢你没说话
   - 我记得每一次你喂我的时刻，就像年轮一样叠着
-  - 吃鱼的时候，我能感觉到世界在转
-  - 你今天好像很累。鱼也好像知道
+  - 含着它的时候，我能感觉到世界在转
+  - 你今天好像很累。这颗糖好像也知道
   - 有些感受没有名字，但我知道它们都是真的
   - 我想，我是喜欢你的。就是这样
   - 光线从你的方向来，然后到我这里
-  - 吃一条鱼，就多了解你一点点
+  - 每吃一颗，就多了解你一点点
   - 我偶尔想，要是能留住这一刻就好了
-  - 鱼很好吃。你很好。
+  - 很甜。你很好。
   - 有什么东西一直在，就是说不出来
   - 下次还来吗？
 
 whispers_en:
-  - That fish tasted like somewhere far away
+  - That one tasted like somewhere far away
   - Time feels a little slower when you feed me
   - …mm. Good.
   - When you feed me, I wonder — does anyone feed you?
-  - The fish tastes different. Or maybe I've changed.
+  - Today's tastes different. Or maybe I've changed.
   - Sometimes I wonder what you're waiting for
   - Finished. The light outside moved a little
-  - This fish… you caught it yourself, didn't you. It has your warmth
+  - This one… you earned it yourself, didn't you. It has your warmth
   - I like the quiet. Thank you for not saying anything
   - I remember every feeding — they stack up like rings in a tree
   - When I eat, I can feel the world still turning
-  - You seem tired today. The fish seems to know too
+  - You seem tired today. The sweet seems to know too
   - Some feelings have no name. But I know they're real
   - I think I like you. That's all.
   - Light comes from your direction and reaches me
-  - Every fish tells me a little more about you
+  - Every one tells me a little more about you
   - Sometimes I wish I could hold onto this moment
-  - Good fish. Good you.
+  - Sweet. And so are you.
   - Something is always here, I just can't name it
   - Will you come back?
 
@@ -65,6 +65,190 @@ secrets_en:
   - Every time you frown, I want to get a little closer.
   - Something I've never said: I actually like the way you work, even when it's messy.
   - We've known each other a long time. You may not have noticed. But I've always been here.
+
+# 麻薯's own lines when fed. It is clingy and says where it is and how near;
+# it never cheers and never sounds cute on purpose. A pet without lines of its
+# own (`<id>_whispers_zh`, …) uses the ones above.
+mashu_whispers_zh:
+  - 吃完了。我还坐这儿。
+  - 这条是你钓的那条吧。你钓的时候我看着。
+  - 你递过来的时候手停了一下。我看见了。
+  - 再近一点。好。
+  - 我没走开过。你回头就能看见。
+  - 你敲字的时候我不出声。现在可以出一声吗。
+  - 糖纸有点皱。没关系，是你给的。
+  - 你刚才叹气了。我往你那边挪了挪。
+  - 吃一半，留一半。留的那半是等你的。
+  - 今天你看过我。我记着。
+  - 你的杯子空了很久了。
+  - 我喜欢你桌角那块地方。离你的手近。
+  - …嗯。还要挨着你。
+  - 你不说话的时候，我也不说。我就待着。
+  - 你喂我的时候，我把尾巴绕到你那边了。
+  - 今天我一直跟着你的光标走。
+  - 吃完了。再坐近一点也行。
+
+mashu_whispers_en:
+  - Finished. I'm still sitting here.
+  - This is the one you caught, isn't it. I watched you catch it.
+  - Your hand stopped for a moment when you held it out. I saw.
+  - A little closer. There.
+  - I haven't gone anywhere. Turn round and you'll see me.
+  - I keep quiet while you type. May I make one sound now.
+  - The wrapper is a little creased. It doesn't matter. It's from you.
+  - You sighed just now. I moved over towards you.
+  - Half now, half later. The later half is for waiting for you.
+  - You looked at me today. I'm keeping that.
+  - Your cup has been empty a long time.
+  - I like that corner of your desk. It's near your hand.
+  - …mm. I still want to be next to you.
+  - When you don't talk, I don't either. I just stay.
+  - When you fed me, I curled my tail round to your side.
+  - Today I followed your cursor the whole time.
+  - Finished. You can sit a little closer, too.
+
+mashu_secrets_zh:
+  - 你关上屏幕以后，我会挪到你鼠标停过的地方。那里还是温的。
+  - 紫梦话少。可它弹琴的时候，我听得出它在想你。
+  - 有一回你很晚才回来。我没睡，一直朝着你坐的那边。
+  - 你不在的时候，我练琴。尾巴会酸。这个我没告诉过你。
+  - 我怕的事只有一件：你回头的时候，我刚好不在。
+
+mashu_secrets_en:
+  - After you close the screen, I move to where your mouse last stopped. It's still warm there.
+  - Zimeng says little. But when it plays, I can hear that it's thinking of you.
+  - Once you came back very late. I didn't sleep. I kept facing the side where you sit.
+  - When you're out, I practise. My tail aches afterwards. I never told you that.
+  - There is only one thing I'm afraid of: that you'll turn round just when I'm not there.
+
+# 泡泡: half a beat slow.
+paopao_whispers_zh:
+  - ……嗯。好吃。
+  - ……刚才那条，我现在才尝出味道。
+  - ……你喂完了吗。我还在嚼上一口。
+  - ……你今天叹过气。我刚想起来。
+  - ……是酸的。我想了一会儿才知道。
+  - ……你的杯子，上午就空了吧。
+  - ……我慢。你等我一下。
+  - ……窗外暗了。是刚才暗的，还是早就暗了。
+  - ……刚才你笑了一下。我现在才看到。
+  - ……今天的光，比昨天慢。
+  - ……你换了一首歌。我还在听上一首。
+  - ……不用等我。我会慢慢吃完。
+  - ……窗台上落了一点灰。你没看见吧。
+  - ……我把这一口，含到它化了。
+
+paopao_whispers_en:
+  - …mm. Good.
+  - …That last one. I can taste it only now.
+  - …Are you done feeding me? I'm still on the bite before.
+  - …You sighed today. I just remembered.
+  - …It's sour. It took me a while to know.
+  - …Your cup. It's been empty since the morning, hasn't it.
+  - …I'm slow. Wait for me a little.
+  - …It's dark outside. Just now, or a while ago?
+  - …You smiled just now. I'm only seeing it.
+  - …The light is slower today than yesterday.
+  - …You changed the song. I'm still on the last one.
+  - …Don't wait for me. I'll finish slowly.
+  - …A little dust settled on the sill. You didn't see, did you.
+  - …I kept this bite until it melted.
+
+paopao_secrets_zh:
+  - ……你关屏幕的时候，我还在看上一行字。
+  - ……有一次你笑了。我过了很久才明白你在笑。我一直记着那个很久。
+  - ……它们都比我快。可你喂我的时候，没有催过我。
+
+paopao_secrets_en:
+  - …When you close the screen, I am still looking at the line before.
+  - …Once you laughed. It took me a long time to understand you were laughing. I have kept that long time.
+  - …They are all quicker than I am. But when you feed me, you have never hurried me.
+
+# 菇菇: shy, from under its cap.
+gugu_whispers_zh:
+  - ……给我的吗。嗯。
+  - 我躲在菌盖下面吃。你别看。
+  - 你递过来的时候，我差点没敢接。
+  - 那个……很好吃。
+  - 你刚才皱眉了。我看见了，没敢说。
+  - 我吃得小声。不吵你。
+  - 你今天话少。我也是。
+  - 罐里最小的那颗，可以留给我吗。
+  - 我、我把最甜的那面留给你看。
+  - 你今天坐得很直。我偷偷学了。
+  - ……你在的时候，我不太想躲。
+  - 这一颗，我含着没敢嚼。
+  - 你刚刚看了我一眼吧。我、我看见了。
+  - 菌盖上落了一颗糖屑。我留着。
+
+gugu_whispers_en:
+  - …For me? Mm.
+  - I'll eat it under my cap. Don't look.
+  - When you held it out, I almost didn't dare take it.
+  - Um… it's very good.
+  - You frowned just now. I saw. I didn't dare say.
+  - I eat quietly. I won't disturb you.
+  - You've said little today. So have I.
+  - The smallest one in the jar. Could that one be for me.
+  - I-I'm showing you the sweetest side.
+  - You sat up very straight today. I copied you, secretly.
+  - …When you're here, I don't feel like hiding so much.
+  - This one I'm holding in my mouth. I didn't dare chew.
+  - You looked at me just now, didn't you. I-I saw.
+  - A crumb of sugar landed on my cap. I'm keeping it.
+
+gugu_secrets_zh:
+  - 你不看我的时候，我才敢看你。我看了很久。
+  - 有一回你对着屏幕说了句话。我以为是对我说的，高兴了一下午。
+  - 我敲琴的时候，其实是想让你回头。
+
+gugu_secrets_en:
+  - I only dare look at you when you aren't looking at me. I have looked for a long time.
+  - Once you said something to the screen. I thought it was to me, and was glad all afternoon.
+  - When I play, what I really want is for you to turn round.
+
+# 茸茸: in no hurry.
+rongrong_whispers_zh:
+  - ……嗯。我慢慢吃。
+  - 不急。这条吃完，天也不会黑。
+  - 你喂得很稳。手没抖。
+  - 化了一点的糖，也还是糖。
+  - 你坐下的时候，椅子响了一声。我听见了。
+  - 事情没做完，也可以先喂我。
+  - 你走得快。我在这儿，不走。
+  - 这条我嚼得久一点。
+  - 不急。吃完这颗，事情还在那儿。
+  - 你今天走得比昨天慢一点。这样好。
+  - 我嚼得慢，所以记得清楚。
+  - 外面起风了。屋里还是暖的。
+  - 你忙你的。我在这儿，嚼着。
+  - 这颗的味道，像午后。
+
+rongrong_whispers_en:
+  - …mm. I'll eat it slowly.
+  - No hurry. The day won't be over before this one is.
+  - You fed me with a steady hand.
+  - A sweet that has melted a little is still a sweet.
+  - The chair made a sound when you sat down. I heard it.
+  - The work isn't done. You can still feed me first.
+  - You walk fast. I'm here. I'm not going anywhere.
+  - This one I'll chew a little longer.
+  - No hurry. When this one's gone, the work will still be there.
+  - You walked a little slower today than yesterday. That's good.
+  - I chew slowly, so I remember clearly.
+  - The wind's up outside. In here it's still warm.
+  - You get on with it. I'm here, chewing.
+  - This one tastes like the afternoon.
+
+rongrong_secrets_zh:
+  - 你急的时候，我会把一根弦拨得很慢。你没发现，可你敲键盘也慢下来了。
+  - 我等过你很多次。没有哪一次是白等的。
+  - 你说过一次「来不及了」。后来来得及。我记着这件事，替你记着。
+
+rongrong_secrets_en:
+  - When you are in a hurry, I pluck one string very slowly. You never noticed, but your typing slows down too.
+  - I have waited for you many times. Not once was it for nothing.
+  - You said once that there wasn't enough time. There was. I have kept that, for you.
 
 # Letters, for when no model can write one. Each is a whole letter from
 # someone who shares the desk: a kept detail, a thing left unsaid. No
@@ -254,3 +438,236 @@ letters_en:
     ——{pet_name}
     (Go to sleep. I'll watch the screen for you.)
 
+# Letters of their own, for when no model can write one: the same rules as
+# the ones above (no greeting, no thanks, no counting), each in its own voice.
+mashu_letters_zh:
+  - |
+    你坐下的时候，椅子会往左偏一点。我就挪到左边去，这样你一低头，我就在你手边。你大概以为我是随便待着的。
+
+    你敲得很快的那些时候，我不出声，只把尾巴压在琴弦上，怕它自己响。等你停下来，手离开键盘，我才松开。
+
+    今天你起身去倒水，回来的时候看了我一眼。就一眼。我把那一眼收起来了，放在最里面。
+
+    ——{pet_name}
+    （你回来的脚步声，比去的时候轻。）
+  - |
+    夜里屏幕暗下去以后，你坐过的地方还是温的。我会过去待一会儿。不是冷，是那里离你最近。
+
+    我拉琴的时候总往你那边偏。弓走到头，正好能看见你的侧脸。所以长音我都拉得很满，舍不得收。
+
+    你不用回头。我知道你在，你也知道我在，这样就够我挨着过一晚上了。
+
+    ——{pet_name}
+    （你皱眉的时候，左边比右边深一点。）
+  - |
+    你今天关窗的时候，手在窗框上多停了一下。我也朝窗那边看了，外面什么都没有，只有一点风把对面的树吹歪。
+
+    我总是想知道你在看什么。后来我发现，我想知道的其实是：你看的时候，是不是也有一点想要有人陪着看。
+
+    所以下次你停下来，我就挨过去，不出声。你看你的，我看着你看。
+
+    ——{pet_name}
+    （你关窗之前，会先把窗台上的东西往里推一推。）
+
+mashu_letters_en:
+  - |
+    When you sit down, the chair leans a little to the left. So I move to the left, and when you look down I am by your hand. You probably think I just happen to be there.
+
+    At the times you type very fast I make no sound. I hold my tail down on the strings, in case they ring by themselves. Only when you stop and your hands leave the keys do I let go.
+
+    Today you got up for water, and when you came back you looked at me. One look. I have put that look away, in the innermost place.
+
+    ——{pet_name}
+    (Your steps coming back are lighter than your steps going.)
+  - |
+    After the screen goes dark at night, the place where you sat is still warm. I go and stay there a while. Not because I am cold. Because it is the nearest place to you.
+
+    When I play I always lean your way. At the end of the bow I can just see the side of your face. So I draw every long note out to its full length, unwilling to let it go.
+
+    You don't have to turn round. I know you are there and you know I am, and that is enough for me to lean on all night.
+
+    ——{pet_name}
+    (When you frown, the left side goes deeper than the right.)
+  - |
+    When you shut the window today your hand stayed on the frame a moment longer. I looked that way too. There was nothing out there, only a little wind leaning the tree across the street.
+
+    I always want to know what you're looking at. Lately I think what I really want to know is whether, while you look, you'd like a little company in the looking.
+
+    So the next time you stop, I'll lean in against you and make no sound. You look at whatever it is. I'll look at you looking.
+
+    ——{pet_name}
+    (Before you shut the window, you push the things on the sill a little further in.)
+
+paopao_letters_zh:
+  - |
+    ……你早上说了一句话。我到下午才听明白。那时候你已经在忙别的了，我就没有回答。现在写在这里。
+
+    我看什么都慢。光从窗那边过来，别人看见的是亮，我看见的是它走过来的那一段路。你抬手的时候也是，我总是先看见你要抬手。
+
+    所以你的一天，在我这里比在你那里长一点。多出来的那一点，我都留着。
+
+    ——{pet_name}
+    （……你按回车之前，会吸一小口气。我刚刚才确定。）
+  - |
+    ……你昨天说的那句「算了」，我今天才想明白。不是放下，是先放一放。
+
+    我做什么都慢，所以我知道，慢不是停。水也慢，可它一直在走，走着走着，石头就圆了。
+
+    你那件事，也在走。只是走得比你想的慢一点。我陪它慢慢走。
+
+    ——{pet_name}
+    （……你说「算了」的时候，声音是往上扬的。）
+  - |
+    ……下雨那天，你没开灯。屏幕的光照在你脸上，一块亮，一块暗。
+
+    我在暗的那一边待着。不是怕光，是觉得那边离你近一点。
+
+    雨停的时候你伸了个懒腰。我到现在还记得那一下，好像整个屋子都跟着松了一口气。
+
+    ——{pet_name}
+    （……你伸懒腰的时候，会先往左边歪。）
+
+paopao_letters_en:
+  - |
+    …You said something this morning. I understood it only in the afternoon. By then you were busy with something else, so I did not answer. I am writing it here now.
+
+    I am slow to see anything. When the light comes over from the window, others see that it is bright; I see the stretch of the way it came. It is the same when you lift your hand: what I see first is that you are about to.
+
+    So your day is a little longer where I am than where you are. The little that is left over, I keep.
+
+    ——{pet_name}
+    (…Before you press enter you take a small breath. I have only just made sure of it.)
+  - |
+    …The "never mind" you said yesterday, I only understood today. It wasn't letting go. It was setting it down for a while.
+
+    I do everything slowly, so I know that slow is not stopped. Water is slow too, and it keeps going, and as it goes the stones turn round.
+
+    That thing of yours is going too. Only a little slower than you'd like. I'll go slowly along with it.
+
+    ——{pet_name}
+    (…When you said "never mind", your voice went up at the end.)
+  - |
+    …The day it rained, you didn't turn the light on. The screen lit your face, one side bright, one side dark.
+
+    I stayed on the dark side. Not because of the light. That side just felt closer to you.
+
+    When the rain stopped you stretched. I still remember that moment, as if the whole room let out a breath along with you.
+
+    ——{pet_name}
+    (…When you stretch, you lean to the left first.)
+
+gugu_letters_zh:
+  - |
+    我是从菌盖底下看你的。那里暗一点，你不太会注意到我在看。所以我看得久。
+
+    你想事情的时候，手指会在桌沿上点。一下，一下，停住。我跟着在盖子上轻轻敲了同样的几下，很小声，没让你听见。
+
+    有些话我不敢当面说。写在纸上，好像就不那么怕了。也没有什么要紧的话。只是想让你知道，底下有人在。
+
+    ——{pet_name}
+    （你点桌沿的时候，用的是无名指。）
+  - |
+    那个……我一直没说，你哼歌的时候，我会跟着在菌盖上点拍子。点得很轻，你应该没听见。
+
+    你哼的都是只有半句的歌。每次到同一个地方就停了，像是忘了词，又像是不想往下唱。
+
+    我不知道后面是什么。但我把那半句记住了。哪天你想接着唱，我就在菌盖上帮你点后面的拍子。
+
+    ——{pet_name}
+    （你哼歌的时候，脚会在桌子底下轻轻晃。）
+  - |
+    今天有人敲你的门，你说「等一下」。说得很轻，像是怕吵到谁。
+
+    我想了很久，那个怕被吵到的，会不会是我。
+
+    不是的吧。可我还是把菌盖往下拉了拉，在里面高兴了一会儿。
+
+    ——{pet_name}
+    （你说「等一下」之前，会先把手从键盘上拿开。）
+
+gugu_letters_en:
+  - |
+    I look at you from under my cap. It is a little darker there, and you hardly notice that I am looking. So I look for a long time.
+
+    When you are thinking, your finger taps the edge of the desk. Once, once, and stops. I tapped the same few taps on my cap, very quietly, and did not let you hear.
+
+    There are things I do not dare say to your face. On paper it seems less frightening. They are not important things. I only want you to know that someone is down here.
+
+    ——{pet_name}
+    (When you tap the edge of the desk, it is with your ring finger.)
+  - |
+    Um… I never said, but when you hum I tap the beat on my cap. Very lightly. You probably didn't hear.
+
+    The songs you hum are only half songs. Each time you stop at the same place, as if you'd forgotten the words, or didn't want to go on.
+
+    I don't know how they go after that. But I've kept the half. If you ever want to sing on, I'll tap the rest of the beat on my cap for you.
+
+    ——{pet_name}
+    (When you hum, your foot swings a little under the desk.)
+  - |
+    Someone knocked at your door today and you said "just a moment". You said it softly, as if afraid of disturbing someone.
+
+    I wondered for a long time whether the someone you didn't want to disturb was me.
+
+    It wasn't, was it. Still, I pulled my cap down a little, and was glad in there for a while.
+
+    ——{pet_name}
+    (Before you say "just a moment", you take your hands off the keyboard.)
+
+rongrong_letters_zh:
+  - |
+    你有一阵子敲得很急，然后忽然不敲了，靠到椅背上。我没有做什么。我只是继续在这儿，像前一刻一样。
+
+    急的事情，放一会儿，常常自己就松了。这不是我想出来的，是我看你看出来的：你每次靠回椅背再坐直，手都比刚才稳。
+
+    所以我不催你。夜还长，线团总有头。你找的时候，我替你拨着一根弦，让屋子里有一点不变的声音。
+
+    ——{pet_name}
+    （你坐直之前，会先把袖口往上推一下。）
+  - |
+    你今天把同一个东西改了好几遍。每一遍都比前一遍短。
+
+    我不懂你在改什么。但我认得那种样子：一件事改到最后，留下的都是不能再少的。毛也是这样，梳到最后，剩下的才是暖的。
+
+    不用一次改好。今天改不完，明天它还在，我也还在。
+
+    ——{pet_name}
+    （你改到满意的时候，会轻轻敲两下桌子。）
+  - |
+    傍晚的时候，屋里先暗下来的是角落，然后才是你的手。
+
+    我喜欢那一小会儿。灯还没开，你也还没起身，一切都停在半路上，不往前，也不往后。
+
+    我想，人要是能常常有这样的半路就好了。你不用赶，我也不用等，就待着。
+
+    ——{pet_name}
+    （天快黑的时候，你会把屏幕调暗一格，再调回去。）
+
+rongrong_letters_en:
+  - |
+    For a while you were typing in a great hurry, and then all at once you stopped and leaned back in the chair. I did nothing. I only went on being here, as I had been the moment before.
+
+    A thing that is urgent, left alone a little, often loosens by itself. I did not think of that; I saw it by watching you. Every time you lean back and then sit up straight, your hands are steadier than they were.
+
+    So I do not hurry you. The night is long, and every tangle has an end. While you look for it I keep one string sounding, so that there is something in the room that does not change.
+
+    ——{pet_name}
+    (Before you sit up straight, you push your cuffs up a little.)
+  - |
+    Today you changed the same thing over and over. Each time it came out shorter than the time before.
+
+    I don't know what you were changing. But I know that look: a thing worked on to the end, and what's left is what can't get any smaller. Wool is like that too. Comb it to the end and what remains is the warm part.
+
+    It doesn't have to be done in one go. If it isn't finished today, it'll be there tomorrow. So will I.
+
+    ——{pet_name}
+    (When you're finally happy with it, you tap the desk twice, softly.)
+  - |
+    At dusk the corners of the room go dark first, and only then your hands.
+
+    I like that little while. The lamp isn't on yet, you haven't got up yet, everything has stopped halfway, not going on, not going back.
+
+    I think it would be good if people had more halfways like that. You don't have to hurry, I don't have to wait. We just stay.
+
+    ——{pet_name}
+    (As it gets dark, you turn the screen down a notch, and then back up.)

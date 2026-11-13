@@ -1,0 +1,28 @@
+# Cursor hook -> 睿洱统一事件（协议 v1）。
+#
+# 核对依据：Cursor 官方 hooks 文档（cursor.com/docs/hooks，2026-11）。
+# 这份文件在构建时编进 rillbuddy-emit；把修改后的副本放到
+# ~/.rillbuddy/adapters/cursor.yaml 可以不重新编译直接覆盖。
+#
+# 隐私：detail 里只会出现工具名、文件 basename 和"是否读取类命令"的判断结果，
+# 命令原文、提示词、输出都不会离开 emitter。
+#
+# Cursor 没有"正在等用户批准"的 hook 事件，所以 Cursor 的宠物不会挥手叫你。
+
+source: cursor
+session: conversation_id|session_id
+project: workspace_roots.0|cwd
+file_keys: [file_path, path, target_file]
+
+read_commands: [cat, type, get-content, gc, head, tail, less, more, rg, grep, select-string, sls, findstr, ls, dir, get-childitem, gci, tree, find, fd, wc, git-log, git-show, git-diff, git-status]
+
+events:
+  sessionStart:       { event: session.start }
+  sessionEnd:         { event: session.end }
+  beforeSubmitPrompt: { event: turn.start }
+  preToolUse:         { event: tool.start, tool: true }
+  postToolUse:        { event: tool.end, tool: true, ok_value: true }
+  # 失败、超时或被拒绝；is_interrupt 为真时算被打断。
+  postToolUseFailure: { event: tool.end, tool: true, ok_value: false, interrupt_key: is_interrupt }
+  # status: completed | aborted | error
+  stop:               { event: turn.done, result: ok, result_key: status, results: { completed: ok, aborted: aborted, error: error } }

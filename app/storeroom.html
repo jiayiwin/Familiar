@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="zh-CN" data-sheet="ui">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-en="Storeroom">储物间</title>
+    <link rel="stylesheet" href="/src/ui.css" />
+    <style>
+      /* Colours come from the pet's skin (src/skin.ts); these are 紫梦's, until the skin is on. */
+      :root { --accent: #7a5fc0; --accent-deep: #6a50b0; --accent-soft: #ece4ff; --accent-text: #5b4696; --accent-off: #cfc3e6; --hover: #f5eefc; --room: #f3ecf9; --room-night: #ebe3f4; --room-line: #e3d8ea; --cushion: #e0d4ff; --stage: #e9eff8; --stage-ink: #5d6c85; --stage-line: #cfd9e8; --shade: 110, 88, 140; --motif-fill: #f3e9cf; --motif-line: #cdbdba; }
+      html:not([data-skin]) body { visibility: hidden; }
+      html, body { height: 100%; overflow: hidden; }
+      body { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 14px; padding: 18px 22px 12px; }
+
+      /* ── who is tidying, and what it found ── */
+      header { display: flex; align-items: center; gap: 16px; padding: 10px 18px 10px 8px; border-radius: 22px; background: var(--room); }
+      header canvas { flex: none; width: 118px; height: 96px; }
+      header .tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+      header h1 { margin: 0; font-size: 22px; line-height: 1.2; }
+      header .said { font-size: 14px; font-weight: 600; color: var(--ink-2); line-height: 1.55; }
+      header button { flex: none; }
+
+      main { display: grid; grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr); gap: 14px; min-height: 0; }
+      section { min-height: 0; display: flex; flex-direction: column; gap: 10px; padding: 16px 16px 12px; border-radius: 20px; background: var(--panel); border: 1px solid var(--line-2); }
+      section > h2 { margin: 0; font-size: 14px; display: flex; align-items: baseline; gap: 8px; }
+      section > h2 small { font-size: 12px; font-weight: 500; color: var(--muted); }
+      .scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 4px; scrollbar-width: thin; }
+      .scroll > * { flex: none; }
+      .waiting { margin: auto; color: var(--muted); font-size: 13px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+      .dots { display: flex; gap: 6px; }
+      .dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: bob 1s ease-in-out infinite; }
+      .dots i:nth-child(2) { animation-delay: 0.15s; } .dots i:nth-child(3) { animation-delay: 0.3s; }
+      @keyframes bob { 50% { transform: translateY(-5px); opacity: 0.5; } }
+
+      /* ── disk ── */
+      .ag { display: flex; flex-direction: column; gap: 7px; padding: 12px 14px; border-radius: 16px; background: var(--bg); border: 1px solid var(--line); }
+      .ag .top { display: flex; align-items: baseline; gap: 8px; }
+      .ag .top b { font-size: 14px; }
+      .ag .top span { font-size: 12px; color: var(--muted); }
+      .ag .big { font-size: 22px; font-weight: 800; line-height: 1.2; }
+      .ag .big small { font-size: 12.5px; font-weight: 600; color: var(--ink-2); margin-left: 4px; }
+      .bar { height: 10px; border-radius: 999px; background: var(--line); overflow: hidden; display: flex; }
+      .bar i { display: block; height: 100%; background: var(--accent); border-radius: 999px; transition: width 0.5s var(--ease); }
+      .ag .note { margin: 0; font-size: 12px; color: var(--muted); }
+      .ag .act { display: flex; align-items: center; gap: 10px; }
+      .ag .prog { flex: 1; font-size: 12px; color: var(--ink-2); }
+      .ag .prog .bar { height: 6px; margin-top: 4px; }
+      .box { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 12px; background: var(--t-butter); font-size: 12.5px; }
+      .box span { flex: 1; min-width: 0; }
+      .box b { font-weight: 700; }
+      h3 { margin: 4px 0 -4px; font-size: 12px; color: var(--muted); }
+
+      /* ── what a session reads first ── */
+      .who { display: flex; gap: 6px; }
+      .sum { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+      .sum .big { font-size: 22px; font-weight: 800; }
+      .sum small { font-size: 12px; color: var(--muted); }
+      .save { padding: 8px 12px; border-radius: 12px; background: var(--t-mint); font-size: 12.5px; font-weight: 600; }
+      .group { display: flex; flex-direction: column; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); overflow: hidden; }
+      .gh { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 12px; border: 0; border-radius: 0; background: transparent; text-align: left; font-size: 13px; }
+      .gh:hover { background: var(--hover); border-color: transparent; }
+      .gh .k { font-weight: 800; }
+      .gh .n { flex: 1; font-size: 12px; font-weight: 500; color: var(--muted); }
+      .gh .t { font-variant-numeric: tabular-nums; font-weight: 700; }
+      .gh svg { width: 14px; height: 14px; fill: none; stroke: var(--muted); stroke-width: 2; transition: transform 0.2s; }
+      .group.open .gh svg { transform: rotate(90deg); }
+      .items { display: none; flex-direction: column; padding: 0 8px 8px; }
+      .group.open .items { display: flex; }
+      .it { display: flex; flex-direction: column; gap: 4px; padding: 7px 6px; border-top: 1px solid var(--line); }
+      .it .row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+      .it .nm { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+      .it .tag { flex: none; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: var(--t-peach); color: var(--ink-2); }
+      .it .tk { flex: none; width: 112px; display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: 12px; justify-content: flex-end; }
+      .it .tk .bar { flex: 1; height: 5px; }
+      .it .fix { font-size: 12px; color: var(--muted); line-height: 1.5; display: flex; gap: 8px; align-items: flex-start; }
+      .it .fix span { flex: 1; user-select: text; }
+      .it .fix button { flex: none; padding: 1px 10px; font-size: 11.5px; }
+      footer { font-size: 12px; color: var(--muted); }
+
+      /* ── which storeroom: the agents', or the desktop ── */
+      .views { flex: none; display: flex; padding: 3px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line-2); }
+      .views button { border: 0; background: transparent; padding: 5px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 700; color: var(--muted); }
+      .views button.on { background: var(--accent); color: #fff; }
+      [hidden] { display: none !important; }
+
+      /* ── the desktop ── */
+      .kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+      .kinds span { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--well); color: var(--ink-2); }
+      .kinds span b { font-weight: 800; color: var(--ink); margin-left: 4px; }
+      .it .row .age { flex: none; font-size: 11.5px; color: var(--muted); }
+      .it .row .sz { flex: none; width: 64px; text-align: right; font-variant-numeric: tabular-nums; font-size: 12px; color: var(--ink-2); }
+      .group .do { display: flex; align-items: center; gap: 10px; padding: 8px 6px 2px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+      .group .do span { flex: 1; }
+      .left { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); font-size: 12.5px; }
+      .left span { flex: 1; min-width: 0; }
+      .left b { font-weight: 700; }
+      .runway { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 16px; background: var(--bg); border: 1px solid var(--line); }
+      .runway .big { font-size: 20px; font-weight: 800; }
+      .runway .big small { font-size: 12.5px; font-weight: 600; color: var(--ink-2); margin-left: 4px; }
+      .runway p { margin: 0; font-size: 12px; color: var(--muted); }
+      .group .do button.sure { background: var(--red, #c24e38); border-color: transparent; color: #fff; }
+      .it .row button { flex: none; padding: 1px 10px; font-size: 11.5px; }
+      /* ── the drive the folders are on ── */
+      header .drive { font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+      header .drive b { color: var(--ink-2); }
+      header .drive.short b.free { color: #b3432e; }
+      header .drive button { padding: 0 8px; font-size: 11.5px; border-radius: 999px; }
+      @media (prefers-reduced-motion: reduce) { .dots i { animation: none; } }
+    </style>
+  </head>
+  <body>
+    <header>
+      <canvas id="pet" aria-hidden="true"></canvas>
+      <div class="tx">
+        <h1 data-en="Storeroom">储物间</h1>
+        <div class="said" id="said" data-en="Having a look at what your agents keep…">我在看你的 agent 都堆了些什么……</div>
+        <div class="drive" id="drive" hidden></div>
+      </div>
+      <div class="views" role="tablist"><button id="v-night" hidden data-en="Last night">昨晚</button><button id="v-agents" class="on" data-en="Agents">agent</button><button id="v-desk" data-en="Desktop">桌面</button><button id="v-dl" data-en="Downloads">下载</button></div>
+      <button id="again" class="ghost" data-en="Count again">再看一遍</button>
+    </header>
+    <main id="m-agents">
+      <section>
+        <h2><span data-en="On disk">占着磁盘的</span><small data-en="session records, kept forever unless cleared">会话记录，不清就一直在</small></h2>
+        <div class="scroll" id="disk"><div class="waiting"><div class="dots"><i></i><i></i><i></i></div><span data-en="Counting…">在清点……</span></div></div>
+      </section>
+      <section>
+        <h2><span data-en="Read before every session">每次开会话先读进去的</span><small data-en="what it takes in before you say a word">你还没开口，它已经读了这些</small></h2>
+        <div class="who" id="who"></div>
+        <div class="scroll" id="start"><div class="waiting"><div class="dots"><i></i><i></i><i></i></div><span data-en="Counting…">在清点……</span></div></div>
+      </section>
+    </main>
+    <main id="m-night" hidden>
+      <section>
+        <h2><span data-en="Done last night">昨晚做的</span><small data-en="all of it can go back">都能放回去</small></h2>
+        <div class="scroll" id="did"></div>
+      </section>
+      <section>
+        <h2><span data-en="Waiting for you">等你定的</span><small data-en="nothing is deleted without you">不经你同意，什么都不删</small></h2>
+        <div class="scroll" id="wait"></div>
+      </section>
+    </main>
+    <main id="m-desk" hidden>
+      <section>
+        <h2><span data-en="Put away">收纳</span><small id="stow-sub"></small></h2>
+        <div class="scroll" id="stow"><div class="waiting"><div class="dots"><i></i><i></i><i></i></div><span data-en="Counting…">在清点……</span></div></div>
+      </section>
+      <section>
+        <h2><span data-en="Could go">可以清掉的</span><small data-en="suggestions only; anything deleted goes to the Recycle Bin">只是建议，删除都进回收站</small></h2>
+        <div class="scroll" id="clean"></div>
+      </section>
+    </main>
+    <footer id="f-desk" hidden data-en="Counted on this machine only. Putting away only moves files into one folder in the same place and can always be put back; anything removed goes to the Recycle Bin.">只在本机清点。收纳只是把文件移进同一处的一个文件夹，随时可以放回原处；删掉的都进回收站。</footer>
+    <footer id="f-night" hidden data-en="It works only while you are away in the evening, and only on what can be put back. What you put back, it remembers and leaves alone.">只在你晚上离开后动手，只做能放回的事。你放回去的，它记住，以后不再动。</footer>
+    <footer id="f-agents" data-en="Counted on this machine only: nothing is sent anywhere and no tokens are spent. Packing checks the box before removing anything, never touches the last 30 days, and can always be put back.">只在本机清点，不上传、不花 token。装箱前先检查箱子，最近 30 天的不碰，随时能放回去。</footer>
+    <script src="/embed.js"></script>
+    <script type="module" src="/src/storeroom.ts"></script>
+  </body>
+</html>

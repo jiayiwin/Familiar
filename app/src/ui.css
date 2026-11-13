@@ -1,84 +1,52 @@
-/* Familiar design system: modern, colourful, shaped.
-   Warm cream paper, a deep indigo, a coral accent, and a set of soft tints
-   (peach, mint, butter, lilac, sky) for the playful parts. Bold geometric
-   shapes (circles, arches, half moons) carry the decoration. Fonts are the
-   system's own (the app works offline). */
+/* Rill design system. Everything comes from the pets' own art: the paper
+   they are drawn on, the warm grey of their outline, the plum of 紫梦's ears.
+   Plum is for what can be clicked; coral is kept for "waiting for you". The
+   soft tints are the five pets' body colours. One look in light and dark
+   system themes, like the pet's speech bubble. Fonts are the system's own (the
+   app works offline). */
 :root {
-  --bg: #f6f1e7;
-  --panel: #ffffff;
-  --raised: #ffffff;
-  --ink: #1f2245;
-  --ink-2: #4a4e72;
-  --muted: #8b8ca6;
-  --faint: #c3c1d0;
-  --line: #ece5d7;
-  --line-2: #ddd4c3;
-  --indigo: #2b3275;
-  --indigo-2: #3b44a0;
-  --accent: #ee5b3c;
-  --accent-2: #ff7a55;
-  --accent-soft: rgba(238, 91, 60, 0.12);
+  --bg: #faf6f0;
+  --panel: #fffaf2;
+  --raised: #fffaf2;
+  --ink: #5b4a57;
+  --ink-2: #6d5d6a;
+  --muted: #776775;
+  --faint: #b9aab5;
+  --line: #efe6e2;
+  --line-2: #d9cbc8;
+  --indigo: #7a5fc0;
+  --indigo-2: #6a50b0;
+  --accent: #7a5fc0;
+  --accent-2: #6a50b0;
+  --accent-soft: rgba(122, 95, 192, 0.12);
   --accent-ink: #ffffff;
-  --mustard: #f4b63f;
-  --mint: #6fc3a0;
-  --sky: #7fb0ec;
-  --lilac: #ad98e6;
-  --t-peach: #fde4d6;
-  --t-mint: #dcf1e6;
-  --t-butter: #fdf0c8;
-  --t-lilac: #e8e2fa;
-  --t-sky: #dde9fa;
-  --chip: #efe8dc;
-  --red: #e0442f;
-  --green: #2f9a6e;
+  --alert: #c24e38;
+  --mustard: #d9b45a;
+  --mint: #8fbfa4;
+  --sky: #9db9d8;
+  --lilac: #b8a4e0;
+  --t-peach: #f6e6df;
+  --t-mint: #e3ecdf;
+  --t-butter: #f6efe4;
+  --t-lilac: #ece4ff;
+  --t-sky: #e3ebf6;
+  --chip: #f0e9e4;
+  --red: #c24e38;
+  --green: #5a9a78;
   --teal: #2f9a8a;
   --cc: #e0794f;
   --cx: #2f9a8a;
-  --frame: #1f2245;
-  --shadow: 0 1px 2px rgba(31, 34, 69, 0.05), 0 10px 30px rgba(31, 34, 69, 0.08);
-  --shadow-lift: 0 2px 4px rgba(31, 34, 69, 0.06), 0 18px 40px rgba(31, 34, 69, 0.14);
-  --serif: "Palatino Linotype", "Book Antiqua", Georgia, "Noto Serif SC", "Songti SC", "STSong", serif;
-  --display: "Bahnschrift", "Segoe UI Variable Display", "Segoe UI", "Microsoft YaHei UI", sans-serif;
-  --sans: "Segoe UI", "Microsoft YaHei UI", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  --frame: #5b4a57;
+  --shadow: 0 1px 2px rgba(110, 88, 140, 0.06), 0 8px 22px rgba(110, 88, 140, 0.1);
+  --shadow-lift: 0 2px 4px rgba(110, 88, 140, 0.08), 0 14px 34px rgba(110, 88, 140, 0.2);
+  --serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "KaiTi", "STKaiti", Georgia, serif;
+  --display: "Segoe UI Variable Display", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  --sans: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
   --light: "Segoe UI Light", "Microsoft YaHei UI Light", "Segoe UI", "Microsoft YaHei UI", sans-serif;
   --emoji: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
   --r: 14px;
   color-scheme: light;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #14162c;
-    --panel: #1d2040;
-    --raised: #252a52;
-    --ink: #f4efe6;
-    --ink-2: #c8c6dc;
-    --muted: #8f91b3;
-    --faint: #5a5d84;
-    --line: #2b2f58;
-    --line-2: #3a3f70;
-    --indigo: #3a43a8;
-    --indigo-2: #4c56c4;
-    --accent: #ff6e4d;
-    --accent-2: #ff8a66;
-    --accent-soft: rgba(255, 110, 77, 0.16);
-    --accent-ink: #ffffff;
-    --t-peach: #3b2a3a;
-    --t-mint: #1f3a3c;
-    --t-butter: #3a3530;
-    --t-lilac: #2e2a52;
-    --t-sky: #22335a;
-    --chip: #262a50;
-    --red: #ff6a55;
-    --green: #5fd0a0;
-    --teal: #5fc8b8;
-    --cc: #f39873;
-    --cx: #5fc8b8;
-    --frame: #f4efe6;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.35);
-    --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.3), 0 20px 44px rgba(0, 0, 0, 0.45);
-    color-scheme: dark;
-  }
 }
 * { box-sizing: border-box; }
 html, body {
@@ -131,49 +99,6 @@ input[type="checkbox"], input[type="range"] { accent-color: var(--accent); }
 .chip:hover { color: var(--ink); border-color: var(--line-2); }
 .chip.on { background: var(--indigo); border-color: var(--indigo); color: #fff; }
 
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
-.card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  padding: 10px 10px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  position: relative;
-  box-shadow: var(--shadow);
-  transition: box-shadow 0.25s var(--ease), transform 0.25s var(--ease), border-color 0.25s var(--ease);
-}
-.card:hover { box-shadow: var(--shadow-lift); transform: translateY(-3px); }
-.card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), var(--shadow-lift); }
-/* each pet stands on its own tinted stage with an arch behind it */
-.card canvas { display: block; margin: 10px auto 12px; image-rendering: pixelated; position: relative; z-index: 1; }
-.card::before {
-  content: ""; position: absolute; left: 10px; right: 10px; top: 10px; height: 132px; border-radius: 12px; z-index: 0;
-  background:
-    radial-gradient(circle at 50% 100%, color-mix(in srgb, var(--stage-c, var(--mustard)) 38%, transparent) 0 46px, transparent 47px),
-    var(--stage, var(--t-butter));
-}
-.card:nth-child(5n + 1) { --stage: var(--t-peach); --stage-c: var(--accent); }
-.card:nth-child(5n + 2) { --stage: var(--t-mint); --stage-c: var(--mint); }
-.card:nth-child(5n + 3) { --stage: var(--t-lilac); --stage-c: var(--lilac); }
-.card:nth-child(5n + 4) { --stage: var(--t-sky); --stage-c: var(--sky); }
-.card:nth-child(5n + 5) { --stage: var(--t-butter); --stage-c: var(--mustard); }
-.card > div { position: relative; z-index: 1; padding: 0 4px; }
-.card .title { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 4px; }
-.card .title b { font-family: var(--display); font-size: 16px; font-weight: 700; letter-spacing: 0.01em; }
-.card .meta { color: var(--muted); font-size: 11.5px; }
-.star { background: none; border: 0; font-size: 16px; line-height: 1; padding: 0 2px; color: var(--faint); box-shadow: none; }
-.star:hover { border: 0; color: var(--mustard); }
-.star.on { color: var(--mustard); }
-.tag { display: inline-block; font-size: 10.5px; font-weight: 600; padding: 0 8px; border-radius: 999px; background: var(--chip); color: var(--ink-2); margin-right: 4px; }
-.inuse { position: absolute; top: 18px; left: 18px; display: flex; gap: 4px; z-index: 2; }
-.inuse span { font-size: 10px; font-weight: 700; letter-spacing: 0.02em; color: #fff; padding: 1px 8px; border-radius: 999px; background: var(--indigo); display: inline-flex; align-items: center; gap: 4px; }
-.inuse .cc { background: var(--cc); }
-.inuse .cx { background: var(--cx); }
-.inuse .pj { background: var(--indigo); }
-.actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.actions button { padding: 4px 12px; font-size: 12px; }
 .banner { padding: 10px 14px; border-radius: 12px; background: color-mix(in srgb, var(--red) 10%, var(--panel)); color: var(--red); border: 1.5px solid color-mix(in srgb, var(--red) 30%, transparent); }
 .toast {
   position: fixed;

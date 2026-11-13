@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Familiar",
-  "identifier": "dev.familiar.desktop",
-  "version": "0.1.16",
+  "productName": "RillBuddy",
+  "identifier": "dev.rillbuddy.desktop",
+  "version": "0.1.33",
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
@@ -13,7 +13,7 @@
     "withGlobalTauri": false,
     "windows": [],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:* https: http:; img-src 'self' data: blob: http://127.0.0.1:* https: http:; media-src 'self' blob: http://127.0.0.1:* https: http:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'"
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:* https: http:; img-src 'self' data: blob: http://127.0.0.1:* https: http:; media-src 'self' blob: http://127.0.0.1:* https: http:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:"
     }
   },
   "bundle": {
@@ -28,12 +28,11 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "../../pets": "pets",
       "../../.claude-plugin/marketplace.json": "plugin/.claude-plugin/marketplace.json",
       "../../adapters/claude-code": "plugin/adapters/claude-code"
     },
     "externalBin": [],
-    "publisher": "Familiar contributors",
+    "publisher": "RillBuddy contributors",
     "shortDescription": "Claude Code 和 Codex 的桌面宠物",
     "windows": {
       "nsis": {
@@ -42,7 +41,8 @@
           "SimpChinese",
           "English"
         ],
-        "displayLanguageSelector": false
+        "displayLanguageSelector": false,
+        "installerHooks": "./windows/hooks.nsh"
       }
     }
   }

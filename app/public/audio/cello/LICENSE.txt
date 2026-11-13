@@ -1,0 +1,9 @@
+Cello samples: "Real Cello Notes" by flcellogrl (Freesound pack 12408,
+https://freesound.org/people/flcellogrl/packs/12408/), licensed under
+Creative Commons Attribution (CC BY).
+
+These files are the edited MP3 set published in tonejs-instruments by
+Nicholaus Brosowsky (https://github.com/nbrosowsky/tonejs-instruments;
+samples under CC BY 3.0, https://creativecommons.org/licenses/by/3.0/):
+trimmed, levelled and pitch-corrected there. Sixteen notes of that set are
+included here, C2 to C5, unmodified.

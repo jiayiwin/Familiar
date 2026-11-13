@@ -5,12 +5,12 @@
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder};
 
 /// Logical size of the panel window; the card sits at its taskbar-side edge.
-const W: f64 = 340.0;
+const W: f64 = 380.0;
 const H: f64 = 900.0;
 
 pub fn create(h: &AppHandle) -> tauri::Result<()> {
     WebviewWindowBuilder::new(h, "tray", WebviewUrl::App("tray.html".into()))
-        .title("Familiar")
+        .title("Rill")
         .transparent(true)
         .decorations(false)
         .shadow(false)
@@ -56,7 +56,7 @@ pub fn open(h: &AppHandle, at: PhysicalPosition<f64>, state: serde_json::Value) 
     let _ = win.set_focus();
 }
 
-/// Fresh state for an open panel (a toggle changed, coins moved).
+/// Fresh state for an open panel (a toggle changed, a pet's state moved on).
 pub fn refresh(h: &AppHandle, state: serde_json::Value) {
     if let Some(win) = h.get_webview_window("tray") {
         if win.is_visible().unwrap_or(false) {

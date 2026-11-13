@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN" data-sheet="ui">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-en="Day's end">收工曲</title>
+    <link rel="stylesheet" href="/src/ui.css" />
+    <style>
+      :root { --accent: #7a5fc0; --room: #f3ecf9; --cushion: #e0d4ff; --shade: 110, 88, 140; }
+      html, body { height: 100%; overflow: hidden; }
+      body { display: flex; flex-direction: column; gap: 10px; padding: 22px 26px 18px; background: linear-gradient(#f6f0fa, var(--bg) 70%); }
+      header { display: flex; align-items: baseline; gap: 12px; }
+      header h1 { margin: 0; font-size: 26px; }
+      header .date { color: var(--muted); font-weight: 700; }
+      header .said { margin-left: auto; font-size: 16px; font-weight: 700; color: var(--ink-2); }
+      /* The five, side by side, each on its cushion with its instrument's name. */
+      .band { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: center; gap: 8px; padding: 0 6px; }
+      .seat { position: relative; min-width: 0; display: flex; flex-direction: column; align-items: center; text-align: center; transition: transform 0.12s; }
+      .seat canvas { width: 100%; max-width: 250px; aspect-ratio: 1; height: auto; position: relative; z-index: 1; }
+      .seat .cushion { width: min(190px, 86%); height: 26px; margin-top: -20px; border-radius: 50%; background: var(--cushion); opacity: 0.8; transition: box-shadow 0.15s, opacity 0.15s; }
+      .seat b { margin-top: 6px; font-size: 13px; }
+      .seat small { font-size: 11.5px; color: var(--muted); }
+      .seat.on { transform: translateY(-4px); }
+      .seat.on .cushion { opacity: 1; box-shadow: 0 0 18px 4px rgba(255, 214, 120, 0.75); }
+      .seat .glow { position: absolute; top: 30%; width: min(190px, 86%); height: 45%; border-radius: 50%; background: radial-gradient(rgba(255, 220, 140, 0.55), rgba(255, 220, 140, 0)); opacity: 0; transition: opacity 0.15s; }
+      .seat.on .glow { opacity: 1; }
+      canvas#day { width: 100%; height: 150px; display: block; }
+      .bar { display: flex; align-items: center; gap: 10px; }
+      .bar .hint { color: var(--muted); font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1 data-en="Day's end">收工曲</h1>
+      <span class="date" id="date"></span>
+      <span class="said" id="said"></span>
+    </header>
+    <div class="band" id="band"></div>
+    <canvas id="day"></canvas>
+    <div class="bar"><button id="play" class="primary" data-en="Play it">听一遍</button><span class="hint" id="hint"></span></div>
+    <script src="/embed.js"></script>
+    <script type="module" src="/src/song.ts"></script>
+  </body>
+</html>

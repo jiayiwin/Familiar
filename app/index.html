@@ -1,16 +1,23 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Familiar</title>
-    <style>
-      html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; user-select: none; }
-      canvas { display: block; }
-    </style>
-  </head>
-  <body>
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Rill</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    html,body{background:transparent;overflow:hidden;user-select:none;-webkit-user-select:none}
+    #pr{position:relative}
+    canvas{position:absolute;top:0;left:0}
+    /* The pet itself; the canvas above it carries bubbles, badges and effects, and takes the mouse. */
+    #rig{pointer-events:none}
+  </style>
+</head>
+<body>
+  <div id="pr">
+    <canvas id="rig"></canvas>
     <canvas id="pet"></canvas>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
 </html>

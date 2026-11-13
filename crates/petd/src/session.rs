@@ -150,7 +150,10 @@ impl Session {
 
     /// Short project name for bubbles and cards.
     pub fn project_name(&self) -> &str {
-        self.project.rsplit(['/', '\\']).find(|s| !s.is_empty()).unwrap_or("")
+        self.project
+            .rsplit(['/', '\\'])
+            .find(|s| !s.is_empty())
+            .unwrap_or("")
     }
 
     fn set(&mut self, s: State, ts: u64) {
@@ -202,7 +205,12 @@ impl Session {
                 t.attentions += 1;
             }
             self.set(State::Attention, ts);
-            self.attention_kind = Some(ev.detail.kind.clone().unwrap_or_else(|| "permission".into()));
+            self.attention_kind = Some(
+                ev.detail
+                    .kind
+                    .clone()
+                    .unwrap_or_else(|| "permission".into()),
+            );
             return None;
         }
 
@@ -235,17 +243,24 @@ impl Session {
             EventKind::TurnStart => {
                 // A new prompt while a turn was still open means the user cut it short.
                 let fin = self.finish_turn(TurnResult::Aborted, ts);
-                self.turn = Some(Turn { started_at: ts, ..Turn::default() });
+                self.turn = Some(Turn {
+                    started_at: ts,
+                    ..Turn::default()
+                });
                 self.set(State::Thinking, ts);
                 fin
             }
             EventKind::ToolStart => {
-                let turn = self.turn.get_or_insert_with(|| Turn { started_at: ts, ..Turn::default() });
+                let turn = self.turn.get_or_insert_with(|| Turn {
+                    started_at: ts,
+                    ..Turn::default()
+                });
                 turn.tool_calls += 1;
                 let stoned = turn.stoned;
                 self.last_tool = ev.detail.tool.clone();
                 self.last_file = ev.detail.file.clone();
-                let reading = ev.detail.read == Some(true) || ev.detail.tool.as_deref().is_some_and(is_read_tool);
+                let reading = ev.detail.read == Some(true)
+                    || ev.detail.tool.as_deref().is_some_and(is_read_tool);
                 self.set(
                     if stoned {
                         State::Stone
@@ -264,18 +279,29 @@ impl Session {
                     self.set(State::Aborted, ts);
                     return fin;
                 }
-                let turn = self.turn.get_or_insert_with(|| Turn { started_at: ts, ..Turn::default() });
+                let turn = self.turn.get_or_insert_with(|| Turn {
+                    started_at: ts,
+                    ..Turn::default()
+                });
                 if ev.detail.ok == Some(false) {
                     turn.tool_errors += 1;
                     turn.consecutive_fails += 1;
                     if turn.consecutive_fails >= STONE_FAILS {
                         turn.stoned = true;
                     }
-                    let s = if turn.stoned { State::Stone } else { State::Error };
+                    let s = if turn.stoned {
+                        State::Stone
+                    } else {
+                        State::Error
+                    };
                     self.set(s, ts);
                 } else {
                     turn.consecutive_fails = 0;
-                    let s = if turn.stoned { State::Stone } else { State::Thinking };
+                    let s = if turn.stoned {
+                        State::Stone
+                    } else {
+                        State::Thinking
+                    };
                     self.set(s, ts);
                 }
                 None
@@ -410,7 +436,11 @@ mod tests {
         s.apply(&tool_end(false, 45), 45);
         assert_eq!(s.state, State::Stone);
         s.apply(&tool_start("Bash", 50), 50);
-        assert_eq!(s.state, State::Stone, "stays stone for the rest of the turn");
+        assert_eq!(
+            s.state,
+            State::Stone,
+            "stays stone for the rest of the turn"
+        );
         s.apply(&ev(EventKind::TurnStart, 60), 60);
         assert_eq!(s.state, State::Thinking);
     }
@@ -485,7 +515,10 @@ mod tests {
         assert!(s.tick(1000 + SLEEP_AFTER));
         assert_eq!(s.state, State::Sleeping);
         // Any event wakes it.
-        s.apply(&ev(EventKind::TurnStart, 1000 + SLEEP_AFTER + 5), 1000 + SLEEP_AFTER + 5);
+        s.apply(
+            &ev(EventKind::TurnStart, 1000 + SLEEP_AFTER + 5),
+            1000 + SLEEP_AFTER + 5,
+        );
         assert_eq!(s.state, State::Thinking);
         // Silence goes offline, but never while waiting on the user.
         assert!(s.tick(1000 + SLEEP_AFTER + 5 + OFFLINE_AFTER));

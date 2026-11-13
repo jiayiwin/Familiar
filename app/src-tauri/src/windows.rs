@@ -16,17 +16,17 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWi
 const PET_W: f64 = 200.0;
 const PET_H: f64 = 168.0;
 const MARGIN: f64 = 24.0;
-// Room for minis: a camp pet grows to ~450 px wide with 4 minis + "+N".
+// Gap between two pets where their windows first appear.
 const SPACING: f64 = 100.0;
 
 /// Autoplay so the attention chime plays without a click first.
 const BASE_ARGS: &str =
     "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required";
 
-/// WebView2 flags; debug builds open DevTools Protocol on `FAMILIAR_CDP_PORT`
+/// WebView2 flags; debug builds open DevTools Protocol on `RILLBUDDY_CDP_PORT`
 /// so tests can drive the pages.
 pub fn browser_args() -> String {
-    match std::env::var("FAMILIAR_CDP_PORT") {
+    match std::env::var("RILLBUDDY_CDP_PORT") {
         Ok(port) if cfg!(debug_assertions) && !port.is_empty() => format!("{BASE_ARGS} --remote-debugging-port={port}"),
         _ => BASE_ARGS.to_string(),
     }
@@ -35,7 +35,7 @@ pub fn browser_args() -> String {
 // ---------------------------------------------------------------- positions
 
 /// Where each pet stands, as the physical screen point under its feet
-/// (bottom-centre of the window). Saved to ~/.familiar/windows.json.
+/// (bottom-centre of the window). Saved to ~/.rillbuddy/windows.json.
 pub struct Positions {
     file: PathBuf,
     map: Mutex<HashMap<String, (i32, i32)>>,
@@ -119,7 +119,7 @@ fn create_pet_window(h: &AppHandle, app: &App, id: &str, index: usize) -> tauri:
         return Ok(());
     }
     let win = WebviewWindowBuilder::new(h, &label, WebviewUrl::App(format!("index.html?pet={id}").into()))
-        .title("Familiar")
+        .title("Rill")
         .transparent(true)
         .decorations(false)
         .shadow(false)
@@ -192,8 +192,8 @@ pub fn sync_pets(h: &AppHandle, app: &Arc<App>, ids: &[String]) {
 // ---------------------------------------------------------------- other windows
 
 pub fn create_card(h: &AppHandle) -> tauri::Result<()> {
-    let w = WebviewWindowBuilder::new(h, "card", WebviewUrl::App("card.html".into()))
-        .title("Familiar")
+    WebviewWindowBuilder::new(h, "card", WebviewUrl::App("card.html".into()))
+        .title("Rill")
         .transparent(true)
         .decorations(false)
         .shadow(false)
@@ -206,13 +206,32 @@ pub fn create_card(h: &AppHandle) -> tauri::Result<()> {
         .inner_size(288.0, 120.0)
         .additional_browser_args(&browser_args())
         .build()?;
-    // Never in the way of a click.
-    let _ = w.set_ignore_cursor_events(true);
+    // It takes clicks (a row goes to that session's window) without taking focus; it is only up while you hover a pet.
     Ok(())
 }
 
-/// One transparent, click-through overlay per monitor (bugs, rope, race lane,
-/// coin pop-ups). Each page is told its monitor's work area in logical px.
+/// The approval card (`features.approve`): shown above a pet while one of its
+/// sessions waits for a permission answer. Takes clicks without taking focus.
+pub fn create_approve(h: &AppHandle) -> tauri::Result<()> {
+    WebviewWindowBuilder::new(h, "approve", WebviewUrl::App("approve.html".into()))
+        .title("Rill")
+        .transparent(true)
+        .decorations(false)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .focused(false)
+        .focusable(false)
+        .visible(false)
+        .inner_size(340.0, 220.0)
+        .additional_browser_args(&browser_args())
+        .build()?;
+    Ok(())
+}
+
+/// One transparent, click-through overlay per monitor (bugs, the 相声 stage).
+/// Each page is told its monitor's work area in logical px.
 pub fn create_overlays(h: &AppHandle) {
     let Some(probe) = h.get_webview_window("card") else { return };
     let monitors = probe.available_monitors().unwrap_or_default();
@@ -225,7 +244,7 @@ pub fn create_overlays(h: &AppHandle) {
         let is_primary = primary == Some(*m.position());
         let url = format!("overlay.html?m={i}&x={x}&y={y}&w={w}&h={hgt}&primary={}", is_primary as u8);
         let res = WebviewWindowBuilder::new(h, format!("overlay-{i}"), WebviewUrl::App(url.into()))
-            .title("Familiar overlay")
+            .title("Rill overlay")
             .transparent(true)
             .decorations(false)
             .shadow(false)
@@ -248,85 +267,83 @@ pub fn create_overlays(h: &AppHandle) {
     }
 }
 
-fn open_page(h: &AppHandle, label: &str, page: &str, title: &str, w: f64, hgt: f64) {
-    if let Some(win) = h.get_webview_window(label) {
+/// The one window the pages open in, each as a tab (`shell.html`): the room,
+/// the gallery, the radio, a letter, the daily report, the first-run page.
+/// It has no system frame; the page draws its own bar, tabs and shadow.
+/// Closing it only hides it, so the tabs (and the radio) are still there when
+/// it comes back. `kind`: room | gallery | radio | letter | report | storeroom | welcome.
+pub fn open_tab(h: &AppHandle, kind: &str, pet: Option<&str>, tab: Option<&str>) {
+    if let Some(win) = h.get_webview_window("home") {
         let _ = win.unminimize();
         let _ = win.show();
         let _ = win.set_focus();
+        let _ = h.emit_to("home", "open-tab", serde_json::json!({ "kind": kind, "pet": pet, "tab": tab }));
         return;
     }
-    let res = WebviewWindowBuilder::new(h, label, WebviewUrl::App(page.into()))
-        .title(title)
-        .inner_size(w, hgt)
-        .min_inner_size(420.0, 420.0)
+    let mut page = format!("shell.html?open={kind}");
+    for (key, value) in [("pet", pet), ("tab", tab)] {
+        if let Some(v) = value {
+            page.push_str(&format!("&{key}={v}"));
+        }
+    }
+    let res = WebviewWindowBuilder::new(h, "home", WebviewUrl::App(page.into()))
+        .title("Rill")
+        // The page inside is 920×640 to begin with; the rest is the bar and the room the card's shadow needs.
+        // It can be made bigger (the corner grip, or a double-click on the bar), never smaller.
+        .inner_size(948.0, 716.0)
+        .min_inner_size(948.0, 716.0)
+        .resizable(true)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
         .center()
         .additional_browser_args(&browser_args())
         .build();
     if let Err(e) = res {
-        eprintln!("{label}: {e}");
+        eprintln!("home: {e}");
     }
 }
 
 pub fn open_gallery(h: &AppHandle) {
-    open_page(h, "gallery", "gallery.html", petd::i18n::t("宠物图鉴 · Familiar", "Gallery · Familiar"), 880.0, 680.0);
+    open_tab(h, "gallery", None, None);
 }
 
-/// The gallery on its shop tab (focuses the gallery if it is already open).
-pub fn open_shop(h: &AppHandle) {
-    open_page(h, "gallery", "gallery.html?tab=shop", petd::i18n::t("宠物图鉴 · Familiar", "Gallery · Familiar"), 880.0, 680.0);
+/// The gallery on its settings tab.
+pub fn open_settings(h: &AppHandle) {
+    open_tab(h, "gallery", None, Some("settings"));
 }
 
-/// The gallery on its reminders tab.
-pub fn open_reminders(h: &AppHandle) {
-    open_page(h, "gallery", "gallery.html?tab=health", petd::i18n::t("宠物图鉴 · Familiar", "Gallery · Familiar"), 880.0, 680.0);
+/// The room of one pet (each has its own); `None` is the main pet's.
+pub fn open_room(h: &AppHandle, pet: Option<&str>) {
+    open_tab(h, "room", pet, None);
 }
 
 pub fn open_welcome(h: &AppHandle) {
-    open_page(h, "welcome", "welcome.html", petd::i18n::t("欢迎使用 Familiar", "Welcome to Familiar"), 760.0, 560.0);
+    open_tab(h, "welcome", None, None);
 }
 
-pub fn open_spring(h: &AppHandle) {
-    open_page(h, "spring", "spring.html", petd::i18n::t("春节倒计时 · Familiar", "Spring Festival · Familiar"), 760.0, 620.0);
+/// The radio. `pet`: the one it was opened from, who listens along (`None`: the main pet).
+pub fn open_radio(h: &AppHandle, pet: Option<&str>) {
+    open_tab(h, "radio", pet, None);
 }
 
-/// The radio: closing it only hides it, so the station keeps playing.
-pub fn open_radio(h: &AppHandle) {
-    open_page(h, "radio", "radio.html", petd::i18n::t("电台 · Familiar", "Radio · Familiar"), 440.0, 720.0);
-}
-
-/// The radio on a given tab. A new window reads it from the URL; an existing one gets an event.
-pub fn open_radio_tab(h: &AppHandle, tab: &str) {
-    if h.get_webview_window("radio").is_some() {
-        open_radio(h);
-        let _ = h.emit_to("radio", "radio-select", tab);
-        return;
-    }
-    open_page(h, "radio", &format!("radio.html?tab={tab}"), petd::i18n::t("电台 · Familiar", "Radio · Familiar"), 440.0, 720.0);
+/// The radio, playing something from `shelf` ("often", "calm", …) right away: a "yes" to a pet's offer.
+pub fn open_radio_playing(h: &AppHandle, pet: &str, shelf: &str) {
+    open_tab(h, "radio", Some(pet), Some(&format!("play:{shelf}")));
 }
 
 pub fn open_report(h: &AppHandle) {
-    open_page(h, "report", "report.html", petd::i18n::t("今日报告 · Familiar", "Today's report · Familiar"), 460.0, 640.0);
+    open_tab(h, "report", None, None);
 }
 
-/// A letter from the pet: decorated=false, transparent, always on top.
-pub fn open_letter(h: &AppHandle) -> tauri::Result<WebviewWindow> {
-    if let Some(w) = h.get_webview_window("letter") {
-        // The window is only hidden on close, so tell the page to pick up the
-        // new letter (it reloads itself).
-        let _ = w.emit("letter-show", ());
-        let _ = w.show();
-        let _ = w.set_focus();
-        return Ok(w);
-    }
-    WebviewWindowBuilder::new(h, "letter", WebviewUrl::App("letter.html".into()))
-        .title("")
-        .inner_size(420.0, 540.0)
-        .decorations(false)
-        .transparent(true)
-        .always_on_top(true)
-        .center()
-        .additional_browser_args(&browser_args())
-        .build()
+/// 储物间: what the agents keep on disk, and what each new session reads first.
+pub fn open_storeroom(h: &AppHandle) {
+    open_tab(h, "storeroom", None, None);
+}
+
+/// A letter from the pet.
+pub fn open_letter(h: &AppHandle) {
+    open_tab(h, "letter", None, None);
 }
 
 // ---------------------------------------------------------------- click-through
@@ -478,8 +495,8 @@ mod win32 {
         out
     }
 
-    /// Parent pid of every process.
-    fn parents() -> std::collections::HashMap<u32, u32> {
+    /// Every process: its parent pid and its executable's file name (lower case).
+    fn processes() -> std::collections::HashMap<u32, (u32, String)> {
         use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
         use windows_sys::Win32::System::Diagnostics::ToolHelp::*;
         let mut out = std::collections::HashMap::new();
@@ -492,7 +509,8 @@ mod win32 {
             e.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
             if Process32FirstW(snap, &mut e) != 0 {
                 loop {
-                    out.insert(e.th32ProcessID, e.th32ParentProcessID);
+                    let n = e.szExeFile.iter().position(|&c| c == 0).unwrap_or(e.szExeFile.len());
+                    out.insert(e.th32ProcessID, (e.th32ParentProcessID, String::from_utf16_lossy(&e.szExeFile[..n]).to_lowercase()));
                     if Process32NextW(snap, &mut e) == 0 {
                         break;
                     }
@@ -503,51 +521,101 @@ mod win32 {
         out
     }
 
-    /// The main visible window of a process, if it has one.
-    fn main_window_of(pid: u32) -> Option<HWND> {
-        let mut all: Vec<HWND> = Vec::new();
-        unsafe { EnumWindows(Some(collect), &mut all as *mut Vec<HWND> as LPARAM) };
-        all.into_iter().find(|&h| unsafe {
-            pid_of(h) == pid
-                && IsWindowVisible(h) != 0
+    /// An app's own window: visible, titled, not owned by another, not a tool window.
+    fn app_window(h: HWND) -> bool {
+        unsafe {
+            IsWindowVisible(h) != 0
                 && GetWindowTextLengthW(h) > 0
                 && GetWindow(h, GW_OWNER).is_null()
                 && (GetWindowLongW(h, GWL_EXSTYLE) as u32 & WS_EX_TOOLWINDOW) == 0
                 && !cloaked(h)
-        })
+        }
+    }
+
+    /// The main visible window of a process, if it has one.
+    fn main_window_of(pid: u32) -> Option<HWND> {
+        let mut all: Vec<HWND> = Vec::new();
+        unsafe { EnumWindows(Some(collect), &mut all as *mut Vec<HWND> as LPARAM) };
+        all.into_iter().find(|&h| pid_of(h) == pid && app_window(h))
+    }
+
+    /// Shells, runtimes and the agents themselves: another window of one of these is not "the same app".
+    const NOT_AN_APP: &[&str] = &[
+        "claude.exe", "codex.exe", "gemini.exe", "opencode.exe", "node.exe", "bun.exe", "deno.exe", "python.exe", "pythonw.exe", "py.exe",
+        "powershell.exe", "pwsh.exe", "cmd.exe", "bash.exe", "sh.exe", "zsh.exe", "wsl.exe", "wslhost.exe", "conhost.exe", "openconsole.exe",
+        "explorer.exe", "svchost.exe", "services.exe", "wininit.exe", "winlogon.exe", "runtimebroker.exe", "taskhostw.exe", "sihost.exe",
+    ];
+
+    fn bring(h: HWND) {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_MENU};
+        unsafe {
+            if IsIconic(h) != 0 {
+                ShowWindow(h, SW_RESTORE);
+            }
+            // A tap of Alt lifts Windows' foreground lock for us.
+            let key = |flags| INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: windows_sys::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
+                    ki: KEYBDINPUT { wVk: VK_MENU, wScan: 0, dwFlags: flags, time: 0, dwExtraInfo: 0 },
+                },
+            };
+            let inputs = [key(0), key(KEYEVENTF_KEYUP)];
+            SendInput(2, inputs.as_ptr(), std::mem::size_of::<INPUT>() as i32);
+            SetForegroundWindow(h);
+        }
+    }
+
+    fn title_of(h: HWND) -> String {
+        let mut buf = [0u16; 512];
+        let n = unsafe { GetWindowTextW(h, buf.as_mut_ptr(), buf.len() as i32) };
+        String::from_utf16_lossy(&buf[..n.max(0) as usize])
     }
 
     /// Bring the terminal / IDE that runs `pid` to the front: walk up the
-    /// process tree to the first ancestor that owns a visible window.
-    pub fn focus_process_window(pid: u32) -> bool {
-        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_MENU};
-        let parents = parents();
+    /// process tree to the first ancestor that owns a visible window. When none
+    /// does (the app that started the agent keeps it in a windowless process of
+    /// its own, one that may even outlive the window it was opened from, as
+    /// some workbench apps do), the window of another process of that same app
+    /// will do: the one whose title names `project` if there is one, else the
+    /// one most in front.
+    pub fn focus_process_window(pid: u32, project: &str) -> bool {
+        let procs = processes();
+        let me = std::process::id();
         let mut cur = pid;
+        let mut apps: Vec<String> = Vec::new();
         for _ in 0..12 {
-            if cur == 0 || cur == std::process::id() {
+            if cur == 0 || cur == me {
                 break;
             }
             if let Some(h) = main_window_of(cur) {
-                unsafe {
-                    if IsIconic(h) != 0 {
-                        ShowWindow(h, SW_RESTORE);
-                    }
-                    // A tap of Alt lifts Windows' foreground lock for us.
-                    let key = |flags| INPUT {
-                        r#type: INPUT_KEYBOARD,
-                        Anonymous: windows_sys::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
-                            ki: KEYBDINPUT { wVk: VK_MENU, wScan: 0, dwFlags: flags, time: 0, dwExtraInfo: 0 },
-                        },
-                    };
-                    let inputs = [key(0), key(KEYEVENTF_KEYUP)];
-                    SendInput(2, inputs.as_ptr(), std::mem::size_of::<INPUT>() as i32);
-                    SetForegroundWindow(h);
-                }
+                bring(h);
                 return true;
             }
-            match parents.get(&cur) {
-                Some(&p) if p != cur => cur = p,
-                _ => break,
+            let Some((parent, exe)) = procs.get(&cur) else { break };
+            if !NOT_AN_APP.contains(&exe.as_str()) && !apps.contains(exe) {
+                apps.push(exe.clone());
+            }
+            if *parent == cur {
+                break;
+            }
+            cur = *parent;
+        }
+        let mut all: Vec<HWND> = Vec::new();
+        unsafe { EnumWindows(Some(collect), &mut all as *mut Vec<HWND> as LPARAM) };
+        let project = project.to_lowercase();
+        for exe in apps {
+            let wins: Vec<HWND> = all
+                .iter()
+                .copied()
+                .filter(|&h| {
+                    let p = pid_of(h);
+                    p != me && procs.get(&p).is_some_and(|(_, e)| *e == exe) && app_window(h)
+                })
+                .collect();
+            let named = (!project.is_empty()).then(|| wins.iter().copied().find(|&h| title_of(h).to_lowercase().contains(&project))).flatten();
+            if let Some(h) = named.or_else(|| wins.first().copied()) {
+                bring(h);
+                return true;
             }
         }
         false
@@ -617,12 +685,12 @@ pub fn sharing_screen(_patterns: &[String]) -> bool {
 }
 
 #[cfg(windows)]
-pub fn focus_process_window(pid: u32) -> bool {
-    win32::focus_process_window(pid)
+pub fn focus_process_window(pid: u32, project: &str) -> bool {
+    win32::focus_process_window(pid, project)
 }
 
 #[cfg(not(windows))]
-pub fn focus_process_window(_pid: u32) -> bool {
+pub fn focus_process_window(_pid: u32, _project: &str) -> bool {
     false
 }
 

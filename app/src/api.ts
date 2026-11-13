@@ -21,94 +21,24 @@ export interface SessionCard {
   file?: string;
 }
 
-export interface MiniView {
-  key: string;
-  source: string;
-  project: string;
-  state: State;
-  since: number;
-}
-
 export interface PetView {
+  /** One pet per agent: `claude-code`, `codex`, … */
   id: string;
-  pack: string;
-  pack_rev: number;
   state: State;
   since: number;
   camp: string | null;
-  target: string;
-  label?: string;
-  hue: number;
+  /** The agent's short name for the tag under the pet ("Claude", "Codex"). */
   marker?: string;
   attention_kind?: string;
   bubble?: { key: string; project?: string };
   online: number;
   waiting: number;
   sessions: SessionCard[];
-  minis: MiniView[];
-  minis_more: number;
   activity?: string;
+  /** The user's size setting, as a scale. */
   size?: number;
-  hat?: string;
-  /** The rest of the outfit: slot (face / neck / back / feet / hand / aura) -> item. */
-  wear?: Record<string, string>;
-  stage?: number;
-}
-
-export interface Action {
-  sheet: string;
-  frames: number;
-  fps: number;
-  loop: boolean;
-  then?: string;
-  sound?: string;
-  tint?: string;
-  from: string;
-}
-
-export interface Pack {
-  id: string;
-  name: string;
-  author?: string;
-  tags?: string[];
-  frame: { w: number; h: number; scale: number; anchor?: [number, number] };
-  actions: Record<string, Action>;
-  bubbles: Record<string, string[]>;
-  sounds?: Record<string, string[]>;
-  description?: string;
-  evolutions?: { turns: number; dir?: string; name?: string }[];
-}
-
-export interface PackInfo {
-  id: string;
-  name: string;
-  description?: string;
-  version: string;
-  author: string;
-  tags: string[];
-  builtin: boolean;
-}
-
-export interface BrokenPack {
-  dir: string;
-  id?: string;
-  errors: string[];
-}
-
-export interface ConfigInfo {
-  mode: string;
-  selection: {
-    "claude-code"?: string | null;
-    codex?: string | null;
-    projects: Record<string, string>;
-    favorites: string[];
-    rotation: string;
-  };
-  in_use: { "claude-code": string; codex: string };
-  rules: { id: string; pack: string }[];
-  projects_seen: string[];
-  error?: string | null;
-  current_target: string;
+  /** Which of the five pets this is: its body, its skin, its voice. */
+  skin?: string;
 }
 
 export interface Conn {
@@ -117,6 +47,30 @@ export interface Conn {
 }
 
 export const inTauri = "__TAURI_INTERNALS__" in window;
+
+/** Inside the tabbed window each page is a frame of it (see shell.ts). */
+export const embedded = window.parent !== window;
+
+/** Hear `event` from the host: sent to this window, or handed down by the tabbed window that holds this page. */
+export async function onHost<T>(event: string, cb: (payload: T) => void): Promise<void> {
+  if (embedded) {
+    window.addEventListener("message", (e) => {
+      if (e.origin === location.origin && e.source === window.parent && e.data?.type === event) cb(e.data.payload as T);
+    });
+    return;
+  }
+  if (!inTauri) return;
+  const { getCurrentWebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+  await getCurrentWebviewWindow().listen<T>(event, (e) => cb(e.payload));
+}
+
+/** Close this page: its tab in the tabbed window, or the window it has to itself. */
+export async function closeSelf(): Promise<void> {
+  if (embedded) return void window.parent.postMessage({ type: "close-tab" }, location.origin);
+  if (!inTauri) return;
+  const { getCurrentWindow } = await import("@tauri-apps/api/window");
+  await getCurrentWindow().close();
+}
 
 export async function connect(): Promise<Conn> {
   const q = new URLSearchParams(location.search);
@@ -129,7 +83,7 @@ export async function connect(): Promise<Conn> {
 }
 
 export async function getJson<T>(c: Conn, path: string): Promise<T> {
-  const r = await fetch(c.base + path, { headers: { "X-Familiar-Token": c.token } });
+  const r = await fetch(c.base + path, { headers: { "X-RillBuddy-Token": c.token } });
   if (!r.ok) throw new Error(`${path}: ${r.status}`);
   return r.json() as Promise<T>;
 }
@@ -137,7 +91,7 @@ export async function getJson<T>(c: Conn, path: string): Promise<T> {
 export async function postJson<T = { ok: boolean; message: string }>(c: Conn, path: string, body: unknown): Promise<T> {
   const r = await fetch(c.base + path, {
     method: "POST",
-    headers: { "X-Familiar-Token": c.token, "Content-Type": "application/json" },
+    headers: { "X-RillBuddy-Token": c.token, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   const text = await r.text();
@@ -146,10 +100,6 @@ export async function postJson<T = { ok: boolean; message: string }>(c: Conn, pa
   } catch {
     return { ok: r.ok, message: text } as T;
   }
-}
-
-export function fileUrl(c: Conn, pack: string, path: string, rev = 0): string {
-  return `${c.base}/v1/packs/${encodeURIComponent(pack)}/files/${path}?token=${c.token}&rev=${rev}`;
 }
 
 /** Subscribe to petd pushes; reconnects forever. */
@@ -170,6 +120,28 @@ export function subscribe(c: Conn, onMsg: (type: string, data: unknown) => void)
 }
 
 // Getters so the names follow the current language at read time.
+/** One thing in 手上的事 (petd/todo.rs). */
+export interface Todo {
+  id: number;
+  text: string;
+  at: number;
+  /** "you", or the agent that left it. */
+  from: string;
+  project?: string;
+  /** The agent it waits on; `ready` once that agent has stopped. */
+  wait?: string;
+  ready?: boolean;
+  told?: boolean;
+  done_at?: number;
+  /** The pet that holds it. */
+  pet?: string;
+}
+
+/** The pet a thing is held by: its own, else the first pet there is. */
+export function holderOf(t: Todo, pets: { id: string }[]): string | undefined {
+  return t.pet && pets.some((p) => p.id === t.pet) ? t.pet : pets[0]?.id;
+}
+
 export const STATE_NAMES: Record<State, string> = {
   get idle() { return t("空闲", "Idle"); },
   get thinking() { return t("思考中", "Thinking"); },
@@ -184,15 +156,7 @@ export const STATE_NAMES: Record<State, string> = {
   get offline() { return t("已离线", "Offline"); },
 };
 
-export const SOURCE_NAMES: Record<string, string> = { "claude-code": "Claude Code", codex: "Codex" };
-
-export function targetName(target: string): string {
-  if (target === "claude-code") return t("Claude Code 阵营", "Claude Code team");
-  if (target === "codex") return t("Codex 阵营", "Codex team");
-  if (target.startsWith("project:")) return t(`项目 ${target.slice(8)}`, `Project ${target.slice(8)}`);
-  if (target.startsWith("rule:")) return t(`规则 ${target.slice(5)}`, `Rule ${target.slice(5)}`);
-  return target;
-}
+export const SOURCE_NAMES: Record<string, string> = { "claude-code": "Claude Code", codex: "Codex", gemini: "Gemini CLI", cursor: "Cursor", opencode: "OpenCode" };
 
 export function duration(ms: number): string {
   const m = Math.max(0, Math.floor(ms / 60000));
@@ -219,18 +183,8 @@ export interface CampDay {
 export interface WorldState {
   frozen: boolean;
   focus: boolean;
-  arena: boolean;
+  sounds?: boolean;
   bugs: Bug[];
-  tug: null | {
-    offset: number;
-    scoring: string;
-    "claude-code": { score: number; day: CampDay };
-    codex: { score: number; day: CampDay };
-  };
-  shadow: null | { today: number; best_now: number; best_total: number; best_day: string; ahead: boolean };
-  wallet: number;
-  income_today: number;
-  daily_cap: number;
 }
 
 export interface CatchRow {
@@ -238,7 +192,6 @@ export interface CatchRow {
   outcome: string;
   fish_id: string;
   rarity: string;
-  coins: number;
   source: string;
 }
 
@@ -252,27 +205,11 @@ export interface Report {
   catches: CatchRow[];
   bugs: number;
   bosses: number;
-  coins_earned: number;
-  balance: number;
-  whips: number;
-  whipped: Record<string, number>;
-  games: number;
-  games_by: Record<string, number>;
   radio_s: number;
   kegel_sets: number;
   kegel_reps: number;
   letters: number;
   peak_agents: number;
-  duty: Duty[];
-}
-
-/** Who stood for a camp that day. */
-export interface Duty {
-  camp: string;
-  pack: string;
-  name: string;
-  turns: number;
-  work_ms: number;
 }
 
 export const RARITY_NAMES: Record<string, string> = {

@@ -1,10 +1,15 @@
 // The radio: stations from all over the world via the Radio Browser
 // directory (radio-browser.info), played straight from each station's
 // stream. Nothing goes online until this window is opened. Closing the window
-// only hides it, so the station keeps playing.
+// only hides it, so the station keeps playing. The pet listens along and says
+// what it knows about the station: whether you have had it on before.
 
-import { connect, inTauri, postJson, type Conn } from "./api";
+import { connect, inTauri, onHost, postJson, type Conn } from "./api";
 import { EN, initLang, t as tr } from "./i18n";
+import { mountPortrait } from "./rig/portrait";
+import type { RigPet } from "./rig/rig.js";
+import { applySkin, followSkin, skinFor } from "./skin";
+import { line } from "./voice";
 
 interface Station {
   stationuuid: string;
@@ -21,12 +26,14 @@ interface Station {
   clickcount: number;
 }
 interface Country { name: string; iso_3166_1: string; stationcount: number }
-type Tab = "hot" | "xs" | "world" | "fav";
+type Tab = "often" | "up" | "calm" | "xs" | "world";
+/** Tab names from before the shelves were renamed still arrive (saved, in links, from the tray). */
+const asTab = (v: unknown): Tab | null => (v === "hot" || v === "fav" ? "often" : v === "often" || v === "up" || v === "calm" || v === "xs" || v === "world" ? v : null);
 
 const SERVERS = ["de1", "fi1", "de2", "nl1", "at1"].map((s) => `https://${s}.api.radio-browser.info`);
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const list = $("list"), player = $("player"), playBtn = $<HTMLButtonElement>("play"), favBtn = $<HTMLButtonElement>("fav");
-const statusEl = $("status"), nameEl = $("name"), metaEl = $("meta"), logoEl = $("logo");
+const statusEl = $("status"), nameEl = $("name"), metaEl = $("meta"), lineEl = $("line");
 const vol = $<HTMLInputElement>("vol"), q = $<HTMLInputElement>("q");
 
 const PLAY = '<svg viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>';
@@ -55,6 +62,18 @@ const slim = (s: Station): Station => ({
 });
 let favs: Station[] = load("radio.favs", []);
 let cur: Station | null = load("radio.last", null);
+
+/** What has been on before: how often, and when (this time and the time before). */
+interface Heard { s: Station; n: number; last: number; prev: number }
+let heard: Record<string, Heard> = load("radio.heard", {});
+function noteHeard(s: Station) {
+  const h = heard[s.stationuuid];
+  heard[s.stationuuid] = { s: slim(s), n: (h?.n ?? 0) + 1, last: Date.now(), prev: h?.last ?? 0 };
+  // Keep the sixty most recent.
+  const keep = Object.values(heard).sort((a, b) => b.last - a.last).slice(0, 60);
+  heard = Object.fromEntries(keep.map((x) => [x.s.stationuuid, x]));
+  save("radio.heard", heard);
+}
 
 // ---------------------------------------------------------------- directory
 
@@ -98,6 +117,16 @@ const crosstalk = () =>
     const zh = (s: Station) => (/相声|评书|曲艺|crosstalk/i.test(s.name + s.tags) ? 0 : /文艺/.test(s.name) ? 1 : 2);
     return dedupe(all).sort((a, b) => zh(a) - zh(b) || b.clickcount - a.clickcount);
   });
+/** Several tags as one shelf, the most listened-to first. */
+const byTags = (key: string, tags: string[]) =>
+  cached(key, async () => {
+    const parts = await Promise.allSettled(tags.map((t) => stations(`bytagexact/${encodeURIComponent(t)}`, 30)));
+    return dedupe(parts.flatMap((p) => (p.status === "fulfilled" ? p.value : []))).sort((a, b) => b.clickcount - a.clickcount);
+  });
+const upbeat = () => byTags("up", ["dance", "funk", "disco", "hits"]);
+const quiet = () => byTags("calm", ["ambient", "chillout", "classical", "piano"]);
+/** Favourites first, then what has been on most. */
+const regulars = (): Station[] => dedupe([...favs, ...Object.values(heard).filter((h) => h.n >= 2).sort((a, b) => b.n - a.n || b.last - a.last).map((h) => h.s)]);
 let countries: Country[] | null = null;
 
 // ---------------------------------------------------------------- names
@@ -111,15 +140,6 @@ function countryName(code: string, fallback = ""): string {
     return fallback || code;
   }
 }
-const hash = (s: string) => {
-  let h = 0;
-  for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return h;
-};
-const tint = (s: string) => `tn-${hash(s) % 5}`;
-/** A hue for a station's art, from its name: the same station always gets the same colours. */
-const hue = (s: string) => hash(s) % 360;
-const initial = (s: string) => [...s.replace(/^[\s\p{P}\p{S}\d]+/u, "")][0]?.toUpperCase() ?? "♪";
 const TAG_ZH: Record<string, string> = {
   crosstalk: "相声", storytelling: "评书", comedy: "喜剧", news: "新闻", music: "音乐", entertainment: "娱乐", culture: "文化", opera: "戏曲",
   pop: "流行", talk: "谈话", sports: "体育", classical: "古典", jazz: "爵士", rock: "摇滚", traffic: "交通", information: "资讯",
@@ -128,22 +148,6 @@ const TAG_ZH: Record<string, string> = {
 };
 const tagLine = (s: Station) =>
   [...new Set(s.tags.split(",").map((t) => t.trim()).filter((t) => t && !/^\d/.test(t)).map((t) => (EN ? t : TAG_ZH[t.toLowerCase()] ?? t)))].slice(0, 3).join(" · ");
-
-function icon(s: Station, el: HTMLElement) {
-  el.textContent = initial(s.name);
-  el.classList.add(tint(s.name));
-  if (s.favicon && /^https?:/.test(s.favicon)) {
-    const img = new Image();
-    img.referrerPolicy = "no-referrer";
-    img.onload = () => {
-      if (img.naturalWidth < 8) return;
-      el.textContent = "";
-      el.classList.remove(...["tn-0", "tn-1", "tn-2", "tn-3", "tn-4"]);
-      el.appendChild(img);
-    };
-    img.src = s.favicon;
-  }
-}
 
 // ---------------------------------------------------------------- playback
 
@@ -159,22 +163,104 @@ let roaming = 0;
 let roamGen = 0;
 let announced = "";
 
+// ---------------------------------------------------------------- the pet
+
+let rigPet: RigPet | null = null;
+/** The pet it was opened from listens along; the window wears its skin. */
+let listener: string | null = null;
+async function seat(petId: string | null) {
+  listener = petId;
+  const sk = applySkin(conn ? (await skinFor(conn, petId)).skin.id : new URLSearchParams(location.search).get("skin"));
+  const old = $<HTMLCanvasElement>("rpet");
+  if (old.dataset.skin === sk.id) return;
+  const cv = old.cloneNode(false) as HTMLCanvasElement;
+  cv.dataset.skin = sk.id;
+  old.replaceWith(cv);
+  rigPet = await mountPortrait(cv, sk.rig ?? undefined).catch(() => null);
+  if (rigPet) rigPet.expr = state === "playing" ? "calm" : "neutral";
+}
+
+/** What it has to say about what is on. Only what it knows. */
+function petLine(): string {
+  if (state === "error") return line("radio.error");
+  if (state === "loading") return line(roaming > 0 ? "radio.roam" : "radio.tuning");
+  if (!cur) return line("radio.pick");
+  if (state === "paused") return line("radio.paused");
+  if (state === "idle") return line("radio.last");
+  const h = heard[cur.stationuuid];
+  if (!h || h.n <= 1) return line("radio.first");
+  const days = h.prev ? (h.last - h.prev) / 86_400_000 : 0;
+  if (h.n >= 5) return line("radio.often");
+  if (days >= 5 && days < 12) return line("radio.lastweek");
+  if (days < 1.5) return line("radio.again");
+  return line("radio.before");
+}
+
+function showLine() {
+  const text = petLine();
+  if (lineEl.textContent === text) return;
+  lineEl.classList.add("swap");
+  setTimeout(() => {
+    lineEl.textContent = text;
+    lineEl.classList.remove("swap");
+  }, 180);
+}
+
 function setState(s: typeof state, note?: string) {
   state = s;
+  if (rigPet) rigPet.expr = s === "playing" ? "calm" : s === "error" ? "worried" : "neutral";
   for (const k of ["playing", "loading", "error"] as const) player.classList.toggle(k, s === k);
   playBtn.innerHTML = s === "playing" || s === "loading" ? PAUSE : PLAY;
   playBtn.disabled = !cur;
   statusEl.textContent =
     note ??
     {
-      idle: tr("Familiar 电台", "Familiar Radio"),
+      idle: tr("电台", "Radio"),
       loading: tr("连接中…", "Connecting…"),
-      playing: tr("正在播放", "Now playing"),
+      playing: tr("正在播", "Now playing"),
       paused: tr("已暂停", "Paused"),
       error: tr("连不上这个台，换一个试试", "Can't reach this station, try another"),
     }[s];
   share();
+  showLine();
   renderList();
+  renderRecent();
+}
+
+/** "刚才" / "3 小时前" / "昨天" / "5 天前" */
+function ago(ts: number): string {
+  const m = (Date.now() - ts) / 60_000;
+  if (m < 60) return tr("刚才", "just now");
+  if (m < 24 * 60) return tr(`${Math.floor(m / 60)} 小时前`, `${Math.floor(m / 60)}h ago`);
+  const d = Math.floor(m / (24 * 60));
+  return d === 1 ? tr("昨天", "yesterday") : tr(`${d} 天前`, `${d} days ago`);
+}
+
+/** Under the player: the last few stations that were on, one click to go back to one. */
+function renderRecent() {
+  const box = $("recent");
+  const past = Object.values(heard)
+    .filter((h) => h.s.stationuuid !== cur?.stationuuid)
+    .sort((a, b) => b.last - a.last)
+    .slice(0, 5);
+  box.replaceChildren(Object.assign(document.createElement("h3"), { textContent: tr("最近听过", "Recently on") }));
+  if (!past.length) {
+    box.append(Object.assign(document.createElement("p"), { className: "none", textContent: tr("换过的台会排在这里，点一下就回去。", "Stations you switch away from line up here. One click takes you back.") }));
+    return;
+  }
+  for (const h of past) {
+    const b = document.createElement("button");
+    b.type = "button";
+    const tx = document.createElement("span");
+    tx.className = "tx";
+    tx.append(
+      Object.assign(document.createElement("b"), { textContent: h.s.name }),
+      Object.assign(document.createElement("small"), { textContent: [countryName(h.s.countrycode, h.s.country), tagLine(h.s)].filter(Boolean).join(" · ") }),
+    );
+    b.append(Object.assign(document.createElement("span"), { className: "dot" }), tx, Object.assign(document.createElement("span"), { className: "when", textContent: ago(h.last) }));
+    b.onclick = () => void play(h.s);
+    box.append(b);
+  }
 }
 
 /** For the tray panel (same origin, reads it on open). */
@@ -191,21 +277,15 @@ setInterval(() => {
 
 function showCurrent() {
   if (!cur) return;
-  player.style.setProperty("--h", String(hue(cur.name)));
   nameEl.textContent = cur.name;
   const bits = [countryName(cur.countrycode, cur.country), tagLine(cur), cur.bitrate ? `${cur.codec || ""} ${cur.bitrate}k`.trim() : ""].filter(Boolean);
   metaEl.textContent = bits.join(" · ");
-  logoEl.className = "logo";
-  logoEl.innerHTML = "";
-  icon(cur, logoEl);
-  logoEl.classList.remove(...["tn-0", "tn-1", "tn-2", "tn-3", "tn-4"]);
   favBtn.classList.toggle("on", favs.some((f) => f.stationuuid === cur!.stationuuid));
-  favBtn.textContent = favBtn.classList.contains("on") ? "♥" : "♡";
   if ("mediaSession" in navigator) {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: cur.name,
       artist: countryName(cur.countrycode, cur.country),
-      album: "Familiar Radio",
+      album: "Rill Radio",
       artwork: cur.favicon && /^https:/.test(cur.favicon) ? [{ src: cur.favicon }] : [],
     });
   }
@@ -257,11 +337,13 @@ function failed() {
 }
 
 audio.addEventListener("playing", () => {
-  setState("playing");
   if (cur && announced !== cur.stationuuid) {
     announced = cur.stationuuid;
-    void tellPet(cur.name);
-  }
+    noteHeard(cur);
+    setState("playing");
+    rigPet?.react("perk");
+    void tellPet(cur.name, petLine());
+  } else setState("playing");
 });
 audio.addEventListener("waiting", () => state === "playing" && setState("loading", tr("缓冲中…", "Buffering…")));
 audio.addEventListener("pause", () => state !== "error" && state !== "loading" && setState("paused"));
@@ -290,15 +372,18 @@ async function roam() {
   }
 }
 
-/** One pet mentions the new station in a bubble. */
-async function tellPet(name: string) {
+/** The pet on the desktop says the same thing it says here. */
+async function tellPet(name: string, text: string) {
   if (!inTauri) return;
+  // Post to petd so the station registers as a bond moment for letters.
+  if (conn) void postJson(conn, "/v1/stat", { kind: "radio", what: name, n: 0 }).catch(() => {});
   try {
     const { getAllWebviewWindows } = await import("@tauri-apps/api/webviewWindow");
     const { emitTo } = await import("@tauri-apps/api/event");
     const pets = (await getAllWebviewWindows()).map((w) => w.label).filter((l) => l.startsWith("pet-")).sort();
     const target = pets.find((l) => l === "pet-claude-code") ?? pets[0];
-    if (target) await emitTo(target, "say", { text: tr(`📻 正在听：${name}`, `📻 Listening to ${name}`), action: null });
+    if (!target) return;
+    await emitTo(target, "say", { text, action: null });
   } catch {
     /* no pets */
   }
@@ -306,95 +391,42 @@ async function tellPet(name: string) {
 
 // ---------------------------------------------------------------- list
 
-let tab: Tab = load<Tab>("radio.tab", "hot");
+let tab: Tab = asTab(load<string>("radio.tab", "often")) ?? "often";
+/** Shown under your regulars (or instead of them, while there are none). */
+let popular: Station[] = [];
 let country: Country | null = null;
 let query = "";
 let rows: Station[] = [];
 let loading = false;
 let error = "";
 
-const EQ = "<i></i><i></i><i></i><i></i>";
+const HEART = '<svg class="heart" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.3-7-9.5A4 4 0 0 1 12 8a4 4 0 0 1 7 2.5C19 15.7 12 20 12 20z"/></svg>';
 const isOn = (s: Station) => cur?.stationuuid === s.stationuuid && state === "playing";
 
-function stationRow(s: Station, i = 0): HTMLButtonElement {
+function stationRow(s: Station): HTMLButtonElement {
   const b = document.createElement("button");
-  b.className = "st" + (cur?.stationuuid === s.stationuuid ? " cur" : "");
-  b.style.animationDelay = `${Math.min(i, 12) * 28}ms`;
-  const ic = document.createElement("span");
-  ic.className = "ic";
-  icon(s, ic);
+  b.type = "button";
+  b.className = "st" + (cur?.stationuuid === s.stationuuid ? " cur" : "") + (isOn(s) ? " on" : "");
+  const eq = document.createElement("span");
+  eq.className = "eq";
+  eq.innerHTML = "<i></i><i></i><i></i>";
   const tx = document.createElement("span");
   tx.className = "tx";
-  const nm = document.createElement("b");
-  if (isOn(s)) {
-    const eq = document.createElement("span");
-    eq.className = "eq";
-    eq.innerHTML = EQ;
-    nm.appendChild(eq);
-  }
-  const name = document.createElement("span");
-  name.className = "nm";
-  name.textContent = s.name.trim();
-  nm.appendChild(name);
-  const sm = document.createElement("small");
-  const cc = document.createElement("span");
-  cc.className = "cc";
-  cc.textContent = s.countrycode || "··";
-  sm.append(cc, [countryName(s.countrycode, s.country), tagLine(s)].filter(Boolean).join(" · "));
-  tx.append(nm, sm);
-  b.append(ic, tx);
-  if (favs.some((f) => f.stationuuid === s.stationuuid)) {
-    const h = document.createElement("span");
-    h.className = "heart";
-    h.textContent = "♥";
-    b.appendChild(h);
-  }
-  const go = document.createElement("span");
-  go.className = "go";
-  go.innerHTML = '<svg viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>';
-  b.appendChild(go);
-  b.onclick = () => (isOn(s) ? undefined : void play(s));
-  return b;
-}
-
-/** A big tile for the top of the popular rack. */
-function featured(s: Station, rank: number): HTMLButtonElement {
-  const b = document.createElement("button");
-  b.className = "ft" + (cur?.stationuuid === s.stationuuid ? " cur" : "");
-  b.style.setProperty("--h", String(hue(s.name)));
-  b.style.animationDelay = `${rank * 60}ms`;
-  const ic = document.createElement("span");
-  ic.className = "ic";
-  icon(s, ic);
-  const rk = document.createElement("span");
-  rk.className = "rank";
-  rk.textContent = String(rank + 1).padStart(2, "0");
   const nm = document.createElement("b");
   nm.textContent = s.name.trim();
   const sm = document.createElement("small");
   sm.textContent = [countryName(s.countrycode, s.country), tagLine(s)].filter(Boolean).join(" · ");
-  b.append(ic, rk, nm, sm);
+  tx.append(nm, sm);
+  b.append(eq, tx);
+  if (favs.some((f) => f.stationuuid === s.stationuuid)) b.insertAdjacentHTML("beforeend", HEART);
   b.onclick = () => (isOn(s) ? undefined : void play(s));
   return b;
-}
-
-/** Slide the pill under the active tab. */
-function moveInd() {
-  const on = document.querySelector<HTMLButtonElement>("#tabs button.on");
-  const ind = document.querySelector<HTMLElement>("#tabs .ind");
-  if (!ind) return;
-  if (!on) {
-    ind.style.width = "0";
-    return;
-  }
-  ind.style.left = `${on.offsetLeft}px`;
-  ind.style.width = `${on.offsetWidth}px`;
 }
 
 function sub(text: string, cls = "", back?: () => void): HTMLElement {
   const d = document.createElement("div");
   d.className = `sub ${cls}`;
-  d.textContent = text;
+  d.append(Object.assign(document.createElement("span"), { textContent: text }));
   if (back) {
     const b = document.createElement("button");
     b.textContent = tr("‹ 返回", "‹ Back");
@@ -415,7 +447,6 @@ function renderList() {
   const keep = list.scrollTop;
   list.replaceChildren();
   document.querySelectorAll<HTMLButtonElement>("#tabs button").forEach((b) => b.classList.toggle("on", !query && b.dataset.tab === tab));
-  moveInd();
   if (loading) return void list.appendChild(empty(tr("加载中…", "Loading…")));
   if (error) return void list.appendChild(empty(error));
   if (query) list.appendChild(sub(tr(`搜索“${query}”`, `Search “${query}”`), "", () => { q.value = ""; query = ""; void refresh(); }));
@@ -427,15 +458,13 @@ function renderList() {
     for (const c of cs) {
       const b = document.createElement("button");
       b.className = "country";
-      const cc = document.createElement("span");
-      cc.className = "cc";
-      cc.textContent = c.iso_3166_1;
       const nm = document.createElement("span");
       nm.className = "nm";
       nm.textContent = countryName(c.iso_3166_1, c.name);
       const n = document.createElement("small");
       n.textContent = String(c.stationcount);
-      b.append(cc, nm, n);
+      b.type = "button";
+      b.append(nm, n);
       b.onclick = () => { country = c; void refresh(); };
       grid.appendChild(b);
     }
@@ -444,69 +473,46 @@ function renderList() {
     return;
   } else if (tab === "world" && country) list.appendChild(sub(countryName(country.iso_3166_1, country.name), "y", () => { country = null; void refresh(); }));
   else if (tab === "xs") list.appendChild(sub(tr("相声 · 评书 · 曲艺", "Chinese crosstalk (相声) and comedy")));
-  else if (tab === "hot") list.appendChild(sub(tr("今日推荐", "Featured today")));
-  else if (tab === "fav") list.appendChild(sub(tr("我的收藏", "My favorites")));
-  if (!rows.length) {
-    list.appendChild(empty(tab === "fav" && !query ? tr("还没有收藏。播放时点 ♡ 收藏电台。", "No favorites yet. Tap ♡ while a station plays.") : tr("没找到电台", "No stations found")));
+  else if (tab === "up") list.appendChild(sub(tr("快一点的：舞曲、放克、热歌", "Quicker: dance, funk, hits")));
+  else if (tab === "calm") list.appendChild(sub(tr("慢一点的：氛围、古典、钢琴", "Slower: ambient, classical, piano")));
+  if (tab === "often" && !query) {
+    // Your own first; what everyone has on fills the rest of the shelf.
+    if (rows.length) {
+      list.appendChild(sub(tr("收藏的和常开的", "Favourites and regulars")));
+      rows.forEach((s) => list.appendChild(stationRow(s)));
+    } else list.appendChild(empty(tr("还没有常听的。播放时点 ♡ 收藏，听过几次的也会留在这里。", "No regulars yet. Tap ♡ while a station plays; ones you return to stay here too.")));
+    if (popular.length) {
+      list.appendChild(sub(tr("大家在听的", "What others have on")));
+      popular.filter((s) => !rows.some((r) => r.stationuuid === s.stationuuid)).forEach((s) => list.appendChild(stationRow(s)));
+    }
+    list.scrollTop = keep;
     return;
   }
-  let rest = rows;
-  if (tab === "hot" && !query && rows.length >= 6) {
-    // The top few as big tiles, the rest as rows.
-    const feat = document.createElement("div");
-    feat.className = "feat";
-    rows.slice(0, 5).forEach((s, i) => feat.appendChild(featured(s, i)));
-    list.appendChild(feat);
-    list.appendChild(sub(tr("更多热门", "More popular")));
-    rest = rows.slice(5);
+  if (!rows.length) {
+    list.appendChild(empty(tr("没找到电台", "No stations found")));
+    return;
   }
-  rest.forEach((s, i) => list.appendChild(stationRow(s, i)));
+  rows.forEach((s) => list.appendChild(stationRow(s)));
   list.scrollTop = keep;
-}
-
-// ---------------------------------------------------------------- spectrum
-
-/** Bars behind the station name that move to the music (shaped, not measured:
- *  most streams forbid reading their audio, so this is a lively impression). */
-function vizLoop() {
-  const cv = document.getElementById("viz") as HTMLCanvasElement | null;
-  if (!cv) return;
-  const dpr = devicePixelRatio || 1;
-  const W = cv.clientWidth, H = cv.clientHeight;
-  if (W && cv.width !== Math.round(W * dpr)) {
-    cv.width = Math.round(W * dpr);
-    cv.height = Math.round(H * dpr);
-  }
-  const g = cv.getContext("2d")!;
-  g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  g.clearRect(0, 0, W, H);
-  const t = performance.now() / 1000;
-  const n = 36, gap = 3, bw = (W - gap * (n + 1)) / n;
-  const live = state === "playing" ? 1 : state === "loading" ? 0.35 : 0.12;
-  for (let i = 0; i < n; i++) {
-    const k = i / (n - 1);
-    const env = 0.35 + 0.65 * Math.exp(-((k - 0.42) ** 2) / 0.09); // louder in the middle
-    const wave = 0.5 + 0.5 * Math.sin(t * 2.1 + i * 0.55) * Math.sin(t * 0.7 + i * 0.21) + 0.25 * Math.sin(t * 5.3 + i * 1.7);
-    const h = Math.max(3, (6 + wave * env * (H - 16) * live));
-    const x = gap + i * (bw + gap);
-    const grad = g.createLinearGradient(0, H - h, 0, H);
-    grad.addColorStop(0, "rgba(255,255,255,0.95)");
-    grad.addColorStop(1, "rgba(255,255,255,0.05)");
-    g.fillStyle = grad;
-    g.beginPath();
-    g.roundRect(x, H - h, bw, h, bw / 2);
-    g.fill();
-  }
-  requestAnimationFrame(vizLoop);
 }
 
 let seq = 0;
 async function refresh() {
   const my = ++seq;
   error = "";
-  if (tab === "fav" && !query) {
-    rows = favs;
+  if (tab === "often" && !query) {
+    rows = regulars();
     loading = false;
+    renderList();
+    // The popular shelf arrives when the directory answers; your own are already up.
+    try {
+      const r = await hot();
+      if (my !== seq) return;
+      popular = r;
+    } catch {
+      if (my !== seq) return;
+      if (!rows.length) error = tr("连不上电台目录，检查一下网络再试。", "Can't reach the station directory. Check your connection and try again.");
+    }
     return renderList();
   }
   loading = true;
@@ -514,7 +520,8 @@ async function refresh() {
   try {
     let r: Station[] = [];
     if (query) r = dedupe(await stations(`search?name=${encodeURIComponent(query)}`, 80));
-    else if (tab === "hot") r = await hot();
+    else if (tab === "up") r = await upbeat();
+    else if (tab === "calm") r = await quiet();
     else if (tab === "xs") r = await crosstalk();
     else if (tab === "world") {
       countries ??= (await api<Country[]>("/json/countries")).sort((a, b) => b.stationcount - a.stationcount);
@@ -540,12 +547,13 @@ async function main() {
   } catch {
     /* standalone preview */
   }
-  const wanted = new URLSearchParams(location.search).get("tab");
-  if (wanted === "hot" || wanted === "xs" || wanted === "world" || wanted === "fav") {
+  const wanted = asTab(new URLSearchParams(location.search).get("tab"));
+  if (wanted) {
     tab = wanted;
     save("radio.tab", tab);
   }
-  document.title = tr("电台 · Familiar", "Radio · Familiar");
+  await seat(new URLSearchParams(location.search).get("pet"));
+  document.title = tr("电台 · 睿洱", "Radio · Rill");
   if (cur) showCurrent();
   setState("idle", cur ? tr("上次听的", "Last played") : undefined);
 
@@ -558,7 +566,7 @@ async function main() {
     else favs.unshift(slim(cur));
     save("radio.favs", favs);
     showCurrent();
-    if (tab === "fav") void refresh();
+    if (tab === "often") void refresh();
     else renderList();
   };
   const paintVol = () => vol.style.setProperty("--v", `${vol.value}%`);
@@ -568,11 +576,9 @@ async function main() {
     save("radio.vol", Number(vol.value));
     paintVol();
   };
-  requestAnimationFrame(vizLoop);
-  window.addEventListener("resize", moveInd);
   document.querySelectorAll<HTMLButtonElement>("#tabs button").forEach((b) => {
     b.onclick = () => {
-      tab = b.dataset.tab as Tab;
+      tab = asTab(b.dataset.tab) ?? "often";
       save("radio.tab", tab);
       q.value = "";
       query = "";
@@ -599,25 +605,37 @@ async function main() {
     navigator.mediaSession.setActionHandler("pause", () => state === "playing" && toggle());
     navigator.mediaSession.setActionHandler("stop", () => state === "playing" && toggle());
   }
-  if (inTauri) {
-    const { getCurrentWebviewWindow } = await import("@tauri-apps/api/webviewWindow");
-    const w = getCurrentWebviewWindow();
-    // Closing hides the window; the station keeps playing.
-    await w.onCloseRequested(async (e) => {
-      e.preventDefault();
-      await w.hide();
-    });
-    await w.listen("radio-toggle", () => toggle());
-    await w.listen<Tab>("radio-select", (e) => {
-      tab = e.payload;
-      save("radio.tab", tab);
-      q.value = "";
-      query = "";
-      country = null;
-      void refresh();
-    });
-  }
+  // The agent it listens with got another pet: that one takes the seat. The station keeps playing.
+  if (conn) followSkin(conn, () => listener, () => void seat(listener));
+  // The station plays for as long as its tab is there: the window around it only hides when closed.
+  await onHost("radio-toggle", () => toggle());
+  // Opened again from another pet: that one comes to listen. The station keeps playing.
+  await onHost<string | null>("for-pet", (pet) => void seat(pet));
+  await onHost<string>("radio-select", (shelf) => {
+    tab = asTab(shelf) ?? tab;
+    save("radio.tab", tab);
+    q.value = "";
+    query = "";
+    country = null;
+    void refresh();
+  });
+  // A pet asked "put something on?" and you said yes: that shelf, and something on it, now.
+  await onHost<string>("radio-play", (shelf) => void playFrom(shelf));
+  const asked = new URLSearchParams(location.search).get("play");
+  if (asked) return void playFrom(asked);
   await refresh();
+}
+
+/** Open `shelf` and play from it: a station you have played before if one is on it, else the first. */
+async function playFrom(shelf: string) {
+  tab = asTab(shelf) ?? "often";
+  save("radio.tab", tab);
+  q.value = "";
+  query = "";
+  country = null;
+  await refresh();
+  const known = rows.find((s) => heard[s.stationuuid]) ?? (tab === "often" ? (rows[0] ?? popular[0]) : rows[0]);
+  if (known && !isOn(known)) await play(known);
 }
 
 void main();

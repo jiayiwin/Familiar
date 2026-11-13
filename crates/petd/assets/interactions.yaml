@@ -1,11 +1,12 @@
-# 互动规则（设计稿 §7.6）。世界层每 500 ms 评估一次。
-# 自己的规则放进 ~/.familiar/interactions/*.yaml；同 id 覆盖内置规则，enabled: false 可关掉。
+# 互动规则。世界层每 500 ms 评估一次。内置的一条都没有：宠物之间的事都在 think.rs 里演出来
+# （做完的给忙着的分一颗糖、一起做完碰一下、闲下来说两句、替对方叫你）。这里留给你自己加。
+# 自己的规则放进 ~/.rillbuddy/interactions/*.yaml；同 id 覆盖内置规则，enabled: false 可关掉。
 #
 # 字段：
-#   on            触发：turn_done（对方 / 自己完成一轮）| state（进入某状态）| slow（对方一口气干了太久）
+#   on            触发：turn_done（对方 / 自己完成一轮）| state（进入某状态）
 #   from          事件来自哪边：other（对方阵营，默认）| self
 #   result        on: turn_done 时的结果：ok | error | aborted
-#   min_turn_s    on: turn_done 时本轮至少多长；on: slow 时连续干活多久算慢
+#   min_turn_s    on: turn_done 时本轮至少多长
 #   state         on: state 时进入的状态：attention | stone | error | done …
 #   actor_state   做动作的宠物当前必须处于的状态之一
 #   chance        概率 0–1
@@ -19,85 +20,6 @@
 #   during_attention  true：允许在有会话等你时触发（只有提醒类规则可以）
 #
 # 全局限制：每只宠物每小时最多 6 次主动互动；有会话等你时其余互动全部冻结。
+#
 
-rules:
-  - id: taunt
-    on: turn_done
-    from: other
-    result: error
-    actor_state: [idle, done, sleeping]
-    chance: 0.3
-    cooldown: 10m
-    action: taunt
-    ms: 3000
-    bubble:
-      claude-code: ["看见了。", "红了一片。", "我这儿是好的。"]
-      codex: ["看见了。", "红了一片。", "我这儿是好的。"]
-    bubble_en:
-      claude-code: ["Saw that.", "That's a lot of red.", "Works on my machine."]
-      codex: ["Saw that.", "That's a lot of red.", "Works on my machine."]
-
-  - id: comfort
-    on: state
-    from: other
-    state: stone
-    chance: 1
-    cooldown: 10m
-    action: comfort
-    ms: 3500
-    bubble:
-      claude-code: ["我陪你。", "石头也会化的。", "我坐这儿，不走。"]
-      codex: ["我陪你。", "石头也会化的。", "我坐这儿，不走。"]
-    bubble_en:
-      claude-code: ["I'm here.", "Stone melts too.", "I'll sit right here."]
-      codex: ["I'm here.", "Stone melts too.", "I'll sit right here."]
-
-  - id: applaud
-    on: turn_done
-    from: other
-    result: ok
-    min_turn_s: 300
-    chance: 0.5
-    cooldown: 10m
-    action: cheer
-    working_action: sulk
-    ms: 2500
-    bubble:
-      claude-code: ["五分钟没出错。我数着的。", "嗯。那一段很稳。"]
-      codex: ["五分钟没出错。我数着的。", "嗯。那一段很稳。"]
-    bubble_en:
-      claude-code: ["Five minutes, no errors. I counted.", "Mm. That stretch was steady."]
-      codex: ["Five minutes, no errors. I counted.", "Mm. That stretch was steady."]
-
-  # 小皮鞭：对方一口气干了八分钟还没收尾，闲着的这只走过去抽一鞭。
-  # 气泡是执鞭那只的话；挨打那只的回话和鞭响在 whip.rs 里。
-  - id: whip
-    on: slow
-    from: other
-    min_turn_s: 480
-    actor_state: [idle, done, sleeping]
-    chance: 1
-    cooldown: 30m
-    action: throw
-    move: to_target
-    ms: 2600
-    bubble: ["太久了。动一动。", "我在旁边看了很久。", "快一点。我等得脚麻了。", "这一下不疼。下一下疼。"]
-    bubble_en: ["Too long. Move.", "I've been watching a while.", "Faster. My feet have gone numb waiting.", "This one doesn't hurt. The next one does."]
-
-  - id: urge
-    on: state
-    from: other
-    state: attention
-    actor_state: [idle, done, sleeping]
-    chance: 1
-    cooldown: 2m
-    action: wave
-    move: to_target
-    during_attention: true
-    ms: 2500
-    bubble:
-      claude-code: ["那边停了。", "它在看你。"]
-      codex: ["那边停了。", "它在看你。"]
-    bubble_en:
-      claude-code: ["That one's stopped.", "It's looking at you."]
-      codex: ["That one's stopped.", "It's looking at you."]
+rules: []

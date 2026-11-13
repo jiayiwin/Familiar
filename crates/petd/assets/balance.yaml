@@ -1,15 +1,9 @@
-# Familiar 玩法数值（设计稿 §7、§8 的首版草案）。
-# 复制到 ~/.familiar/balance.yaml 修改即可覆盖，只需写要改的键。
-
-economy:
-  daily_cap: 300            # 每日金币收入上限，超出部分不发放
+# 睿洱世界层的数值。
+# 复制到 ~/.rillbuddy/balance.yaml 修改即可覆盖，只需写要改的键。
 
 fishing:
-  start_after_s: 5          # 会话干活多久后宠物开始钓鱼
-  min_turn_s: 5             # 短于这个时长的回合不出鱼
-  coins: { common: 1, rare: 3, epic: 8, legendary: 20 }
-  clean_bonus: 1.5          # 本轮无工具失败时金币 ×1.5
-  hourly_soft_cap: 10       # 同一小时内从第 10 条鱼起金币减半
+  start_after_s: 5          # 会话干活多久后开始算这一轮（做完能得一颗糖）
+  min_turn_s: 5             # 短于这个时长的回合不给糖
   # 按本轮时长（分钟）抽稀有度：普通 / 稀有 / 史诗 / 传说（百分比）
   odds:
     - { under_min: 1,  p: [90, 10, 0, 0] }
@@ -23,17 +17,10 @@ bugs:
   max: 20                   # 屏幕上最多 20 只
   ttl_min: 10               # 超过 10 分钟没拍的虫钻进地缝消失
   boss_hp: 10               # Boss 要点 10 下
-  coins_per: 5              # 每拍死 5 只普通虫……
-  coins: 1                  # ……得 1 金币
-  boss_coins: 5
-
-tug:
-  scoring: efficiency       # efficiency（默认，与会话数无关）| workload
-  min_turns: 3              # 完成轮数少于 3 时效率分按 0 计
 
 quips:
   enabled: true
-  min_s: 90                 # 干活时每 90–180 秒随机吐槽一句
+  min_s: 90                 # 干活时每 90–180 秒随机吐槽一句（features.chatter: lively 的节奏；normal 间隔 ×2.5，quiet 不说）
   max_s: 180
   no_repeat_min: 30         # 同一句 30 分钟内不重复
   # 变量：{file} 最近操作的文件，{n} 本会话改这个文件的次数，{tool} 最近用的工具，{project} 项目名。
@@ -43,8 +30,8 @@ quips:
     - "{file} 今天被翻了好多遍"
     - "在 {tool} 了，它是不是迷路了"
     - "{project} 这个项目好像很难"
-    - "我在钓鱼，别告诉老板"
-    - "代码在跑，鱼在游"
+    - "它在跑。我在数糖纸。"
+    - "这一轮做完，罐里该多一颗了。"
     - "这行你盯了很久了。"
     - "今天的键盘声很整齐。"
     - "它又卡住了，转圈那种。"
@@ -54,14 +41,14 @@ quips:
     - "{file} is getting a real workout today"
     - "Still on {tool}... is it lost?"
     - "{project} looks like a tough one"
-    - "I'm fishing. Don't tell the boss"
-    - "Code's running, fish are swimming"
+    - "It's running. I'm counting wrappers."
+    - "When this turn is done, there should be one more in the jar."
     - "You've been staring at that line a while."
     - "The keyboard sounds even today."
     - "It's stuck again. The spinning kind."
 
 interactions:
-  per_pet_hour: 6           # 每只宠物每小时最多 6 次主动互动
+  per_pet_hour: 6           # 每只宠物每小时最多 6 次主动互动（lively；normal 取一半，quiet 为 1）
   tick_ms: 500
 
 work:

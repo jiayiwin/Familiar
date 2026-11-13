@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>扫桌面 · 预览</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #e9ecf2; }
+      canvas { display: block; }
+      #pet { position: absolute; left: 0; top: 0; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <!-- A pretend desktop, for seeing the sweep without touching a real one. Not part of the app. -->
+    <canvas id="desk"></canvas>
+    <script type="module" src="/src/sweep-preview.ts"></script>
+  </body>
+</html>

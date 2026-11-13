@@ -3,7 +3,7 @@
 use std::path::Path;
 
 /// Executable names that count as "the agent process".
-const AGENT_EXES: &[&str] = &["claude", "codex", "node", "bun"];
+const AGENT_EXES: &[&str] = &["claude", "codex", "node", "bun", "gemini", "cursor", "cursor-agent", "opencode"];
 
 fn is_agent_exe(name: &str) -> bool {
     let n = name.to_ascii_lowercase();

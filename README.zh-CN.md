@@ -1,109 +1,165 @@
-# Familiar
+# 睿洱 RillBuddy
 
 [English](README.md)
 
-Familiar 是一个纯本地运行的桌宠系统：把 Claude Code 和 Codex 的真实工作状态显示成桌面宠物。每个会话对应一只宠物——agent 思考时它在想，调工具时它在敲，需要你批准时它第一时间挥手提醒，完成时庆祝，出错时垂头丧气。干活的间隙还有一层轻量的玩法：钓鱼、拍虫子、Claude Code 宠物和 Codex 宠物之间的拔河和小游戏，再加上宠物图鉴、每日报告和自制宠物包。所有东西都在你本机运行：不用注册账号，没有服务器，不收集任何数据（只有电台在你收听时联网）。
+睿洱（RillBuddy，简称 Rill）在你的桌面上养宠物，让它们替你看着写代码的 agent：紫梦陪 Claude Code，麻薯陪 Codex，泡泡、菇菇、茸茸陪实验性支持的 Gemini CLI、Cursor、OpenCode。agent 在想、在动手、停下来等你、做完、出错，它都看在眼里，脸上和头顶的一句话会告诉你。它也看着你：坐久了、熬夜了、agent 连着卡住了，它会自己做点什么——跳一段舞、用自己的乐器奏一段、带你做一组提肛。没有 agent 在跑的时候，桌面上留一只紫梦。
 
-目前只支持 Windows 10/11。技术栈：Rust、Tauri 2、TypeScript/Canvas。
+纯本地运行，只支持 Windows 10/11。技术栈：Rust、Tauri 2、TypeScript/Canvas。
 
-<!-- screenshot：桌面上的两只阵营宠物，其中一只在挥手提醒 -->
+![小屋：所有页面都开在同一个窗口里，各占一个标签。紫梦坐在垫子上，右边是你在桌前多久、agent 干了多久，和它今天注意到的事](docs/images/room.zh.png)
 
 ## 目录
 
-- [功能](#功能)
+- [它做什么](#它做什么)
 - [快速开始](#快速开始)
 - [使用](#使用)
-- [玩法与互动](#玩法与互动)
 - [配置](#配置)
-- [自制宠物包](#自制宠物包)
 - [从源码构建](#从源码构建)
 - [目录结构](#目录结构)
 - [隐私与安全](#隐私与安全)
 - [常见问题](#常见问题)
-- [路线图](#路线图)
-- [许可证](#许可证)
+- [许可证与素材](#许可证与素材)
 
-## 功能
+## 它做什么
 
-### 状态一眼可见
+### 替你看着 agent
 
-- **真实的会话状态**，直接来自 agent 自己的 hook：思考、读文件、调工具、等你、完成、出错、被打断、睡着。
-- **每个阵营一只主宠物，每个会话一个小分身**（默认的 `per-camp` 模式）。等你处理的分身排在最靠近主宠物的位置，头上冒感叹号，脚下显示项目名。其他路由模式：`single`、`per-rule`、`per-session`。
-- **阵营标签**：阵营宠物脚下有橙色"Claude"、青色"Codex"小标签。两个阵营用同一个包时，Codex 那只会色相旋转 180°。
-- **悬停 1 秒**显示会话卡片：项目、agent、状态、已运行时长和最近的工具。
-- **双击宠物**把对应会话的终端或 IDE 调到前台（双击主宠物跳到最需要你处理的会话）。
-- **僵尸会话检测**：每 5 秒检查一次 agent 进程，关掉终端后分身几秒内就会消失。
-- **Codex 额度**（Codex 的宠物上）：5 小时 / 每周额度用了多少、多久后重置，用到 90% 时提醒。
+- **每个 agent 一只**，各不相同：Claude Code 是紫梦，Codex 是麻薯，Gemini CLI 是泡泡，Cursor 是菇菇，OpenCode 是茸茸（在图鉴里可以换）。脚下的标签写着是谁、在看哪个项目（`Claude · my-project`）；同一个 agent 开了几个会话，角上会有个数字。agent 的最后一个会话关掉，它的宠物就回家；一个 agent 都没开时，桌面上只有紫梦。
+- **状态看脸**：干活时它看着，做完跳一下，出错皱眉，没活时犯困，睡着了就是睡着了。
+- **等你的时候最显眼**：agent 停下来等你回话或批准，它马上抬头，头顶是一条珊瑚色的「等你呢。」，并响两个钢琴音。整个应用里只有这件事用这个颜色。
+- **悬停 1 秒**看会话卡片：项目、状态、已经跑了多久、最近在用的工具。**双击**把那个会话的终端或 IDE 调到前台。卡片放在宠物上方，上面放不下就放到旁边，不会盖住宠物。
+- **手上的事**：右键「陪我一下 → 记一件事」，在它头顶的气泡里写一行，回车记下；选中一段字按 `Ctrl+Alt+N`，就从那段字开始写。有事在手上时它身上别着一张纸条（不显示数字）。悬停卡片里会话下面列着这些事，点圆圈勾掉，它把那张纸揉成团吃掉；再点一次放回手上。写「等 Claude 做完…」的那件，等 Claude 这轮停下来、你又在电脑前时，由 Claude 的宠物提一句，点「好」到它的窗口去。agent 收工时说的「下一步：…」那一行会自己落成一张纸条（每个 agent 最多同时留 4 张），它回复里的其他内容不读。前一天没做完的，第二天早上和夜里整理的那句话一起说。
+- **在宠物上批准权限**（可选，默认关）：Claude Code 要权限时，宠物上方弹出一张卡片，点「允许」或「拒绝」，不用切回终端。见[在宠物上批准权限](#在宠物上批准权限)。
+- **额度**：右键菜单的「更多」里能看 Codex 的 5 小时 / 每周额度，Claude Code 的接上状态栏后也能看。用到 90% 时它会说一声。
 
-### 玩法
+### 也看着你
 
-- agent 干活时钓鱼、工具失败时拍虫子、两个阵营拔河、和历史最佳那天影子赛跑。
-- 双人小游戏：羽毛球、乒乓球、掰手腕、猜拳、投球。
-- 金币、12 种鱼的鱼类图鉴、20 个成就、只卖外观的商店、周赛季、赛跑下注和擂台。
-- 下班时间弹出每日报告，可以复制成图片。
+它只看一件关于你的事：距离上一次碰键盘或鼠标过了多久（不看你按了什么、屏幕上是什么）。由此它认得出几种情况，每种只回应一个动作，并且先说出它看到了什么：
 
-### 自定义
+| 它看到 | 它做 |
+|---|---|
+| 你连续坐了 90 分钟（下午 1–4 点是 60 分钟） | 跳一段舞，或者转过身带你做一组提肛，两样轮着来 |
+| 夜里 11 点以后你还坐着 | 用自己的乐器奏一段 |
+| 半小时里 agent 卡住了 3 次 | 那个 agent 的宠物奏一段 |
+| 一个 agent 等了你 3 分钟，而你就在桌前 | 另一只走过去告诉你 |
+| 一件跑了 15 分钟以上的活做完了 | 跳一段舞 |
+| 你离开 20 分钟以上再回来，期间有活做完或卡住 | 告诉你发生了什么 |
+| agent 一件活跑了 8 分钟以上，你停下手在等它 | 问要不要听电台；点「好」，从常听的电台里放一个 |
+| 夜里 10 点以后你坐了半小时 | 问你要不要放点安静的；点「好」就从「安静的」里放 |
+| agent 一个月以前的旧会话超过 1 GB（一周最多一次） | 问要不要整理储物间；点「好」，打开储物间 |
+| 切到桌面时，有几个图标不在列里（一天最多一次） | 问要不要清扫桌面；点「好」，它骑扫帚过去，把图标扫回列中，再回到原处。完成后的气泡上有「放回原处」，可以撤销 |
 
-- 在图鉴里按阵营或按项目选宠物；收藏、每日轮换、三档大小。
-- **用任意一张图片做宠物**：图鉴里选图或拖图、起名字、预览 16 个动作、点安装，背景自动去掉，不用装任何工具（[教程](docs/make-a-pet.zh-CN.md)）。
-- 把文件夹或 zip 拖进图鉴、或拖到任意一只宠物身上即可安装宠物包；改了文件自动热加载。
-- 自己做宠物包：一个 `pet.json` 加每个动作一张帧条，最少只要一张 `idle`。
-- 中英文界面（`language: auto | zh | en`）。
+清扫桌面只改变图标的位置，不移动、不改动文件。已在列中的图标保持不动，不在列中的依次放进后面的空位；大部分图标都不在列中时，按类型整体重排（系统图标和快捷方式保持原有顺序，文件按名称）。桌面图标已隐藏、或开启了「自动排列图标」时，不会清扫。
 
-### 隐私与办公室保护
+带「好」「不用」的是它在问，不会自己放出声音；电台已经在放、或者开着「安静一会儿」时它不问，问过一次几个小时内不再问。
 
-- 只在 `127.0.0.1` 上用 token 通信，不上传任何东西。唯一联网的是电台，而且只在你用它的时候。
-- 老板键（`Ctrl+Alt+H`）一键全部隐藏；前台全屏、开会共享屏幕时自动隐身。
-- 专注模式只保留状态显示和等你的提醒。
+两次之间至少隔 10 分钟。专注模式下、把「话多话少」调成安静时，它什么都不主动做。点它一下就停。
+
+声音是真乐器的采样，每只有自己的乐器和自己的演法：紫梦用两只耳朵弹一排浮着的琴键；麻薯用尾巴当弓拉大提琴；泡泡横着吹一支长笛，每个音从笛尾冒出一个泡泡；菇菇用两根琴槌敲一架小木琴，敲到哪块哪块亮，菌盖上的斑点跟着亮；茸茸用靠琴那侧的耳朵拨立在身边的一架小竖琴，被拨的弦会抖，音符从琴上飘出来。舞各有九个舞步，包括转过身摇尾巴。
+
+### 几只在一起
+
+两个以上的 agent 同时开着，桌面上就有几只，这些时刻它们一起过：
+
+- **第一天**：一只奏琴时，离它最近的那只走过去，其余的在原地听。小屋的日记里会记一句新来的那只来了。
+- **从它们一起待过的第二天起**：一只奏琴，一只走过去，在场的都用自己的乐器合进来——五只的谱子是同一首曲子的五个声部，两只是二重奏，五只到齐是五重奏；跳舞也一起跳。
+- **替对方叫你**：一个 agent 停下来等你超过 3 分钟，它自己的宠物已经在抬头看你了，另一只会走过去说一声。每次等待只说一次。
+- **分一颗糖**：从第二天起，一个 agent 做完一件几分钟的活，另一个还在跑长活（或者刚卡住），做完的那只会走过去，从糖罐里拿一颗递给它。罐里真的少一颗，飞进嘴里的就是那一种；罐里最后一颗总留给你。40 分钟最多一次。
+- **一起做完，碰一下**：两个 agent 前后一分半钟内做完，后做完的那只走过去，两只一起跳一下、碰一碰。
+- **闲下来说两句**：大家都没活、安静了十来分钟，一只会走到另一只旁边，各说一句，各有各的说法：光、外面的声音、糖罐、跑调的琴、挂在屏幕边上的事。不出声的气泡，一个半小时最多一次；说了什么记在小屋的日记里。
+- 走过去的那只，曲终自己走回原位。等你回话的那只不参加，睡着的那只不叫醒。
+- **拖着主宠走**：按住紫梦（陪 Claude Code 的那只）拖动，其余的保持各自的位置跟着一起走，松手一起落地；拖别的宠物只动它自己。
+
+右键菜单里手动点「弹首曲子」（按乐器是拉、吹、敲、拨）「跳支舞」，也是同一套规矩。
+
+### 每只都是一整套皮肤
+
+宠物不只是换个形象。从哪只打开的窗口，就穿哪只的皮肤：小屋、右键菜单、信纸、电台、批准卡片的颜色，信封上的印记，等你时的那两个音（用它自己的乐器），以及它说话的口吻——紫梦话少，只说看到的；麻薯黏人，会说自己当时待在哪儿。不属于任何一只的窗口（托盘、图鉴、日报）跟着陪 Claude Code 的那只。在图鉴里可以换谁陪哪个 agent。换了谁陪哪个 agent，已经打开的页面会跟着换肤。
+
+### 小屋、信和其他
+
+这些页面都开在**同一个窗口**里，各占一个标签：点一个功能就多一个标签，标签可以关掉。窗口的边框是自己画的，颜色跟着当前标签那只宠物的皮肤。关窗口只是把它收起来，标签还在，电台也接着放；关掉电台的标签才停。右下角可以拖着放大，双击标签栏空白处铺满屏幕。
+
+- **小屋**：它坐着的地方。左边是它和它正在说的话，右边是今天：你在桌前多久、中间起身几次，agent 干了多久、跑了几轮、卡住几次，以及「它今天注意到的」——它每次主动做事都会记一条。小屋里可以和它玩：它的眼睛和头跟着你的指针；点它是戳一下，连戳几下它会把自己转晕；按住它左右拖，能把它转过去看背面；在它头上来回摸，它会眯起眼；「逗它」拿它自己的小挂件吊在指针上，整间小屋都是它的地方：它在地上跑着追，挂件到了头顶就蹲一下跳起来够，在空中咬住了就不松口，你可以拎着它晃，过一会儿它才松口落地；举得太高它跳不到，会告诉你（每只跳的高度不一样，麻薯最高，泡泡最矮）；「转一圈」让它原地转一圈；「接糖」是这里唯一的小游戏：30 秒里，图鉴里的各种糖从小屋上方飘下来，它跟着你的指针跑，点一下跳，落进嘴里的就吃掉。一轮接住 20 颗，罐里多一颗（一天最多两颗）。
+- **喂它糖果**：它们吃糖果和果子，都是挣来的，存在糖罐里。来的是哪一种看时候：agent 每做完一轮得一颗（失败只有一张空糖纸）；早上、午后、夜里各有只在那时才有的，四季各有一种；没有 agent 的时候靠你自己——跟着它把一组提肛做完得一颗话梅，坐了半小时以上起身歇一会儿再回来得一片薄荷叶，这样挣的每天最多 6 颗。罐空了，喂它的按钮会告诉你怎么挣。喂它，它会回你一句话；喂得多了，它会给你写信。信里不提数字。
+- **图鉴**：五只宠物和各自的乐器，谁陪哪个 agent 在这里换；遇到过的糖果（22 种，没遇到的会提示什么时候才有）、它记得的事（跨天的日记）、设置。
+- **日报**：一张卡片，可以复制成图片。下班时间（默认 18:00）当天有活就自己弹出来；平时点小屋里「agent 的一天」那张卡打开。
+- **电台**：全世界的电台，按常听的、提神的、安静的、相声、世界分。它陪你听，会说它知道的事（「这个台，第一次听。」）。
+- **储物间**（在设置的「语言与接入」里）：你的 agent 在这台机器上都堆了什么。一是磁盘上的会话记录：Codex 一条都不删（天天用的机器上很容易到几个 GB），Claude Code 一个月后会自己清。超过 30 天的可以一键装进睿洱文件夹里的一个箱子（先检查箱子再移走原文件，最近 30 天的不碰），随时一键放回，日期不变。二是每开一个会话、你还没开口它就先读进去的：家目录和项目各级文件夹里的 CLAUDE.md / AGENTS.md、记忆索引、启动钩子塞进来的文字、列给它的技能、它要连的 MCP 服务器，各自大约多少 token，最近一个月从没用过的会标出来。没用过的技能可以在这里收进储物间（也能放回）；其余的给出改法和命令。全部在本机清点，不上传、不花 token。旧会话超过 1 GB 时，宠物一周最多提一次。
+- **虫子**：agent 的工具失败时，屏幕底边会掉下虫子。宠物会自己沿着屏幕底边跑过去扑掉，你也可以抢先点。连着失败三次会来一只大的，把那只宠物压住动不了；这时其他在场的宠物会跑过来，站在大虫另一边一下下帮忙拍（在另一块屏幕上的会走过来，拍完再走回去），你点也算，拍掉它就能动了。
+
+![图鉴：五只宠物，各陪一个 agent](docs/images/gallery.zh.png)
+
+### 不打扰
+
+- 老板键（`Ctrl+Alt+H`）一键全部隐藏并静音；前台全屏、开会共享屏幕时自动隐身。
+- 「安静一会儿」（专注模式，`Ctrl+Alt+F`）只留状态和「等你」的提醒。
+- 只在 `127.0.0.1` 上用 token 通信。会联网的只有三件事，见[隐私与安全](#隐私与安全)：电台、下载本地语言模型、以及设了 `ANTHROPIC_API_KEY` 时的写信。
 
 ## 快速开始
 
 ### 1. 安装
 
-1. 从 Releases 页面下载 `Familiar_<版本>_x64-setup.exe`，或者[自己构建](#从源码构建)。
+1. 从 Releases 页面下载 `RillBuddy_<版本>_x64-setup.exe`，或者[自己构建](#从源码构建)。
 2. 运行安装包。装到当前用户目录，不需要管理员权限。安装包还没有代码签名，SmartScreen 可能会拦一下，见[常见问题](#常见问题)。
-3. 装好后 Familiar 会自己启动，并默认开机自启（托盘 → 开机自启 可以关掉）。
-4. 首次启动分两步给 Claude Code 和 Codex 各选一只宠物，可以跳过。
+3. 装好后睿洱会自己启动，并默认开机自启（设置 →「这台电脑上」→ 开机自启 可以关掉）。
+4. 首次启动，紫梦把 agent 的几种状态演一遍给你看，同一页上就有「接入」按钮。想再看一遍：`/pet tour`。
 
 ### 2. 接入 Claude Code
 
-托盘 → 接入 → **接入 Claude Code…**
+托盘 →「设置…」→「语言与接入」→ 接入 agent → **Claude Code…**
 
-它会替你运行 `claude plugin marketplace add` 和 `claude plugin install familiar@familiar`（需要已经装了 Claude Code 命令行版）。装完重开 Claude Code。
+它会替你运行 `claude plugin marketplace add` 和 `claude plugin install rillbuddy@rillbuddy`（需要已经装了 Claude Code 命令行版）。装完重开 Claude Code。
 
 手动操作的话，在普通终端里执行：
 
 ```
-claude plugin marketplace add /path/to/familiar
-claude plugin install familiar@familiar
+claude plugin marketplace add /path/to/rillbuddy
+claude plugin install rillbuddy@rillbuddy
 ```
 
-用安装包安装时，marketplace 在 `familiar.exe` 旁边的 `plugin` 文件夹里。Windows 上路径也要用正斜杠（`C:/path/to/familiar`）；在 Claude Code 交互界面里执行 `/plugin marketplace add` 时，反斜杠路径会没有响应。
+用安装包安装时，marketplace 在 `rillbuddy.exe` 旁边的 `plugin` 文件夹里。Windows 上路径也要用正斜杠（`C:/path/to/rillbuddy`）；在 Claude Code 交互界面里执行 `/plugin marketplace add` 时，反斜杠路径会没有响应。
 
 ### 3. 接入 Codex
 
-托盘 → 接入 → **接入 Codex…**
+托盘 →「设置…」→「语言与接入」→ 接入 agent → **Codex…**
 
-它会在 Codex 的 `hooks.json` 里追加 Familiar 的 hook，原有的 hook 保留，写入前先备份。
+它会在 Codex 的 `hooks.json` 里追加睿洱的 hook，原有的 hook 保留，写入前先备份。
 
-**最后还有一步必须手动做：**在终端运行 `codex`，输入 `/hooks`，把 Familiar 的 hook 标记为信任。Codex 只运行信任过的 hook。ChatGPT / Codex 桌面应用里没有 `/hooks` 命令，但两者共用同一个配置目录，在命令行里信任过就行。
+**最后还有一步必须手动做：**在终端运行 `codex`，输入 `/hooks`，把睿洱的 hook 标记为信任。Codex 只运行信任过的 hook。ChatGPT / Codex 桌面应用里没有 `/hooks` 命令，但两者共用同一个配置目录，在命令行里信任过就行。
 
-两个"接入"都会先弹窗说明要改什么，点"接入"才执行。
+两个「接入」都会先弹窗说明要改什么，点「接入」才执行。
 
 手动操作：
 
 ```
-familiar-emit --install codex
+rillbuddy-emit --install codex
 ```
 
 - 写到 `$CODEX_HOME/hooks.json`，没设 `CODEX_HOME` 时写到 `~/.codex/hooks.json`。也可以用 `--codex-home <目录>` 指定。
-- 你原有的 hook 原样保留，Familiar 的 hook 追加在每个事件的最后。
-- 写入前备份为 `hooks.json.familiar-bak`。
-- emitter 会复制到 `~/.familiar/bin/`，以后挪动仓库不影响。
+- 你原有的 hook 原样保留，睿洱的 hook 追加在每个事件的最后。
+- 写入前备份为 `hooks.json.rillbuddy-bak`。
+- emitter 会复制到 `~/.rillbuddy/bin/`，以后挪动仓库不影响。
 - 不确定 Codex 用的是哪个配置目录时（比如设了 `CODEX_HOME`，同时也在用 `~/.codex`），两个都装：再执行一次，加上 `--codex-home %USERPROFILE%\.codex`。
-- 卸载：`familiar-emit --uninstall codex`
+- 卸载：`rillbuddy-emit --uninstall codex`
 
-完成。在任意一个 agent 里开个会话，对应的宠物就动起来了。
+### 4. 其他 agent（实验性）
+
+Gemini CLI、Cursor、OpenCode 也可以各有一只。在图鉴的「设置」页 → 其他 agent 里点对应的按钮，或者手动：
+
+```
+rillbuddy-emit --install gemini      # 在 ~/.gemini/settings.json 里追加 hook
+rillbuddy-emit --install cursor      # 在 ~/.cursor/hooks.json 里追加 hook
+rillbuddy-emit --install opencode    # 写一个插件到 ~/.config/opencode/plugins/rillbuddy.js
+```
+
+把 `--install` 换成 `--uninstall` 即可移除；配置目录不在默认位置时加 `--config-dir <目录>`。原有的 hook 都保留，写入前先备份。
+
+- Cursor 没有「正在等用户批准」这个 hook 事件，所以它那只不会叫你。
+- **这三个适配是按各家的官方文档写的，还没有在真实的 Gemini CLI、Cursor、OpenCode 上验证过。**字段对不上时，把 [`adapters/`](adapters/) 里对应的 `mapping.yaml` 复制到 `~/.rillbuddy/adapters/<名字>.yaml` 修改即可生效，不用重新编译；也欢迎提 issue。
+- Cursor 默认还会运行 Claude Code 的 hook；睿洱认得出这种情况，不会把 Cursor 的会话算到 Claude Code 那只头上，Cursor 要单独接入。
+
+完成。在任意一个 agent 里开个会话，对应的那只就动起来了。
 
 ## 使用
 
@@ -111,34 +167,32 @@ familiar-emit --install codex
 
 | 操作 | 效果 |
 |---|---|
-| 单击 | 捏一下，随机三种音效 |
-| 在头上来回摸 3 次 | 撸毛：冒爱心，心情值 +1，每分钟最多 +3 |
-| 5 秒内单击超过 12 次 | 生气跳开，说"够了！"，之后 60 秒内再点只会委屈 |
-| 按住拖动 | 移动宠物；松手后按最后 80 ms 的速度甩出去，会反弹，撞墙太狠会晕 |
-| 双击 | 把会话所在的终端或 IDE 调到前台 |
+| 单击 | 捏一下。它在表演时，单击是「够了」 |
+| 在头上来回摸 3 次 | 它高兴一下 |
+| 5 秒内单击超过 12 次 | 它说「够了。」跳开，一分钟内不理你 |
+| 按住拖动 | 移动；松手时带着速度甩出去，会反弹，撞得太狠会晕。甩得够快、撞上屏幕的左右边或顶边，它会挂在那儿：靠在侧边慢慢往下滑，或者吊在顶边晃。过一阵累了、被你点一下、被喂了糖变重、或者它的 agent 在等你，它就滑下来，落地后自己走回被拿起来之前的位置 |
+| 双击 | 把会话所在的终端或 IDE 调到前台（先去等你的那个） |
 | 悬停 1 秒 | 会话卡片 |
-| 右键 | 圆形菜单 |
-| 把一只宠物拖到另一只身上 | 投球 |
-| 把宠物包文件夹或 zip 拖到宠物身上 | 安装宠物包 |
+| 右键 | 菜单 |
 
-宠物会落在屏幕底边或普通窗口的标题栏上，脚下的窗口被移走或关掉时会掉下来。两只宠物不会重叠，叠在一起时会自动弹开。宠物身体以外的透明区域点击穿透，不挡鼠标。
+宠物会落在屏幕底边或普通窗口的标题栏上，脚下的窗口被移走或关掉时会掉下来。身体以外的透明区域点击穿透，不挡鼠标。
 
-### 右键圆形菜单
+### 右键菜单
 
-右键宠物，周围弹出一圈圆形按钮：**游戏**、**投喂**、**换装**、**设置**、**图鉴**、**报告**、**隐藏**；Codex 的宠物多一个**重置卡**。贴着屏幕边或底边时自动改成半圈或四分之一圈。有子项的按钮点开后在旁边弹出卡片（游戏、猜拳、擂台、下注、大小、路由模式、专注模式、语言、编辑配置……）。点空白处、按 Esc 或切到别的窗口就收起。`/pet menu` 也能打开。
+右键宠物，旁边弹出一张卡片。顶上是它的名字、它替哪个 agent 看着、在看哪个项目、今天 agent 一共干了多久。下面：
 
-<!-- screenshot：宠物周围的圆形菜单 -->
+- **陪我一下**：跳支舞 · 弹首曲子（麻薯是「拉首曲子」）· 放电台 · 做一组提肛 · 记一件事
+- **喂它**：后面写着罐里还有几颗
+- **有一封信**：有信的时候才出现
+- **小屋**
+- **安静一会儿**：专注模式的开关
+- **更多**：多喂几颗 · 用量或重置卡 · 隐藏。（图鉴、日报这些页面都在它的小屋里，开关在托盘里。）
 
-### 托盘菜单
+### 托盘面板
 
-左键或右键点托盘图标，打开托盘面板。顶部显示版本号和金币余额，下面是：
+点托盘图标。上面是在场的宠物和各自的状态；三个开关：**安静一会儿**、**它自己会做事**、**声音**；大小三档；**打开小屋**、**都藏起来**（老板键）、退出。下面只有一行**设置…**，其余的都在设置里（话多话少、提肛、语言、接入 agent、储物间、开机自启、本地语言模型、数据文件夹）。托盘和右键菜单不再给新功能单独开位置：新功能要么自己发生、由宠物在合适的时候提起，要么放进已有的页面。
 
-- **快捷开关：** 显示宠物 · 全部隐藏（老板键）· 专注模式
-- **玩：** 宠物图鉴 · 今日报告 · 商店 · 春节倒计时 · 健康提醒 · 电台 · 说相声
-- **设置：** 路由模式 · 语言 · 开机自启 · 接入（Claude Code / Codex）
-- **底栏：** 编辑配置 · 数据目录 · 退出
-
-切换开关时面板不会关闭；点面板外面或按 Esc 关闭。有宠物包校验失败时，图鉴那一项会显示出错的包数。面板跟随系统的浅色 / 深色主题。
+切换开关时面板不会关闭；点面板外面或按 Esc 关闭。
 
 ### `/pet` 命令（Claude Code）
 
@@ -146,148 +200,82 @@ familiar-emit --install codex
 |---|---|
 | `/pet show`、`/pet hide` | 显示、隐藏宠物 |
 | `/pet stats` | 查看各会话状态 |
-| `/pet switch [包名]` | 切换当前阵营的宠物 |
-| `/pet mode [模式]` | 切换路由模式 |
 | `/pet focus [on/off]` | 专注模式 |
-| `/pet wallet` | 金币余额和今日收入 |
-| `/pet report` | 打开今日报告 |
 | `/pet size s/m/l` | 宠物大小 |
-| `/pet spring` | 打开春节倒计时和抢红包小游戏 |
-| `/pet radio` | 打开电台 |
-| `/pet xiangsheng [段子]` | 两只宠物说一段相声 |
-| `/pet kegel [时间… / off]` | 马上跟宠物做一组提肛；带时间则设为每天提醒，如 `/pet kegel 10:30 15:30` |
 | `/pet lang auto/zh/en` | 界面语言 |
-| `/pet next` | 在收藏里换下一只 |
-| `/pet tug` | 马上来一局拔河 |
-| `/pet duel` | 发起擂台 |
-| `/pet badminton`、`/pet pingpong`、`/pet armwrestle` | 来一局羽毛球 / 乒乓球 / 掰手腕 |
-| `/pet menu [宠物]` | 打开右键圆形菜单 |
-| `/pet fling [宠物] [vx] [vy]` | 把宠物甩出去（调试物理用） |
+| `/pet kegel` | 马上跟它做一组提肛 |
+| `/pet radio` | 打开电台 |
+| `/pet moment [share\|bump\|chat\|tidy\|stow]` | 马上演一个宠物之间的小场面（分糖、碰一下、说两句），要两只都在；`tidy` 让一只宠物询问是否清扫桌面；`stow` 让它询问是否边扫边把很久没碰的文件收进「桌面收纳」 |
+| `/pet report` | 打开今日报告 |
+| `/pet menu` | 打开右键菜单 |
+| `/pet tour` | 它把 agent 的几种状态演一遍 |
 
 Codex 没有对应的命令，用托盘、右键菜单或图鉴操作。
+
+### 设置
+
+图鉴 →「设置」页（托盘 →「设置…」）：大小、话多话少、安静一会儿、声音、提肛每次几下、界面语言、在宠物上批准权限、接入各个 agent、接上 Claude Code 用量。改了立刻生效，写进 `config.yaml`。
+
+### 在宠物上批准权限
+
+默认关闭。在设置里打开之后：
+
+- Claude Code 每次要权限，宠物上方弹出一张卡片：工具名、它自己写的一句说明、要运行的命令（或要改的文件、要访问的地址），三个按钮：**允许**、**拒绝**、**回终端决定**。只管这一次，不会改你的权限规则。
+- 卡片不抢焦点，你手上的窗口不会被打断。多个请求会排队，卡片右上角显示还有几个。
+- **代价**：打开以后，终端里自己的确认框要等这张卡片。你不点的话，等到设定的时间（15 / 30 / 60 秒，默认 30）才回到终端里照常问你；想马上回终端，点「回终端决定」。
+- 全屏、共享屏幕、按了老板键时不弹卡片，直接回终端问。
+- 要显示的命令内容会交给本机的睿洱（平时不转发这些），只用来显示这张卡片，不保存。
+- 只支持 Claude Code。Codex 的 hook 没有办法把答案带回去。
+- 关着的时候和以前完全一样：hook 立刻返回，不等任何东西。
 
 ### 快捷键
 
 | 默认 | 作用 |
 |---|---|
-| `Ctrl+Alt+H` | 老板键：所有宠物和覆盖层立即隐藏并静音；再按一次，宠物从下面探头回来 |
-| `Ctrl+Alt+F` | 专注模式：只保留状态显示和等你的提醒，关闭玩法、互动、吐槽和其他音效 |
-| `Ctrl+Alt+P` | 在收藏里切换当前阵营的宠物（当前阵营 = 最近有事件的那一边） |
+| `Ctrl+Alt+H` | 老板键：所有宠物和覆盖层立即隐藏并静音；再按一次，它从下面探头回来 |
+| `Ctrl+Alt+F` | 安静一会儿（专注模式）：只留状态和等你的提醒 |
+| `Ctrl+Alt+N` | 记一件事；先选中一段字，就从那段字开始写（通过系统的辅助功能接口读选区，不碰剪贴板，密码框不读） |
 
 在 `config.yaml` 的 `hotkeys` 里修改，重启后生效。
 
 ### 自动隐身
 
 - **全屏**：前台窗口全屏时（看视频、放幻灯片）自动隐藏，退出全屏 3 秒后恢复。
-- **共享屏幕**：检测到腾讯会议、飞书、钉钉、Zoom、Teams 等的"正在共享"工具条窗口时自动隐藏。识别不了你用的会议软件时，在 `config.yaml` 的 `meeting.share_windows` 里加工具条窗口标题或类名的关键词。
-
-### 宠物图鉴
-
-托盘 → **宠物图鉴…**（或右键菜单）：
-
-- 预览所有包，按标签筛选，收藏。
-- 给 Claude Code、Codex 或某个项目选宠物；切换路由模式。
-- 分页查看鱼类图鉴、钱包与战绩、成就、商店。
-- 导入宠物包（文件夹、zip 或直接拖进来）。校验失败的包会列出原因。
-
-切换宠物有个小动画：挥手 → 一团烟 → 新宠物原地出现。处于等你（attention）状态时立即替换，不耽误提醒。
-
-## 玩法与互动
-
-所有玩法都不会干扰状态显示。**只要有会话在等你，所有互动都冻结**（只有跑过去催你的那条例外），虫子也暂停不能拍。每只宠物每小时最多 6 次主动互动。
-
-**钓鱼**：会话干活 5 秒后宠物开始钓鱼。每轮结束收竿，按本轮时长抽鱼：时长越长，越容易钓到稀有、史诗、传说。出错的回合钓到破靴子，被打断的回合鱼跑了。金币：普通 1、稀有 3、史诗 8、传说 20；本轮没有工具失败时 ×1.5。同一小时第 10 条鱼起金币减半，几轮同时结束会合并成一次收竿。短于 5 秒的回合不出鱼。一共 12 种鱼。
-
-**抓 Bug**：每次工具失败，宠物身上掉一只虫；回合出错，掉 3 只。虫子沿屏幕底边爬，单击拍扁，每拍死 5 只得 1 金币。同一轮连续 3 次失败会掉出 Boss：2 倍大，要点 10 下，同时宠物石化；打死 Boss 得 5 金币，石化解除。屏幕上最多 20 只，10 分钟没拍的虫会钻进地缝。
-
-**拔河**（两个阵营都在线时）：由两只主宠物本体来演——Codex 的宠物走到 Claude Code 宠物旁边，两只后仰拉绳约 5 秒，领先的说"我领先！"，落后的被往绳子那边拽，结束后走回原位。效率分 = 一次通过率 − 出错率，与开几个会话无关；每边完成 3 轮以上才有分。两边刚同时在线时先来一局，之后比分有变化、或者距离上一局超过 20 分钟就会再演，冷却 10 分钟。右键"来一局拔河"或 `/pet tug` 随时开，不受冷却限制。按会话模式出了两只同阵营宠物时，它俩也会拔河（同门内卷）。`features.arena: false` 可以关掉。
-
-**影子赛跑**（只有一个阵营在线时）：今天的完成轮数超过历史最佳那天同一时刻时，宠物欢呼。
-
-**双人小游戏**：两只宠物都闲了 2 分钟以上时偶尔自己玩羽毛球、乒乓球、掰手腕（冷却 20 分钟）；右键 → 游戏 或 `/pet badminton|pingpong|armwrestle` 随时开。猜拳：两只都闲了 3 分钟以上会自己玩三局两胜，也可以右键"猜拳"和宠物对战，赢了 +2 金币。投球：把一只宠物拖到另一只身上，两只来回扔 5 次球，球在空中时点它就截下来，+1 金币，冷却 2 分钟。
-
-**小皮鞭**：输了就得挨抽。羽毛球 / 乒乓球 / 掰手腕 / 擂台 / 赛跑结束后，赢家走到输家旁边抽一鞭；猜拳输给你的宠物也一样。对方一口气干了 8 分钟还没收尾，闲着的那只会过去抽它（`interactions.yaml` 里的 `whip` 规则，`min_turn_s` 调时长，`enabled: false` 关掉）。右键 → 🪢 小皮鞭 可以亲手抽，宠物按当前状态回话。另一只会在自己窗口里看着并有反应：看不惯对方或者自己戴着皇冠就嘲两句，交情好就替它求情，否则只盼下一个别是自己。你亲手抽的，或者因为太慢挨的鞭子，也会传到 agent 本人：它下一次 Claude Code hook 里会带上一句话，说它挨了鞭子，让它先用一句话汇报进度，然后少说多做（闲着的则是简短汇报一下做到哪了）。Codex 没有能带话的 hook 通道，它的宠物只挨打不传话。鞭响、挨打、球拍、哨声、输赢这些音效都是代码合成的，没有版权问题。
-
-**下注与擂台**：两边 2 分钟内先后开始新一轮就开跑，20 秒内可以右键下注 10 / 50 / 100 金币（单注不超过余额的一半）。先完成且成功的一方赢，出错或被打断直接判负。赔率 = 0.9 ÷ 最近 20 场的胜率，限制在 1.2–5.0；不足 5 场时都是 1.8。只有一边在线时有庄家局，押这一轮"不到 1 分钟 / 1–5 分钟 / 超过 5 分钟 / 会出错 / 要你确认"。**擂台**（右键或 `/pet duel`）：两边各挑一个会话，各自的下一轮里先一次通过的赢，胜方 +15 金币；完成时间相差不到 5 秒算平局。
-
-**吐槽与日常**：干活时每 90–180 秒随机吐槽一句（比如"又改 main.rs 了，第 5 次"），同一句 30 分钟内不重复。内置互动规则：对方出错时嘲讽、对方石化时安慰、对方完成长任务时鼓掌、对方等你时空闲的宠物跑过去挥手催你。还有打脸、抢活、偷吃、23 点后提醒早点休息、下班前 30 分钟收拾书包、周五 17 点后跳舞、对手好几天没来时问"它今天没来上班？"等。
-
-**金币、商店与养成**：
-- 金币全局计算，余额由流水求和得出。每日收入上限 300，花钱不算收入。
-- 20 个成就（一次通过、十连胜、传说猎人、Bug 克星、夜猫子……），解锁奖励 10–100 金币。
-- 商店只卖外观，全身 7 个部位按宠物分别穿戴：11 顶帽子、5 件脸上的（眼镜、墨镜、眼罩、腮红、单片镜）、5 件脖子上的（围巾、领结、领带、铃铛项圈、珍珠）、5 件背后的（披风、天使 / 蝙蝠翅膀、书包、喷气背包）、4 双鞋袜、6 件手里的（气球、棒棒糖、咖啡、小旗、魔杖、小伞）、6 种光效（星光、爱心、小雨云、萤火虫、火焰、彩虹），外加 2 种拔河绳、2 个吐槽台词包。每件都按每一帧的头、脖子、脚自动贴合，自制宠物同样适用；图鉴 → 商店里有试衣间，实时看穿好的样子。
-- 周赛季：每周一结算上周拔河效率分，冠军阵营的宠物戴一周皇冠，输家戴"输"字纸帽。
-- 投喂（右键）：消耗鱼篓里最新的一条鱼，心情 +3。
-- 好感度（两只宠物之间，0–100）：投喂、猜拳、拔河、安慰都会加。20 解锁拔河后击掌，50 解锁并排睡，80 解锁每日报告上的合照。
-- 进化：每个宠物包累计完成 100 / 500 / 2000 轮升到 1 / 2 / 3 阶，身后出现蓝 / 紫 / 金色光环（宠物包可以自定义阈值和每一阶的图）。
-
-**Codex 重置卡**（只在 Codex 的宠物上）：右键 → 重置卡，查看 5 小时 / 每周额度各用了多少、多久后重置。"使用重置卡…"会打开一个运行 `codex` 的终端，在里面输入 `/usage` 选择使用（桌面版在 设置 → 用量）。用卡是你账号上的操作，Familiar 不会替你点。检测到额度在到期前突然清空（也就是用了重置卡）时，宠物头上飞来一张金色重置卡，然后欢呼"满血复活"。
-
-**健康提醒**（默认关闭）：`features.water: true` 每 60 分钟空闲时提醒喝水；`features.breathe: true` 时，10 分钟内被叫去确认超过 6 次，宠物带你做 30 秒 4-7-8 呼吸，点一下宠物跳过。
-
-**春节倒计时**：右键宠物 → 游戏 → 春节倒计时（或 `/pet spring`），显示距离春节还有几天几时几分几秒，背景音乐放刘德华的《恭喜发财》：歌曲有版权，安装包里不带，把你自己的音频文件放进 `~/.familiar/music/`（页面上点「音乐文件夹」直接打开），文件名带「恭喜发财」就自动播放；也可以点「选歌…」选一首。同名的 `.lrc` 歌词文件放在旁边，页面上会跟着歌显示歌词。没放歌时播放内置的原创锣鼓小调。下面是 30 秒抢红包：点红包和金元宝得分，别碰爆竹。每天前 3 局按得分发金币，每局最多 15。除夕晚上和大年初一，宠物会给你拜年。
-
-**电台**：托盘 →「电台」（或右键宠物 → 游戏 → 电台，或 `/pet radio`），收听全世界的直播电台：国内热门、「相声」页（德云社相声合集、北京文艺广播等真正的相声、评书台，还有国外的喜剧台）、按国家浏览、搜索和收藏。点「漫游」随机去世界上某个地方的电台。关掉窗口电台继续播放，键盘媒体键和 Windows 音量面板也能控制。电台目录来自免费的社区目录 [Radio Browser](https://www.radio-browser.info/)，声音直接来自各电台。
-
-**说相声**：两只宠物都空闲一阵子后，有时会走到一起、摆上小桌子说一段相声：大气泡一句一句说，用电脑自带的 Windows 语音配音（逗哏男声、捧哏女声），开场拍醒木，抖响包袱时台下哈哈大笑、鼓掌叫好，最后一起鞠躬。不想要声音，在 `config.yaml` 里设 `features.sounds: false`。随时也能点：右键宠物 → 游戏 → 说相声、托盘 →「说相声」，或 `/pet xiangsheng`。内置 8 段中文、5 段英文段子（都是原创，《报菜名》贯口和《八百标兵》绕口令是传统段落）。想让它们演你手上的本子：把文本文件放进 `~/.familiar/xiangsheng/`（右键 → 游戏 → 说相声 →「放自己的本子…」直接打开这个文件夹）。第一行可以写《标题》，后面每句以 `甲：` 或 `乙：` 开头（甲是逗哏、乙是捧哏；也认 `逗哏：`/`捧哏：`、`A:`/`B:`）。括号里的舞台提示会跳过，带“笑”字的（比如“（观众笑）”）会变成台下的笑声。UTF-8 和 GBK 编码都行。放进去的本子会按名字出现在菜单里；长本子只在你点名时才演。也支持 [`crates/petd/assets/xiangsheng.yaml`](crates/petd/assets/xiangsheng.yaml) 的 YAML 格式。这些文件只在你自己电脑上。
-
-**提肛提醒**：图鉴 →「提醒」页（或右键宠物 → 健康 → 提醒设置）里添加每天的时间，到点宠物会转过身、屁股对着你带你做一组：收紧时夹紧上提、尾巴竖起，放松时松开摇尾巴，头顶显示「收紧 ⬆ / 放松 ⬇」和倒计时，还有提示音；页面里附有动作要领。右键 → 健康 → 提肛一组，或 `/pet kegel`，可以随时做一组。
-
-**每日报告**：下班时间（默认 18:00）自动弹出：今日值班的宠物（每个阵营是哪只在岗、干了几轮多久）、agent 工作时长、完成轮数、一次通过、钓到的鱼、拍死的虫、金币，以及挨的鞭子（谁挨了几下）、玩的游戏（哪几种各几局）、听电台的时长（电台窗口和相声都算）、提肛组数、收到的信、当天最多同时在线的 agent 数，最后是拔河结果和鱼篓。可以复制成图片，托盘和右键菜单里也能随时打开。
-
-每轮的明细保留 90 天，更早的汇总成每日数据。
+- **共享屏幕**：检测到腾讯会议、飞书、钉钉、Zoom、Teams 等的「正在共享」工具条窗口时自动隐藏。识别不了你用的会议软件时，在 `config.yaml` 的 `meeting.share_windows` 里加工具条窗口标题或类名的关键词。
 
 ## 配置
 
-运行时数据在 `~/.familiar/`，可以用环境变量 `FAMILIAR_HOME` 改到别处。托盘 → **编辑配置…** 打开 `config.yaml`，保存后自动生效。
+运行时数据在 `~/.rillbuddy/`，可以用环境变量 `RILLBUDDY_HOME` 改到别处。设置 →「语言与接入」→ **编辑配置…** 打开 `config.yaml`，保存后自动生效。
 
 ```yaml
 language: auto           # 界面语言：auto（跟随系统）| zh | en
-mode: per-camp           # per-camp | single | per-rule | per-session
-max_minis: 4             # per-camp 下每只主宠物最多几个分身
-max_pets: 4              # per-session 下最多几只宠物
 
-selection:
-  claude-code: pixel-cat
-  codex: pixel-bot
-  projects: { f1-*: pixel-bot }   # 按项目覆盖；键可以是文件夹名、完整路径或通配符
-  favorites: [pixel-cat, pixel-bot]
-  rotation: off          # off | daily-random（每天随机一只收藏）| weekday（按星期轮换收藏）
-
-# per-rule 模式下每条规则一只宠物
-# pets:
-#   - { id: work, pack: pixel-cat, match: { project: "C:/work/*" } }
-#   - { id: bots, pack: pixel-bot, match: { source: codex } }
+companions:              # 谁陪哪个 agent（图鉴里也能换）：zimeng | mashu | paopao | gugu | rongrong
+  claude-code: zimeng
+  codex: mashu
+  gemini: paopao
+  cursor: gugu
+  opencode: rongrong
 
 features:
-  focus_mode: false
-  sounds: true
-  arena: true            # 拔河小剧场
+  focus_mode: false      # 安静一会儿
+  sounds: true           # 琴声和提示音
   size: m                # s | m | l（0.75 / 1 / 1.35 倍）
-  water: false           # 每小时提醒喝水
-  breathe: false         # 被频繁叫去确认时一起深呼吸
-  kegel: []              # 每天提肛提醒的时间，如 ["10:30", "15:30"]
-  kegel_reps: 10         # 每次几组（收紧 3 秒、放松 3 秒）
+  kegel_reps: 10         # 一组提肛做几下（收紧 3 秒、放松 3 秒）
+  chatter: normal        # 它自己说话、做事的多少：quiet | normal | lively
+  approve: false         # 在宠物上方的卡片里允许 / 拒绝 Claude Code 的权限请求
+  approve_wait_s: 30     # 卡片等你多久（秒），之后回到终端里问
 
 # meeting:
-#   share_windows: ["正在共享"]   # 识别会议软件"正在共享"工具条的额外关键词
+#   share_windows: ["正在共享"]   # 识别会议软件「正在共享」工具条的额外关键词
 
 hotkeys:
   boss_key: Ctrl+Alt+H
   focus_toggle: Ctrl+Alt+F
-  cycle_pet: Ctrl+Alt+P
+  note: Ctrl+Alt+N
 ```
 
-路由模式：
-
-| 模式 | 宠物 |
-|---|---|
-| `per-camp`（默认） | 每个阵营（Claude Code / Codex）一只主宠物，每个会话一个小分身 |
-| `single` | 只有一只宠物 |
-| `per-rule` | `pets:` 里每条规则一只宠物（按 `source` 和/或 `project` 匹配） |
-| `per-session` | 每个会话一只宠物（最多 `max_pets` 只） |
-
-图鉴、右键菜单和 `/pet switch` 会改写这个文件：你自己加的配置项会保留，**注释不会保留**（YAML 库的限制）。写入前会先校验，不合法的修改不会落盘。
+设置页和 `/pet` 命令会改写这个文件：你自己加的配置项会保留，**注释不会保留**（YAML 库的限制）。写入前会先校验，不合法的修改不会落盘。旧版本留下的配置项（路由模式、宠物包等）会被忽略，不会报错。
 
 ### 数据目录
 
@@ -295,125 +283,15 @@ hotkeys:
 |---|---|
 | `config.yaml` | 配置 |
 | `token`、`port` | 本地接口的凭据和端口 |
-| `spool/` | Familiar 没运行时暂存的事件 |
-| `pets/` | 自己安装的宠物包 |
+| `spool/` | 睿洱没运行时暂存的事件 |
 | `windows.json` | 宠物位置（显示器拔掉后回到主屏右下角） |
-| `familiar.db` | 回合记录、钱包流水、鱼篓、拍虫记录、心情值、互动日志（SQLite） |
-| `balance.yaml`、`fish.yaml` | 可选：覆盖内置的数值和鱼种，只写要改的键（比如 `work: { off_time: "19:00" }` 改下班时间） |
+| `rillbuddy.db` | 回合记录、糖罐、拍虫记录、日记、关系（SQLite） |
+| `balance.yaml`、`treats.yaml` | 可选：覆盖内置的数值和糖果的种类（名字、样子、什么时候出现），只写要改的键 |
 | `interactions/*.yaml` | 可选：自己的互动规则；同 id 覆盖内置规则，`enabled: false` 可关闭 |
 | `bin/` | 安装到 Codex 的 emitter |
 | `logs/petd.log` | 日志 |
 
-内置默认值在 [`crates/petd/assets/`](crates/petd/assets/)（`balance.yaml`、`fish.yaml`、`interactions.yaml`），可用字段写在文件注释里。
-
-## 自制宠物包
-
-宠物包就是一个文件夹：
-
-```
-my-dog/
-  pet.json
-  sprites/idle.png  sprites/tool.png  …     每个动作一张横排帧条 PNG（透明背景）
-  sounds/attention.wav  …                    可选，wav / mp3 / ogg
-```
-
-### pet.json
-
-```json
-{
-  "id": "my-dog",
-  "name": "我的小狗",
-  "name_en": "My Dog",
-  "version": "1.0.0",
-  "author": "你的名字",
-  "description": "一句话介绍",
-  "description_en": "One-line description",
-  "frame": { "w": 64, "h": 64, "scale": 2 },
-  "actions": {
-    "idle":      { "sheet": "sprites/idle.png", "frames": 4, "fps": 4, "loop": true },
-    "tool":      { "sheet": "sprites/tool.png", "frames": 4, "fps": 8, "loop": true },
-    "attention": { "sheet": "sprites/attention.png", "frames": 2, "fps": 4, "loop": true, "sound": "sounds/attention.wav" },
-    "done":      { "sheet": "sprites/done.png", "frames": 6, "fps": 10, "loop": false, "then": "idle" },
-    "stone":     { "fallback": "error", "tint": "#9aa0a6" }
-  },
-  "bubbles":    { "attention": ["汪！该你了"], "done": ["汪汪，搞定"] },
-  "bubbles_en": { "attention": ["Woof! Your turn"], "done": ["Woof, done"] },
-  "sounds":  { "squish": ["sounds/s1.wav", "sounds/s2.wav"] },
-  "evolutions": [{ "turns": 100, "dir": "stage1" }, { "turns": 500, "dir": "stage2" }, { "turns": 2000 }],
-  "tags": ["狗", "可爱"],
-  "tags_en": ["dog", "cute"]
-}
-```
-
-| 字段 | 说明 |
-|---|---|
-| `id` | 唯一标识，也是安装后的文件夹名 |
-| `name`、`description`、`tags` | 显示名、一句话介绍、图鉴标签 |
-| `name_en`、`description_en`、`tags_en` | 可选的英文版本，界面切到英文时使用；缺了或为空就用上面的中文 |
-| `version`、`author` | 显示在图鉴里；导入覆盖同 id 的包时会比较版本号 |
-| `frame` | `w`、`h`：帧尺寸（像素），所有动作共用；`scale`：显示倍数 |
-| `actions.<动作名>` | `sheet`（帧条）、`frames`、`fps`、`loop`、`then`、`sound`、`fallback`、`tint` |
-| `bubbles` | 各状态的气泡台词（`attention`、`done`、`error`、`stone`……），随机挑一句 |
-| `bubbles_en` | 英文台词，格式相同；按键合并，这里缺的状态继续用中文 |
-| `sounds.squish` | 可以放多个文件，捏的时候随机播一个 |
-| `evolutions` | 可选，见下文 |
-
-- `loop: false` 的是一次性动作，播完按 `then` 切走；不写 `then` 就回到当前状态对应的动作。
-- `fallback`：没画这个动作时借用哪个动作。`tint`：借用时叠一层颜色。
-- `evolutions`：每一项的 `turns` 是升到这一阶需要的累计轮数；`dir` 是这一阶的图所在的子文件夹，里面放和 `sprites/` 同名的帧条，缺哪张就用基础的那张。不写 `evolutions` 时阈值是 100 / 500 / 2000，只加光环不换图。
-
-### 动作清单
-
-| 优先级 | 动作 | 没画时用 |
-|---|---|---|
-| 必需 | `idle` | — |
-| 强烈建议 | `thinking`、`tool`、`attention`、`done`、`error`、`sleep` | idle |
-| 建议 | `reading`（→ tool）、`wake`、`wave`（切换时挥手）、`squish`（被捏） | 括号里的动作，或 idle |
-| 玩法用 | `fish`、`fish_reel`、`walk`、`fall`、`dizzy`、`petted`、`annoyed`、`sulk`、`cheer`、`taunt`、`comfort`、`peek`、`eat`（投喂）、`pack_bag`（下班前收拾书包） | idle（玩法照常，只是动作不生动） |
-| 可选 | `stone`、`aborted`（→ error）、`celebrate`（→ done） | 括号里的动作；可以加 `tint` 染色 |
-
-没画的动作会按上表自动借用别的动作，所以最小的宠物包只需要一张 idle 帧条。
-
-### 校验规则
-
-导入时会校验，不通过就列出原因，不会安装。
-
-- `id` 不能为空，不能含 `/`、`\`、`.`。
-- 必须有带图的 `idle`。
-- 每张帧条：宽 = 帧数 × `frame.w`，高 = `frame.h`。所有动作使用同一帧尺寸。
-- 引用的图片、音效文件都要存在。
-- `fallback` 不能绕成环，`then` 要指向存在的动作。
-
-### 导入
-
-- 图鉴 → **导入文件夹…** 或 **导入 zip…**；也可以把文件夹或 zip 直接拖进图鉴窗口，或拖到任意一只宠物身上。
-- 已有同 id 的宠物包时，先显示新旧版本号，问你是否覆盖。覆盖内置宠物不会删掉内置版本，删掉导入的这份就会恢复。
-- zip 里的文件可以放在根目录，也可以套一层文件夹。
-- 宠物包存放在 `~/.familiar/pets/<id>/`。直接把文件夹复制到那里也行，约 2 秒内自动加载，改了图片或 `pet.json` 也会自动重新加载。
-- 自己导入的宠物卡片右上角有"删除"按钮，点两次确认。正在被某个阵营、项目或规则使用的宠物包，删除后会自动换回默认宠物。
-
-### 作画建议
-
-- 宠物的脚画在帧的最底一行。落地、站在窗口标题栏上、两只宠物拉绳对齐，都以帧底边为准。
-- 显示大小约 100 px 比较合适：32×32 的像素画用 `scale: 3`，64×64 用 2，128×128 用 1。
-- 两个阵营选了同一只宠物时，Codex 那只会自动转 180° 色相，不用另画。
-- 参考内置宠物 [`pets/pixel-cat/`](pets/pixel-cat/)，生成脚本在 [`tools/gen-builtin-pets.py`](tools/gen-builtin-pets.py)。
-
-### 从一张图生成宠物（可选）
-
-最简单的方法在 App 里：图鉴 → **用图片做宠物…**。选一张图或直接拖进来（背景什么样都行，会在本机自动去掉），起个名字、可选填台词，看一眼 16 个动作的预览，点安装就好。图文教程：[用一张图做你自己的桌宠](docs/make-a-pet.zh-CN.md)。
-
-命令行也能做同样的宠物包：`python tools/petgen/build_pack.py <工作目录> --image 图片.png --id my-pet --name 我的宠物`。
-
-想要逐帧的真动画，[`tools/petgen/`](tools/petgen/README.md) 也能用图片模型加图生视频模型，把 AI 视频做成宠物包：
-
-1. 用图片模型从原图生成一张纯绿背景的 Q 版全身立绘。
-2. 以立绘为首帧，用图生视频模型给每个动作生成一段短视频——idle、thinking、tool、attention、done、error、sleep（镜头固定）。
-3. `build_pack.py` 用 ffmpeg 抽帧、绿幕抠像、挑出首尾接得上的循环片段、裁边，打包成带 `pet.json` 的标准宠物包，并输出一张效果总览图方便检查。
-
-图片和视频模型用你自己的就行：在工作目录里产出 `idle.mp4`、`thinking.mp4`……，再跑第 3 步。好用的提示词见 [`tools/petgen/prompts.md`](tools/petgen/prompts.md)，步骤和经验见 [`tools/petgen/README.md`](tools/petgen/README.md)。
-
-**角色版权**：用别人的角色做的宠物包自己用没问题；分享或再发布需要版权方授权。
+内置默认值在 [`crates/petd/assets/`](crates/petd/assets/)，可用字段写在文件注释里。读过的信存在这台机器上应用自己的网页存储里。
 
 ## 从源码构建
 
@@ -424,101 +302,107 @@ cd app && npm install && cd ..
 node tools/build.mjs            # release；加 --debug 编得更快
 ```
 
-这一步会构建 `target/release/familiar.exe`，并把 `familiar-emit` 复制到 `adapters/claude-code/bin/`。
+这一步会构建 `target/release/rillbuddy.exe`，并把 `rillbuddy-emit` 复制到 `adapters/claude-code/bin/`。
 
-出安装包：`node tools/build.mjs --bundle`，生成 `target/release/bundle/nsis/Familiar_<版本>_x64-setup.exe`。安装包里带着内置宠物、Claude Code 插件和 emitter。第一次构建时 Tauri 会下载 NSIS。
+出安装包：`node tools/build.mjs --bundle`，生成 `target/release/bundle/nsis/RillBuddy_<版本>_x64-setup.exe`。安装包里带着 Claude Code 插件和 emitter。第一次构建时 Tauri 会下载 NSIS。
 
-npm 里的 `@tauri-apps/*` 版本要和 Rust 的 Tauri 版本保持同一个小版本（目前都是 2.11 / dialog 2.7），否则 `tauri build` 会拒绝打包。
+npm 里的 `@tauri-apps/api` 版本要和 Rust 的 Tauri 版本保持同一个小版本（目前都是 2.11），否则 `tauri build` 会拒绝打包。
 
 ### 从源码运行
 
-1. 手动运行一次 `familiar.exe`。它会把自己的路径写进 `~/.familiar/petd_path`，以后 emitter 发现它不在时会自动拉起。
+1. 手动运行一次 `rillbuddy.exe`。它会把自己的路径写进 `~/.rillbuddy/petd_path`，以后 emitter 发现它不在时会自动拉起。
 2. 以仓库作为 marketplace 接入 Claude Code：
    ```
-   claude plugin marketplace add /path/to/familiar
-   claude plugin install familiar@familiar
+   claude plugin marketplace add /path/to/rillbuddy
+   claude plugin install rillbuddy@rillbuddy
    ```
-3. 接入 Codex：`adapters\claude-code\bin\familiar-emit.exe --install codex`，然后在 `codex` 里用 `/hooks` 信任。
+3. 接入 Codex：`adapters\claude-code\bin\rillbuddy-emit.exe --install codex`，然后在 `codex` 里用 `/hooks` 信任。
 
 Claude Code 会把插件复制到 `~/.claude/plugins/cache/`。重新构建后要把 `adapters/claude-code/.claude-plugin/plugin.json` 的版本号改掉，更新插件，然后重开 Claude Code：
 
 ```
-claude plugin marketplace update familiar
-claude plugin update familiar@familiar
+claude plugin marketplace update rillbuddy
+claude plugin update rillbuddy@rillbuddy
 ```
-
-修改内置宠物：编辑 `tools/gen-builtin-pets.py`，然后运行 `python tools/gen-builtin-pets.py`（需要 Pillow）。
 
 测试、调试方法和贡献规范见 [CONTRIBUTING.md](CONTRIBUTING.md)；实现说明见 [docs/implementation-notes.md](docs/implementation-notes.md)。
 
 ## 目录结构
 
 ```
-crates/emit/              hook 发射器（Rust，单文件可执行），含 Codex 安装器
-crates/petd/              守护进程核心库：状态机、路由、宠物包、配置、HTTP/WS、世界层、SQLite
-crates/petd/assets/       内置的 balance.yaml（数值）、fish.yaml（鱼种）、interactions.yaml（互动规则）
+crates/emit/              hook 发射器（Rust，单文件可执行），含各 agent 的安装器
+crates/petd/              守护进程核心库：会话状态机、每个 agent 一只宠物、世界层（糖果、虫子）、
+                          五只宠物和谁陪谁（cast.rs）、它们自己会做的事和两只的联动（think.rs）、
+                          各自的口吻（voice.rs）、关系与信（bond.rs）、配置、HTTP/WS、SQLite
+crates/petd/assets/       内置的 balance.yaml、treats.yaml、interactions.yaml、bond.yaml
 app/                      Tauri 2 外壳 + TypeScript/Canvas 页面
-  index.html              宠物窗口（每只宠物一个）
-  card.html               悬停会话卡片
-  gallery.html            宠物图鉴
-  welcome.html            首次启动选择
-  overlay.html            覆盖层（每个显示器一个）：虫子、拔河绳、赛跑条
-  report.html             每日报告卡片
+  index.html              宠物窗口（每只一个）
+  src/rig/                拆层绑定：rig.js（长耳兔和直立身体两类的姿态、表情、舞步）、perform.js（五种乐器的谱子和跳舞）
+  src/skin.ts voice.ts    每只宠物的一整套皮肤，和它在窗口里说的话
+  public/rig/<宠物>/      每只宠物的图层（zimeng、mashu、paopao、gugu、rongrong）
+  public/audio/<乐器>/    乐器采样（piano、cello、flute、xylophone、harp）
+  menu.html tray.html     右键菜单、托盘面板
+  shell.html              所有页面所在的那个窗口：自绘的边框和标签栏，每个页面是一个标签
+  room.html               小屋
+  gallery.html            图鉴（宠物、糖果、它记得的事、设置）
+  letter.html radio.html report.html welcome.html
+  card.html approve.html  悬停会话卡片、权限卡片
+  overlay.html            覆盖层（每个显示器一个）：虫子
 adapters/claude-code/     Claude Code 插件：hooks/hooks.json、commands/pet.md、bin/
-adapters/codex/           Codex 映射表 mapping.yaml
-pets/                     内置宠物包（pixel-cat、pixel-bot）
-tools/                    构建脚本、内置宠物生成器、petgen
-docs/                     实现说明
+adapters/codex/ gemini/ cursor/ opencode/   各 agent 的映射表
+design/pet-art/           五只宠物的原画、切层脚本和预览页（不进安装包）
+tools/build.mjs           构建脚本
+docs/                     实现说明、截图
 ```
 
-工作原理：agent 的每个 hook 都会运行 `familiar-emit`，它把一个小事件发给本地守护进程（`petd`，跑在 App 里面）后立刻退出——总耗时 ≤ 300 ms，退出码恒为 0，不写 stdout，所以永远不会卡住或弄坏你的 agent。App 没在运行时，事件先写进 spool，再在后台拉起 App。守护进程为每个会话维护一个状态机，把会话分配给宠物，通过本地 WebSocket 把状态推给宠物窗口。
+工作原理：agent 的每个 hook 都会运行 `rillbuddy-emit`，它把一个小事件发给本地守护进程（`petd`，跑在 App 里面）后立刻退出——总耗时 ≤ 300 ms（唯一的例外是你自己打开「在宠物上批准权限」之后的权限请求，它会等你在卡片上点）。守护进程不在时事件先存进 `spool/`，下次启动补上。页面通过本地 HTTP/WebSocket 读状态。
 
 ## 隐私与安全
 
-- **只在本机。**守护进程只监听 `127.0.0.1`（默认端口 47321，被占用时随机选一个空闲端口），每个请求都要带 `~/.familiar/token` 里的 token。Familiar 不上传任何东西；除了你打开电台时从 [Radio Browser](https://www.radio-browser.info/) 读取电台目录、直接从各电台播放声音之外，不发任何网络请求，也不会发送任何关于你或 agent 的信息。所有数据都在 `~/.familiar/`。
-- **事件只带必要信息。**hook 只把宠物需要的东西交给守护进程：会话 id、事件类型、会话的工作目录、工具名、被修改文件的文件名和 agent 进程号。提示词、文件内容、工具输出都不会转发。Codex 的 shell 命令只看第一个词来判断是不是读取类操作，命令原文不离开 emitter。
-- **hook 只追加，不替换。**Claude Code 这边是一个普通插件。Codex 那边，Familiar 把自己的 hook 追加在你的后面，写入前先备份 `hooks.json`；`--uninstall codex` 可以移除。两个"接入"都会先告诉你要改什么。
-- **Codex 额度只读。**额度显示读取的是 Codex 自己的会话日志（`$CODEX_HOME/sessions` 和 `~/.codex/sessions`），不做任何修改。Familiar 永远不会替你使用重置卡。
+- **只在本机。**守护进程只监听 `127.0.0.1`（默认端口 47321，被占用时随机选一个空闲端口），每个请求都要带 `~/.rillbuddy/token` 里的 token。会联网的只有三件事：（1）打开电台时，从 [Radio Browser](https://www.radio-browser.info/) 读取电台目录并播放你选的台；（2）在托盘里点了「宠物的语言模型」时，从 Hugging Face 下载一个约 390 MB 的本地模型，用来写信；（3）写信时，如果环境变量 `ANTHROPIC_API_KEY` 存在，信交给 Anthropic 的接口写，发过去的是喂了多少次、宠物的名字和它记下的几件事（比如「深夜还在」「开过哪个电台」），不含代码、文件名和项目内容。没有这个变量时用本地模型或内置的句子，不联网。
+- **关于你，它只读一个数。**「你坐了多久」来自系统的「距离上次键鼠输入多少秒」。它不读按键，不截屏，不看窗口内容。
+- **事件只带必要信息。**hook 只把宠物需要的东西交给守护进程：会话 id、事件类型、会话的工作目录、工具名、被修改文件的文件名和 agent 进程号。提示词、文件内容、工具输出都不会转发。只有一个例外，而且由你亲手打开：「在宠物上批准权限」会把要批准的那条命令交给本机的睿洱用来显示卡片，不保存。另外，一轮结束时，hook 会在 agent 最后那段回复里找写着「下一步：…」的那一行，只把这一行交给守护进程，记进「手上的事」；回复的其余部分不转发。
+- **选中的字只在你按键时读。**按 `Ctrl+Alt+N` 时，通过系统的辅助功能接口读一次当前选中的文字，用来开头那件事；不碰剪贴板，不模拟按键，密码框不读。
+- **hook 只追加，不替换。**Claude Code 这边是一个普通插件。Codex、Gemini CLI、Cursor 那边，睿洱把自己的 hook 追加在你的后面，写入前先备份；OpenCode 那边是单独一个插件文件。
+- **Claude Code 用量只读。**用量数字来自 Claude Code 交给状态栏命令的数据，由你点「接上」之后才读取；睿洱不登录你的账号，也不联网查询。
+- **Codex 额度只读。**额度显示读取的是 Codex 自己的会话日志，不做任何修改。睿洱永远不会替你使用重置卡。
 - **本机系统信息。**为了检测关掉的会话、跳转到终端、全屏和共享屏幕时隐身，App 会读取本机的进程列表和窗口标题。这些信息不保存，也不发往任何地方。
 
 ## 常见问题
 
 **Windows SmartScreen 拦截了安装包。**
-安装包还没有代码签名。点"更多信息 → 仍要运行"，或者自己构建安装包。
+安装包还没有代码签名。点「更多信息 → 仍要运行」，或者自己构建安装包。
 
-**Codex 的宠物一直不动。**
-Codex 只运行信任过的 hook。在终端运行 `codex`，输入 `/hooks`，把 Familiar 的 hook 标记为信任。如果你用了不止一个 Codex 配置目录，每个都要装（见[接入 Codex](#3-接入-codex)）。
+**Codex 那只一直不动。**
+Codex 只运行信任过的 hook。在终端运行 `codex`，输入 `/hooks`，把睿洱的 hook 标记为信任。如果你用了不止一个 Codex 配置目录，每个都要装（见[接入 Codex](#3-接入-codex)）。
 
 **重新构建后 Claude Code 还在跑旧的 emitter。**
-Claude Code 运行的是缓存里的插件副本。改掉插件版本号，执行 `claude plugin marketplace update familiar` 和 `claude plugin update familiar@familiar`（或者再点一次 托盘 → 接入 Claude Code…，已安装时会自动更新），然后重开 Claude Code。
+Claude Code 运行的是缓存里的插件副本。改掉插件版本号，执行 `claude plugin marketplace update rillbuddy` 和 `claude plugin update rillbuddy@rillbuddy`（或者再点一次 接入 → Claude，已安装时会自动更新），然后重开 Claude Code。
+
+**从 0.1.33 或更早的版本升级。**
+以前程序叫 `familiar.exe`，数据在 `~/.familiar`，Claude Code 插件叫 `familiar@familiar`。新版第一次启动时会把数据搬到 `~/.rillbuddy`，原来的位置留一个指过去的链接，所以旧的 hook 照常能用。之后宠物会问一句要不要把 Claude Code 里的接入换成新名字，点「好」就换，重开 Claude Code 后生效。Codex 的 hook 不会自动改（改了要重新信任），想换的话在设置里再点一次接入 Codex。等没有任何地方再用旧路径，那个链接会自己删掉。
 
 **宠物不见了。**
-依次检查：是不是按了老板键（`Ctrl+Alt+H`）；前台是不是有全屏窗口；会议软件是不是在共享屏幕；是不是执行过 `/pet hide`（用 `/pet show` 或 托盘 → 显示宠物 恢复）。
+依次检查：是不是按了老板键（`Ctrl+Alt+H`）；前台是不是有全屏窗口；会议软件是不是在共享屏幕；是不是藏起来了（托盘 → 都叫出来，或 `/pet show`）。
+
+**它为什么不自己做事。**
+看一下是不是开着「安静一会儿」，或者把「它自己会做事」关了。另外它只在你确实坐了那么久之后才动，两次之间至少隔十分钟。
 
 **共享屏幕时没有隐身。**
-在 `config.yaml` 的 `meeting.share_windows` 里加上会议软件"正在共享"工具条的窗口标题或类名关键词。识别靠的是这些工具条，内置名单不保证认得每个版本。
-
-**宠物包没有出现。**
-打开图鉴：校验失败的包会在那里列出原因（托盘上也会显示出错的包数）。
+在 `config.yaml` 的 `meeting.share_windows` 里加上会议软件「正在共享」工具条的窗口标题或类名关键词。
 
 **双击跳不到具体的标签页。**
 Windows Terminal 只能切到窗口，切不到具体标签页。
 
 **日志在哪？**
-`~/.familiar/logs/petd.log`。
+`~/.rillbuddy/logs/petd.log`。
 
-## 路线图
+## 许可证与素材
 
-- macOS 支持（尚未开始）。
-- 安装包代码签名。
-- 投球专用的接球、扔球帧（内置宠物目前用挥手和欢呼代替）。
-- Codex 宠物包导入器：需要先拿到真实的源格式样本，并确认授权。
-- 覆盖更多会议软件的共享屏幕检测。
+代码：[MIT](LICENSE)。
 
-## 许可证
-
-[MIT](LICENSE)。内置宠物（像素猫、像素机器人）及其音效都是仓库里的代码生成的，同样适用 MIT 许可证。
-
-App 自带的第三方组件：[onnxruntime-web](https://github.com/microsoft/onnxruntime)（MIT）和 [U-2-Net](https://github.com/xuebinqin/U-2-Net) 的 u2netp 模型（Apache-2.0，见 [`app/public/models/LICENSE-U2Net.txt`](app/public/models/LICENSE-U2Net.txt)），用于「用图片做宠物」时去掉杂乱背景；以及 [hls.js](https://github.com/video-dev/hls.js)（Apache-2.0），用于播放 HLS 格式的电台。
-
-用别人的角色做的宠物包仅限自己使用；分享需要版权方授权。
+- **钢琴采样**：Salamander Grand Piano（Alexander Holm），[CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)，见 [`app/public/audio/piano/LICENSE.txt`](app/public/audio/piano/LICENSE.txt)。
+- **大提琴采样**：「Real Cello Notes」（flcellogrl，Freesound），取自 Nicholaus Brosowsky 的 tonejs-instruments 整理版，[CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)，见 [`app/public/audio/cello/LICENSE.txt`](app/public/audio/cello/LICENSE.txt)。
+- **长笛、木琴、竖琴采样**：Versilian Studios Chamber Orchestra 2 社区版（VSCO 2 CE，CC0），取自同一个 tonejs-instruments 整理版（[CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)），见 `app/public/audio/flute/`、`xylophone/`、`harp/` 各自的 `LICENSE.txt`。
+- **宠物形象**：紫梦、麻薯、泡泡、菇菇、茸茸是本项目的原创角色。
+- **电台目录**：[Radio Browser](https://www.radio-browser.info/)，声音直接来自各电台。

@@ -1,10 +1,10 @@
 [package]
-name = "familiar-petd"
+name = "rillbuddy-petd"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Familiar daemon core: session state machine, routing, pack loading, local HTTP/WS."
+description = "Rill daemon core: session state machine, the pets' world, local HTTP/WS."
 
 [lib]
 name = "petd"
@@ -20,7 +20,6 @@ tower-http = { version = "0.6", features = ["cors"] }
 fs4 = { version = "0.13", features = ["sync"] }
 getrandom = "0.3"
 rusqlite = { version = "0.37", features = ["bundled"] }
-zip = { version = "2", default-features = false, features = ["deflate"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 encoding_rs = "0.8"
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream"], default-features = false }
@@ -28,9 +27,13 @@ candle-core = { version = "0.8", default-features = false }
 candle-nn = { version = "0.8", default-features = false }
 candle-transformers = { version = "0.8", default-features = false }
 tokenizers = { version = "0.21", default-features = false, features = ["fancy-regex"] }
+# 储物间: walking the agents' folders, finding what sessions used, packing old ones.
+walkdir = "2"
+memchr = "2"
+zip = { version = "1", default-features = false, features = ["deflate"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Threading"] }
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_System_SystemInformation", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_System_Com", "Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
 tempfile = "3"

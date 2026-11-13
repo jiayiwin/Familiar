@@ -1,16 +1,16 @@
 {
-  "name": "familiar",
+  "name": "rillbuddy",
   "owner": {
-    "name": "Familiar contributors"
+    "name": "RillBuddy contributors"
   },
   "metadata": {
-    "description": "Familiar 本地桌宠系统的 Claude Code 适配器"
+    "description": "睿洱本地桌宠系统的 Claude Code 适配器"
   },
   "plugins": [
     {
-      "name": "familiar",
+      "name": "rillbuddy",
       "source": "./adapters/claude-code",
-      "description": "Familiar 桌宠的 Claude Code 适配器（hooks + /pet 命令）"
+      "description": "睿洱桌宠的 Claude Code 适配器（hooks + /pet 命令）"
     }
   ]
 }

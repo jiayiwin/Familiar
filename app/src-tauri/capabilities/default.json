@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Pet windows, the hover card, the gallery and the first-run chooser",
-  "windows": ["pet-*", "card", "gallery", "welcome", "overlay-*", "report", "menu", "spring", "tray", "radio", "letter"],
+  "description": "Pet windows, the hover card, the approval card, the menu, the tray panel, and the tabbed window the pages open in",
+  "windows": ["pet-*", "card", "approve", "overlay-*", "menu", "tray", "home"],
   "permissions": [
     "core:default",
     "core:window:allow-set-size",
@@ -18,8 +18,11 @@
     "core:window:allow-show",
     "core:window:allow-hide",
     "core:window:allow-close",
+    "core:window:allow-minimize",
+    "core:window:allow-start-resize-dragging",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-is-maximized",
     "core:event:allow-emit-to",
-    "core:webview:default",
-    "dialog:allow-open"
+    "core:webview:default"
   ]
 }

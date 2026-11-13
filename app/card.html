@@ -3,26 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title data-en="Familiar sessions">Familiar 会话</title>
+    <title data-en="Rill sessions">睿洱会话</title>
     <style>
+      /* Colours come from the pet's skin (src/skin.ts); these are 紫梦's, until the skin is on. */
+      :root { --accent: #7a5fc0; --accent-deep: #6a50b0; --accent-soft: #ece4ff; --accent-text: #5b4696; --accent-off: #cfc3e6; --hover: #f5eefc; --room: #f3ecf9; --room-night: #ebe3f4; --room-line: #e3d8ea; --cushion: #e0d4ff; --stage: #e9eff8; --stage-ink: #5d6c85; --stage-line: #cfd9e8; --shade: 110, 88, 140; --motif-fill: #f3e9cf; --motif-line: #cdbdba; }
+      html:not([data-skin]) body { visibility: hidden; }
+      /* The pet's paper, like its bubble and its menu. */
       :root {
-        --bg: rgba(255, 255, 255, 0.97);
-        --ink: #1f2245;
-        --muted: #8b8ca6;
-        --line: #ece5d7;
-        --red: #e0442f;
-        --accent: #ee5b3c;
-        --indigo: #2b3275;
-        --display: "Bahnschrift", "Segoe UI Variable Display", "Segoe UI", "Microsoft YaHei UI", sans-serif;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root { --bg: rgba(29, 32, 64, 0.97); --ink: #f4efe6; --muted: #8f91b3; --line: #2b2f58; --red: #ff6a55; --accent: #ff6e4d; --indigo: #3a43a8; }
+        --bg: #fffaf2;
+        --ink: #5b4a57;
+        --muted: #776775;
+        --line: #efe6e2;
+        --red: #c24e38;
+        --indigo: #7a5fc0;
+        --display: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", sans-serif;
       }
       html, body {
         margin: 0;
         background: transparent;
         overflow: hidden;
-        font: 12px/1.5 "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+        font: 12px/1.5 "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
         color: var(--ink);
         user-select: none;
         -webkit-font-smoothing: antialiased;
@@ -30,27 +30,57 @@
       #card {
         margin: 6px;
         background: var(--bg);
-        border-radius: 16px;
-        box-shadow: 0 0 0 1px rgba(31, 34, 69, 0.06), 0 10px 28px rgba(31, 34, 69, 0.18);
+        border-radius: 18px;
+        border: 1px solid #d9cbc8;
+        box-shadow: 0 8px 20px rgba(var(--shade), 0.24);
         padding: 0 12px 10px;
         overflow: hidden;
       }
       h1 { font-family: var(--display); font-size: 13px; font-weight: 700; margin: 0 -12px 6px; padding: 8px 12px; display: flex; justify-content: space-between; gap: 8px;
-        color: #fff; background: radial-gradient(circle at calc(100% - 14px) 100%, var(--accent) 0 16px, transparent 17px), var(--indigo); }
-      h1 small { color: rgba(255, 255, 255, 0.7); font-family: "Segoe UI", sans-serif; font-weight: 400; font-size: 10.5px; margin-right: 26px; }
+        font-weight: 800; color: var(--ink); background: none; padding-bottom: 2px; }
+      h1 small { color: var(--muted); font-family: "Segoe UI", sans-serif; font-weight: 400; font-size: 10.5px; margin-right: 26px; }
       .row { display: grid; grid-template-columns: 10px 1fr auto; gap: 1px 10px; padding: 6px 0; border-top: 1px solid var(--line); align-items: baseline; }
       .row:first-of-type { border-top: 0; }
+      /* A row is a way to that session's window. */
+      .row.go { cursor: pointer; margin: 0 -8px; padding: 6px 8px; border-radius: 10px; }
+      .row.go:hover { background: var(--hover); border-top-color: transparent; }
+      .row.go:hover + .row { border-top-color: transparent; }
+      .row.go:active { background: var(--accent-soft); }
+      .row .go-to { grid-column: 3; grid-row: 2; color: var(--accent-deep); font-size: 10.5px; font-weight: 700; opacity: 0; }
+      .row.go:hover .go-to { opacity: 1; }
+      .row.go .meta { grid-column: 2 / 3; }
+      .note { color: #b3432e; font-size: 10.5px; margin-top: 4px; }
       .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); align-self: center; }
       .dot.attention { background: var(--red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 22%, transparent); }
       .dot.tool, .dot.reading, .dot.thinking { background: #2f9a8a; }
-      .dot.done { background: #f4b63f; }
-      .dot.error, .dot.stone, .dot.aborted { background: #9a5ce6; }
+      .dot.done { background: #d2a13c; }
+      .dot.error, .dot.stone, .dot.aborted { background: #b3432e; }
       .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
       .state { color: var(--muted); white-space: nowrap; font-size: 11px; }
-      .state.attention { color: var(--red); font-weight: 700; }
+      .state.attention { color: #b3432e; font-weight: 700; }
       .meta { grid-column: 2 / 4; color: var(--muted); font-size: 10.5px; }
       .empty { color: var(--muted); padding: 4px 0; }
-      .hint { color: var(--muted); font-size: 10.5px; margin-top: 6px; border-top: 1px solid var(--line); padding-top: 6px; }
+      .hint { color: var(--accent-deep); font-weight: 700; font-size: 10.5px; margin-top: 6px; border-top: 1px solid var(--line); padding-top: 6px; }
+      /* 手上的事: a round tick, the words, where it came from. */
+      h2 { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: .04em; margin: 10px 0 2px; display: flex; justify-content: space-between; }
+      h2 small { font-weight: 400; letter-spacing: 0; font-size: 10.5px; }
+      .todo { display: grid; grid-template-columns: 14px 1fr; gap: 0 9px; padding: 6px 8px; margin: 0 -8px; border-radius: 10px; align-items: start; cursor: pointer; }
+      .todo + .todo { border-top: 1px solid var(--line); }
+      .todo:hover { background: var(--hover); border-top-color: transparent; }
+      .todo:hover + .todo { border-top-color: transparent; }
+      .tick { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid #cbbcc6; margin-top: 2px; box-sizing: border-box; display: grid; place-items: center; }
+      .todo:hover .tick { border-color: var(--accent); }
+      .todo.gone .tick { background: var(--accent); border-color: var(--accent); }
+      .todo.gone .tick::after { content: ""; width: 6px; height: 3px; border: solid #fff; border-width: 0 0 1.6px 1.6px; transform: translateY(-1px) rotate(-45deg); }
+      .todo.gone .what { text-decoration: line-through; color: var(--muted); }
+      .todo.gone { opacity: .7; }
+      .what { font-weight: 600; overflow-wrap: anywhere; }
+      .from { grid-column: 2; color: var(--muted); font-size: 10.5px; display: flex; gap: 5px; align-items: center; }
+      .from .wait { color: var(--accent-deep); font-weight: 700; display: inline-flex; gap: 5px; align-items: center; }
+      .from i.ag { width: 6px; height: 6px; border-radius: 50%; background: #2f9a8a; display: inline-block; flex: none; }
+      .more { color: var(--muted); font-size: 10.5px; padding: 2px 0 0 23px; }
+      .add { margin-top: 6px; padding: 6px 9px; border: 1px dashed #dccfd6; border-radius: 10px; color: #a597a2; font-size: 11.5px; cursor: pointer; }
+      .add:hover { border-color: var(--accent); color: var(--accent-deep); background: var(--hover); }
     </style>
   </head>
   <body>

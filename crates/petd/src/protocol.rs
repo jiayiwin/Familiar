@@ -61,6 +61,9 @@ pub struct Detail {
     /// Emitter judged the shell command a read/search (Codex runs those through Bash).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub read: Option<bool>,
+    /// The "next step" an agent named at the end of a turn (one line, nothing else of its output).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -78,6 +81,10 @@ pub fn is_read_tool(name: &str) -> bool {
         "Read" | "Grep" | "Glob" | "LS" | "WebFetch" | "WebSearch" | "NotebookRead"
             // Codex tool names (shell reads arrive as Bash + detail.read).
             | "read_file" | "list_dir" | "grep_files" | "web_search" | "view_image"
+            // Gemini CLI.
+            | "read_many_files" | "glob" | "grep_search" | "search_file_content" | "list_directory" | "web_fetch" | "google_web_search"
+            // OpenCode.
+            | "read" | "grep" | "list" | "webfetch" | "websearch" | "codesearch"
     )
 }
 

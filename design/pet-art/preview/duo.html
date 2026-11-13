@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>灵宠 · 两只一起</title>
+<style>
+  :root { --ink:#3b3348; --mute:#8a8198; --line:#e4dfec; --accent:#8f7bd6; --page:#faf8fc; }
+  * { box-sizing: border-box; margin: 0; }
+  body { font: 14px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; color: var(--ink); background: var(--page); padding: 28px max(16px, 4vw); }
+  h1 { font-size: 20px; }
+  .sub { color: var(--mute); margin: 2px 0 20px; max-width: 46em; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 18px; }
+  button, a.pick { font: inherit; padding: 6px 16px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer; text-decoration: none; }
+  button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .stage { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end; border-radius: 20px; border: 1px solid var(--line); background: #f1eef6; padding: 10px; max-width: 880px; }
+  .stage.dark { background: #23222b; border-color: #23222b; }
+  iframe { border: 0; width: 400px; height: 400px; max-width: 100%; background: transparent; }
+  .stage.five { max-width: 1320px; }
+  .stage.five iframe { width: 250px; height: 250px; }
+  #status { color: var(--mute); font-size: 12px; margin-top: 14px; }
+</style>
+</head>
+<body>
+<h1 id="h">两只一起</h1>
+<p class="sub">两只各在自己的窗口里（这里是两个 iframe，和桌面上两个宠物窗口一样），各出各的声音，只靠同一个开始时刻对拍。合奏时紫梦弹整首，麻薯先拉低音、第二遍接上中声部。</p>
+<div class="bar" id="acts">
+  <button data-mode="play">合奏</button>
+  <button data-mode="dance">一起跳</button>
+  <button data-mode="idle" class="on">停</button>
+  <button id="bg">切换深色</button>
+  <a class="pick" href="index.html?pet=zimeng">只看紫梦</a>
+  <a class="pick" href="index.html?pet=mashu">只看麻薯</a>
+  <a class="pick" href="duo.html?all">五只一起</a>
+</div>
+<div class="stage" id="stage"></div>
+<p id="status">音色加载中…</p>
+<script>
+// Each pet is a page of its own, as on the desktop; `?all` seats all five.
+const all = new URLSearchParams(location.search).has("all");
+const cast = all ? [["paopao", "泡泡"], ["mashu", "麻薯"], ["zimeng", "紫梦"], ["gugu", "菇菇"], ["rongrong", "茸茸"]] : [["mashu", "麻薯"], ["zimeng", "紫梦"]];
+const size = all ? 250 : 400;
+const stage = document.getElementById("stage");
+stage.classList.toggle("five", all);
+if (all) {
+  document.getElementById("h").textContent = "五只一起";
+  document.title = "灵宠 · 五只一起";
+}
+for (const [id, name] of cast) {
+  const f = document.createElement("iframe");
+  f.src = `index.html?pet=${id}&embed&size=${size}`;
+  f.allow = "autoplay";
+  f.title = name;
+  stage.append(f);
+}
+const frames = [...document.querySelectorAll("iframe")];
+const ready = new Set();
+window.addEventListener("message", (e) => {
+  if (e.origin !== location.origin || !e.data?.ready) return;
+  ready.add(e.data.ready);
+  if (ready.size === cast.length) document.getElementById("status").textContent = "音色都就绪了。点「合奏」。";
+});
+document.getElementById("acts").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-mode]");
+  if (!b) return;
+  document.querySelectorAll("button[data-mode]").forEach((x) => x.classList.toggle("on", x === b));
+  // Both begin a second from now, each on its own clock.
+  const at = Date.now() + 1000;
+  for (const f of frames) f.contentWindow.postMessage({ mode: b.dataset.mode, at }, location.origin);
+});
+document.getElementById("bg").addEventListener("click", (e) => {
+  const dark = document.getElementById("stage").classList.toggle("dark");
+  e.target.textContent = dark ? "切换浅色" : "切换深色";
+});
+</script>
+</body>
+</html>

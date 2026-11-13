@@ -1,0 +1,42 @@
+# 糖果和果子：宠物吃的东西，也是图鉴里收集的东西。
+# 复制到 ~/.rillbuddy/treats.yaml 可以扩展或改名（四种稀有度每种至少留一种）。
+#
+#   rarity: common | rare | epic | legendary     越久的一轮活，越容易遇到稀有的
+#   shape:  画成什么样（wrapped drop bean star cloud lolly cube moon slice berry grape cherry peach leaf flower）
+#   colors: 两种颜色，主色和点缀
+#   from:   从哪儿来。不写 = 随时都可能；agent = agent 做完一轮才有；
+#           kegel = 跟它做完一组提肛；break = 久坐后起身歇一会儿
+#   hours:  [从, 到) 只在一天里的这段时间出现（可以跨午夜，比如 [21, 5]）
+#   months: [从, 到] 只在这几个月出现（可以跨年，比如 [12, 2]）
+#   name_en / note_en: English name and note (the Chinese ones are used when missing).
+#
+# The ids of the first twelve are those of the fish that used to be here, so
+# what was collected before is still in the jar and in the gallery.
+treats:
+  # ---- 随时都有
+  - { id: semicolon, name: 牛奶糖,     rarity: common,    shape: wrapped, colors: ["#f6ead2", "#d9b98a"], note: "包着两层纸。里面那层也能吃。", name_en: "Milk Caramel", note_en: "Wrapped in two papers. The inner one can be eaten too." }
+  - { id: log,       name: 草莓,       rarity: common,    shape: berry,   colors: ["#f08a8f", "#8fc99a"], note: "尖上那一口最甜。它留到了最后。", name_en: "Strawberry", note_en: "The tip is the sweetest bite. It saved that for last." }
+  - { id: konpeito,  name: 金平糖,     rarity: common,    shape: star,    colors: ["#f8d7e3", "#fff3c4"], note: "一粒一粒的小星星。数不清，也不用数。", name_en: "Konpeito", note_en: "Tiny stars, one grain at a time. Too many to count, and no need to." }
+  - { id: magic,     name: 跳跳糖,     rarity: rare,      shape: drop,    colors: ["#f29cc0", "#9fd3f0"], note: "在嘴里下了一场很小的雨。", name_en: "Popping Candy", note_en: "A very small rain, falling in the mouth." }
+  - { id: twins,     name: 双生樱桃,   rarity: rare,      shape: cherry,  colors: ["#e2596b", "#7fb087"], note: "两颗连着。一颗是给你的。", name_en: "Twin Cherries", note_en: "Two on one stem. One of them is yours." }
+  - { id: race,      name: 彩虹卷,     rarity: epic,      shape: lolly,   colors: ["#f7a8b8", "#a8d8f0"], note: "卷了七种颜色。它只认得出三种。", name_en: "Rainbow Swirl", note_en: "Seven colours rolled together. It can name three." }
+  - { id: leak,      name: 棉花糖,     rarity: epic,      shape: cloud,   colors: ["#f9d5e5", "#d5e8f9"], note: "看着很大。一口下去，只剩一点甜。", name_en: "Cotton Candy", note_en: "It looks enormous. One bite and only a little sweetness is left." }
+  - { id: tz,        name: 雨后桃子,   rarity: epic,      shape: peach,   colors: ["#f7b9a6", "#8fc99a"], note: "皮上还有水珠。它先舔了水珠。", name_en: "Peach After Rain", note_en: "Still beaded with rain. It licked the drops off first." }
+  - { id: legacy,    name: 陈皮糖,     rarity: legendary, shape: wrapped, colors: ["#d99a4e", "#8a5a2e"], note: "放了很多年的味道。越嚼越久。", name_en: "Aged Peel Candy", note_en: "The taste of many years. The longer you chew, the longer it lasts." }
+  - { id: dontouch,  name: 许愿糖,     rarity: legendary, shape: wrapped, colors: ["#f6d77a", "#e88fa8"], note: "糖纸上有一行很小的字：别拆。它没拆。", name_en: "Wishing Candy", note_en: "A line of very small print on the wrapper: do not open. It hasn't." }
+  # ---- 看时辰
+  - { id: dew,       name: 晨露葡萄,   rarity: common,    shape: grape,   colors: ["#b9a3e0", "#8fc99a"], hours: [5, 10],  note: "早上才有。带着一点还没醒的凉。", name_en: "Morning Grapes", note_en: "Only in the morning. Still cool, not quite awake." }
+  - { id: indent,    name: 橘子瓣糖,   rarity: common,    shape: slice,   colors: ["#f6b45e", "#fbe2b0"], hours: [12, 18], note: "下午的光照进来，就是这个颜色。", name_en: "Orange Segment", note_en: "The afternoon light comes in exactly this colour." }
+  - { id: nullptr,   name: 月亮软糖,   rarity: rare,      shape: moon,    colors: ["#f7e7a6", "#e6c96a"], hours: [21, 5],  note: "夜里才有。咬一口，缺的那块就是月牙。", name_en: "Moon Gummy", note_en: "Only at night. Take a bite and what's missing is the crescent." }
+  - { id: aurora,    name: 极光果冻,   rarity: legendary, shape: cube,    colors: ["#9be3c8", "#b9a3f0"], hours: [21, 5],  note: "里面的光是会动的。它看了很久才吃。", name_en: "Aurora Jelly", note_en: "The light inside it moves. It watched a long time before eating." }
+  # ---- 看季节
+  - { id: sakura,    name: 樱花糖,     rarity: rare,      shape: flower,  colors: ["#f9cfe0", "#f2a3c0"], months: [3, 5],  note: "只有春天那几周有。含着的时候别说话。", name_en: "Sakura Drop", note_en: "Only for those few weeks of spring. Don't talk while it melts." }
+  - { id: melon,     name: 西瓜冰,     rarity: rare,      shape: slice,   colors: ["#f2707f", "#9fd6a0"], months: [6, 8],  note: "夏天最热的下午，从最中间挖的那一勺。", name_en: "Watermelon Ice", note_en: "The hottest afternoon of summer, the spoonful from the very middle." }
+  - { id: osmanthus, name: 桂花糖,     rarity: rare,      shape: drop,    colors: ["#f5c96a", "#fff0c2"], months: [9, 11], note: "秋天有一阵，整条街都是这个味道。", name_en: "Osmanthus Candy", note_en: "For a while in autumn the whole street smells of this." }
+  - { id: snow,      name: 初雪糖霜,   rarity: epic,      shape: star,    colors: ["#ffffff", "#cfe3f5"], months: [12, 2], note: "只在最冷的那几天有。化得很快，要趁早。", name_en: "First-Snow Frosting", note_en: "Only on the coldest days. It melts fast, so be early." }
+  # ---- 你自己挣的
+  - { id: todo,      name: 薄荷叶,     rarity: common,    shape: leaf,    colors: ["#a9dcc0", "#6fb596"], from: break,     note: "你起身走了一圈，带回来的风是这个味道。", name_en: "Mint Leaf", note_en: "You got up and walked about. The air you brought back tastes like this." }
+  - { id: plum,      name: 话梅,       rarity: common,    shape: peach,   colors: ["#b98592", "#8a5f6c"], from: kegel,     note: "酸一下，人就坐直了。", name_en: "Salted Plum", note_en: "One sour moment and you sit up straight." }
+  # ---- agent 干活带来的
+  - { id: bean,      name: 分号糖豆,   rarity: rare,      shape: bean,    colors: ["#8fc0ea", "#f7c6d9"], from: agent,     note: "很小的一粒。少了它，一整句都不算数。", name_en: "Semicolon Jelly Bean", note_en: "A very small one. Without it the whole sentence doesn't count." }
+  - { id: gummy,     name: 缩进软糖,   rarity: epic,      shape: cube,    colors: ["#b4e0d2", "#f6e2a6"], from: agent,     note: "两格一颗，四格一颗，排得整整齐齐。", name_en: "Indent Gummies", note_en: "One every two spaces, one every four. All in line." }

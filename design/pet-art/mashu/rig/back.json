@@ -1,0 +1,36 @@
+{
+  "layers": [
+    {
+      "name": "back_body",
+      "file": "back_body.png",
+      "x": 155.0,
+      "y": 264.0,
+      "w": 212,
+      "h": 190
+    },
+    {
+      "name": "back_tail",
+      "file": "back_tail.png",
+      "x": 222.0,
+      "y": 386.0,
+      "w": 76,
+      "h": 69,
+      "pivot": [
+        260.0,
+        395.0
+      ]
+    },
+    {
+      "name": "back_head",
+      "file": "back_head.png",
+      "x": 115.0,
+      "y": 51.0,
+      "w": 293,
+      "h": 259,
+      "pivot": [
+        261.0,
+        299.0
+      ]
+    }
+  ]
+}

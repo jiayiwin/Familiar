@@ -1,29 +1,34 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-sheet="ui">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title data-en="Daily report">今日报告</title>
     <link rel="stylesheet" href="/src/ui.css" />
     <style>
+      /* Colours come from the pet's skin (src/skin.ts); these are 紫梦's, until the skin is on. */
+      :root { --accent: #7a5fc0; --accent-deep: #6a50b0; --accent-soft: #ece4ff; --accent-text: #5b4696; --accent-off: #cfc3e6; --hover: #f5eefc; --room: #f3ecf9; --room-night: #ebe3f4; --room-line: #e3d8ea; --cushion: #e0d4ff; --stage: #e9eff8; --stage-ink: #5d6c85; --stage-line: #cfd9e8; --shade: 110, 88, 140; --motif-fill: #f3e9cf; --motif-line: #cdbdba; }
+      html:not([data-skin]) body { visibility: hidden; }
       html, body { overflow: hidden; }
-      body { display: flex; flex-direction: column; align-items: center; padding: 12px 14px 10px; gap: 8px; perspective: 900px; }
-      canvas { border-radius: 24px; box-shadow: 0 2px 4px rgba(31,34,69,0.08), 0 22px 48px rgba(31,34,69,0.22); cursor: pointer; max-width: 100%;
-        transition: transform 0.18s var(--ease), box-shadow 0.18s var(--ease); will-change: transform; }
-      canvas:hover { box-shadow: 0 6px 10px rgba(31,34,69,0.1), 0 30px 60px rgba(31,34,69,0.28); }
+      /* The card is always shown whole: scaled to fit the page (report.ts), never scrolled. */
+      html, body { height: 100%; }
+      body { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px 14px 12px; gap: 12px; }
+      canvas { border-radius: 24px; box-shadow: 0 10px 26px rgba(var(--shade), 0.22); cursor: pointer; max-width: 100%; }
       .bar { display: flex; gap: 8px; align-items: center; }
-      .bar button { padding: 4px 13px; font-size: 12px; }
-      .hint { color: var(--muted); font-size: 11px; line-height: 1; }
+      .bar button { min-height: 36px; padding: 0 16px; font-size: 13px; font-weight: 700; }
+      .hint { color: var(--muted); font-size: 12px; line-height: 1; }
     </style>
   </head>
   <body>
     <canvas id="card" title="点一下关闭" data-en-title="Click to close"></canvas>
     <div class="bar">
-      <button id="prev" class="ghost" data-en="‹ Previous day">‹ 前一天</button>
+      <button id="prev" class="ghost" data-en="‹ The day before">‹ 前一天</button>
       <button id="copy" class="primary" data-en="Copy as image">复制为图片</button>
-      <button id="next" class="ghost" data-en="Next day ›">后一天 ›</button>
+      <button id="song" class="ghost" data-en="Hear this day">听这一天的</button>
+      <button id="next" class="ghost" data-en="The day after ›">后一天 ›</button>
     </div>
     <div class="hint" data-en="Click the card to close">点卡片关闭</div>
+    <script src="/embed.js"></script>
     <script type="module" src="/src/report.ts"></script>
   </body>
 </html>

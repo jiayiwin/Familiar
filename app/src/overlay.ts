@@ -1,11 +1,14 @@
-// Full-monitor transparent overlay (design §6): bugs crawling along the bottom
-// of the screen and coin pop-ups. (Tug of war is acted out by the pets themselves.)
-// Click-through everywhere except on bugs; everything pauses while an agent
-// waits on the user.
+// Full-monitor transparent overlay: bugs crawling along the bottom of the
+// screen. Click-through everywhere except on bugs; everything pauses while an agent waits on the user.
+//
+// The pets go after the bugs themselves: a bug that has landed is chased by
+// its own pet, which runs along the floor and pounces (you can still get there
+// first with a click). A boss pins its pet in place; then the other pets that
+// are up come over and swat it, one swat at a time, and your clicks count too.
 
 import { connect, getJson, inTauri, postJson, subscribe, type Bug, type Conn, type WorldState } from "./api";
 import { initLang, t as tr } from "./i18n"; // `t` is a common local name here
-import { Whip } from "./whip";
+import { linesOf } from "./voice";
 
 const q = new URLSearchParams(location.search);
 const MON = { x: Number(q.get("x") ?? 0), y: Number(q.get("y") ?? 0), w: Number(q.get("w") ?? innerWidth), h: Number(q.get("h") ?? innerHeight) };
@@ -13,8 +16,8 @@ const PRIMARY = q.get("primary") === "1";
 const canvas = document.getElementById("ov") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
 
-const BUG = 14;
-const BOSS = 30;
+const BUG = 24;
+const BOSS = 46;
 const GRAVITY = 1400;
 
 interface Crawler {
@@ -27,6 +30,10 @@ interface Crawler {
   hitAt: number;
   deadAt: number;
   turnAt: number;
+  /** When it came to rest on the floor (its pet goes for it a moment later). */
+  landedAt: number;
+  /** A Boss: which side of its pinned pet it landed on (helpers come at it from that side, not over the pet). */
+  away?: number;
 }
 
 interface Popup {
@@ -39,11 +46,18 @@ interface Popup {
 
 const crawlers = new Map<number, Crawler>();
 
-/** Ball toss between two pets: positions are read from their windows. */
-interface Toss { a: string; b: string; throws: number; each: number; t0: number; caught: boolean }
-let toss: Toss | null = null;
-const tossPos = new Map<string, { x: number; y: number } | null>();
-let tossBall: { x: number; y: number } | null = null;
+/** The pets as the daemon last described them: which of the five each is, and what its agent is doing. */
+const pets = new Map<string, { skin: string; state: string }>();
+/** A pet out after a bug: which one, when it set off, when it may next swat. */
+const hunts = new Map<string, { bug: number; since: number; aimAt: number; nextSwat: number; aimX: number }>();
+/** When each pet last said something about bugs, so it does not chatter. */
+const saidAt = new Map<string, number>();
+/** A bug lies this long on the floor before its pet goes for it (time enough for you to click it first). */
+const CHASE_AFTER = 1100;
+/** How close (px) a pet's feet must be to a bug to get it; and how often a helper swats a boss. */
+const REACH = 30;
+const SWAT_EVERY = 900;
+
 const popups: Popup[] = [];
 let world: WorldState | null = null;
 let allowed = true;
@@ -112,19 +126,25 @@ function addCrawler(bug: Bug, x: number, y: number, falling: boolean) {
     bug,
     x,
     y,
-    vx: (Math.random() < 0.5 ? -1 : 1) * (bug.boss ? 18 : 26 + Math.random() * 22),
+    vx: (Math.random() < 0.5 ? -1 : 1) * (bug.boss ? 6 : 26 + Math.random() * 22),
     vy: falling ? -180 - Math.random() * 120 : 0,
     falling,
     hitAt: 0,
     deadAt: 0,
     turnAt: performance.now() + 2000 + Math.random() * 4000,
+    landedAt: falling ? Infinity : performance.now(),
   });
 }
 
 async function spawn(bug: Bug) {
   const feet = await petFeet(bug.pet);
   if (feet) {
-    addCrawler(bug, feet.x + (Math.random() - 0.5) * 30, feet.y - 20, true);
+    // A Boss lands beside its pet (towards the middle of the screen), where it can be seen and hit,
+    // not under it; small ones drop at its feet.
+    const off = bug.boss ? (feet.x > MON.w / 2 ? -1 : 1) * 96 : (Math.random() - 0.5) * 30;
+    addCrawler(bug, feet.x + off, feet.y - 20, true);
+    const c = crawlers.get(bug.id);
+    if (c && bug.boss) c.away = Math.sign(off);
   }
 }
 
@@ -155,10 +175,123 @@ function onWorld(w: WorldState) {
   void adopt(w.bugs);
 }
 
-async function squash(conn: Conn, c: Crawler) {
+/** A pet says one of its bug lines, now and then. */
+async function petSays(pet: string, key: string, gap = 6000) {
+  const now = performance.now();
+  if (now - (saidAt.get(pet) ?? -1e9) < gap || !inTauri) return;
+  saidAt.set(pet, now);
+  const all = linesOf(pets.get(pet)?.skin ?? "zimeng", key);
+  if (!all.length) return;
+  const { emitTo } = await import("@tauri-apps/api/event");
+  await emitTo(`pet-${pet}`, "say", { text: all[Math.floor(Math.random() * all.length)] });
+}
+
+async function chaseTo(pet: string, x: number | null) {
+  if (!inTauri) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("pet_chase", { pet, x: x == null ? null : MON.x + x }).catch(() => {});
+}
+
+/** Free to go after a bug: up, not waiting on you, not pinned, and standing on this screen's floor. */
+async function free(pet: string): Promise<{ x: number; y: number } | null> {
+  const st = pets.get(pet)?.state;
+  if (!st || st === "attention" || st === "stone" || st === "offline") return null;
+  const feet = await petFeet(pet);
+  return feet && Math.abs(feet.y - floorY()) < 46 ? feet : null;
+}
+
+/** Pets from another screen called over to help with a Boss on this one. */
+const summoned = new Set<string>();
+
+/** A Boss here, a free pet on another screen: it walks over to the pinned one, onto this floor. */
+async function summon(bosses: Crawler[]) {
+  if (!bosses.length) {
+    // The Boss is gone. One that came over and is not chasing anything here goes home (the hunt takes the rest back).
+    for (const pet of summoned) {
+      if (!hunts.has(pet)) void import("@tauri-apps/api/core").then(({ invoke }) => invoke("pet_visit", { pet, target: null }).catch(() => {}));
+    }
+    return summoned.clear();
+  }
+  for (const [pet, p] of pets) {
+    if (summoned.has(pet) || bosses.some((b) => b.bug.pet === pet)) continue;
+    if (!p.state || ["attention", "stone", "offline", "sleeping"].includes(p.state)) continue;
+    // Already on this screen: the hunt below sends it.
+    if (await petFeet(pet)) continue;
+    summoned.add(pet);
+    void petSays(pet, "bug.help", 20_000);
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("pet_visit", { pet, target: bosses[0].bug.pet }).catch(() => {});
+  }
+}
+
+let hunting = false;
+/** Twice a second: send pets after bugs, steer them as the bugs crawl, and swat what they reach. */
+async function hunt(conn: Conn) {
+  if (hunting || !allowed || world?.frozen || world?.focus) return;
+  hunting = true;
+  try {
+    const now = performance.now();
+    const live = [...crawlers.values()].filter((c) => !c.deadAt && !c.falling);
+    // A boss pins its own pet; every other pet that is free is a helper.
+    const bosses = live.filter((c) => c.bug.boss);
+    if (inTauri) await summon(bosses);
+    for (const [pet] of pets) {
+      const mine = hunts.get(pet);
+      let target: Crawler | undefined;
+      if (mine) target = crawlers.get(mine.bug);
+      if (!target || target.deadAt) {
+        const own = live.filter((c) => !c.bug.boss && c.bug.pet === pet && now - c.landedAt > CHASE_AFTER);
+        const help = bosses.find((c) => c.bug.pet !== pet);
+        target = help ?? own.sort((a, b) => a.bug.id - b.bug.id)[0];
+        if (!target) {
+          if (mine) {
+            hunts.delete(pet);
+            // Nothing left to get: back to where it was.
+            window.setTimeout(() => !hunts.has(pet) && void chaseTo(pet, null), 1200);
+          }
+          continue;
+        }
+      }
+      const feet = await free(pet);
+      if (!feet) {
+        hunts.delete(pet);
+        continue;
+      }
+      let h = hunts.get(pet);
+      if (!h || h.bug !== target.bug.id) {
+        h = { bug: target.bug.id, since: now, aimAt: 0, nextSwat: 0, aimX: NaN };
+        hunts.set(pet, h);
+        void petSays(pet, target.bug.boss ? "bug.help" : "bug.chase", target.bug.boss ? 20_000 : 9000);
+      }
+      // A Boss is hit from its far side, so the helper does not stand on the pet it pins.
+      const spot = target.bug.boss && target.away ? target.x + target.away * 54 : target.x;
+      const gap = Math.abs(feet.x - spot);
+      if (gap <= REACH) {
+        if (now >= h.nextSwat) {
+          h.nextSwat = now + SWAT_EVERY;
+          const last = !target.bug.boss || target.bug.hp <= 1;
+          const { emitTo } = inTauri ? await import("@tauri-apps/api/event") : { emitTo: async () => {} };
+          await emitTo(`pet-${pet}`, "swat", { last });
+          // The paw comes down a moment after the pounce starts.
+          window.setTimeout(() => void squash(conn, target!, pet), 160);
+        }
+      } else if (now - h.aimAt > 450 || Math.abs(h.aimX - target.x) > 40) {
+        // Run to where the bug will be by the time it gets there.
+        const lead = spot + target.vx * Math.min(1.2, gap / 330);
+        h.aimAt = now;
+        h.aimX = target.x;
+        void chaseTo(pet, Math.max(10, Math.min(MON.w - 10, lead)));
+      }
+    }
+  } finally {
+    hunting = false;
+  }
+}
+
+async function squash(conn: Conn, c: Crawler, by?: string) {
   if (world?.frozen || c.deadAt) return;
   c.hitAt = performance.now();
-  const r = await postJson<{ ok: boolean; message?: string; result?: { hp: number; killed: boolean; boss: boolean; coins: number } }>(
+  const r = await postJson<{ ok: boolean; message?: string; result?: { hp: number; killed: boolean; boss: boolean } }>(
     conn,
     "/v1/world/squash",
     { id: c.bug.id },
@@ -168,11 +301,10 @@ async function squash(conn: Conn, c: Crawler) {
   if (r.result.killed) {
     c.deadAt = performance.now();
     sfx(r.result.boss ? "boss-down" : "splat");
-    if (r.result.coins > 0) {
-      popups.push({ x: c.x, y: c.y - 20, text: `+${r.result.coins}`, color: "#f2a93b", t0: performance.now() });
-      setTimeout(() => sfx("coin"), 150);
-    }
-    if (r.result.boss) popups.push({ x: c.x, y: c.y - 44, text: tr("Boss 倒下了！石化解除", "Boss down! Stone lifted"), color: "#e63946", t0: performance.now() });
+    if (r.result.boss) {
+      popups.push({ x: c.x, y: c.y - 44, text: tr("拍掉了。它能动了。", "Squashed. It can move again."), color: "#5b4a57", t0: performance.now() });
+      void petSays(c.bug.pet, "bug.freed", 0);
+    } else if (by && ![...crawlers.values()].some((o) => !o.deadAt && o.bug.pet === by && !o.bug.boss)) void petSays(by, "bug.done", 15_000);
   } else {
     sfx(c.bug.boss ? "boss-hit" : "splat");
   }
@@ -180,71 +312,179 @@ async function squash(conn: Conn, c: Crawler) {
 
 // ------------------------------------------------------------ drawing
 
+/**
+ * A bug in the pets' own hand: a round little beetle in a pastel shell, a soft
+ * warm-grey line, two dot eyes and a blush, legs that patter. Each one gets one
+ * of three shells by its id; a Boss is a bigger, plum one with a frown, its
+ * strength a small pill above it. Squashed, it goes up in a puff.
+ */
+const SHELLS = [
+  { body: "#cfe2bf", spot: "#a6c595", head: "#b9d4a9" }, // sage
+  { body: "#f6d5bb", spot: "#e7ae8c", head: "#efc3a4" }, // apricot
+  { body: "#dcd3ef", spot: "#b6a8db", head: "#cbbfe7" }, // lavender
+];
+const BOSS_SHELL = { body: "#ecb8c2", spot: "#cf8193", head: "#e3a3b1" };
+const BUG_LINE = "#7d6672";
+const BUG_EYE = "#4a3a44";
+
 function drawBug(c: Crawler, now: number) {
   const s = c.bug.boss ? BOSS : BUG;
+  const look = c.bug.boss ? BOSS_SHELL : SHELLS[c.bug.id % SHELLS.length];
   const frozen = !!world?.frozen;
   ctx.save();
   ctx.translate(c.x, c.y);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
   if (c.deadAt) {
+    // A soft puff: little paper clouds going out, and two glints of its colour.
     const k = Math.min(1, (now - c.deadAt) / 700);
     ctx.globalAlpha = 1 - k;
-    ctx.fillStyle = c.bug.boss ? "#7a1f2b" : "#4b5d2a";
-    ctx.beginPath();
-    ctx.ellipse(0, s * 0.1, s * (0.7 + k * 0.3), s * 0.15, 0, 0, Math.PI * 2);
-    ctx.fill();
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + 0.3;
+      const d = s * (0.25 + k * 0.75);
+      const r = s * (0.24 - k * 0.1);
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * d, -s * 0.4 + Math.sin(a) * d * 0.7, Math.max(1, r), 0, Math.PI * 2);
+      ctx.fillStyle = "#fffaf2";
+      ctx.fill();
+      ctx.strokeStyle = "#d9cbc8";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    ctx.fillStyle = look.spot;
+    for (const [dx, dy] of [[-0.6, -0.9], [0.7, -0.75]]) {
+      const x = dx * s * (0.6 + k), y = dy * s * (0.6 + k * 0.6), r = s * 0.16;
+      ctx.beginPath();
+      ctx.moveTo(x, y - r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.quadraticCurveTo(x, y, x, y + r);
+      ctx.quadraticCurveTo(x, y, x - r, y);
+      ctx.quadraticCurveTo(x, y, x, y - r);
+      ctx.fill();
+    }
     ctx.restore();
     return;
   }
   if (frozen) ctx.globalAlpha = 0.45;
   const dir = c.vx < 0 ? -1 : 1;
   ctx.scale(dir, 1);
-  const wiggle = c.falling || frozen ? 0 : Math.sin(now / 60) * 1.5;
-  const hit = now - c.hitAt < 120 ? 0.8 : 1;
-  ctx.scale(1, hit);
-  // Legs.
-  ctx.strokeStyle = "#2b1d16";
-  ctx.lineWidth = c.bug.boss ? 2 : 1.2;
-  for (let i = -1; i <= 1; i++) {
-    const lx = i * s * 0.28;
+  const step = c.falling || frozen ? 0 : now / 70;
+  const hit = now - c.hitAt < 120 ? 0.78 : 1;
+  ctx.scale(1 + (1 - hit) * 0.5, hit);
+  const lw = c.bug.boss ? 2.2 : 1.6;
+
+  // A soft shadow on the floor.
+  ctx.fillStyle = "rgba(91, 74, 87, 0.14)";
+  ctx.beginPath();
+  ctx.ellipse(0, 0.5, s * 0.62, s * 0.11, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Three pairs of short legs, pattering.
+  ctx.strokeStyle = BUG_LINE;
+  ctx.lineWidth = lw;
+  for (let i = 0; i < 3; i++) {
+    const lx = (i - 1) * s * 0.3 - s * 0.05;
+    const lift = Math.sin(step + i * 2.1) * s * 0.07;
     ctx.beginPath();
-    ctx.moveTo(lx, -s * 0.2);
-    ctx.lineTo(lx + (i % 2 ? wiggle : -wiggle), 0);
+    ctx.moveTo(lx, -s * 0.16);
+    ctx.lineTo(lx + s * 0.06 + lift, -Math.max(0, lift) * 0.6);
     ctx.stroke();
   }
-  // Body and head.
-  ctx.fillStyle = c.bug.boss ? "#c2283a" : "#6b8e23";
-  ctx.strokeStyle = "#2b1d16";
+
+  // The shell: round, with a parting down the middle and a few spots.
+  const bob = c.falling || frozen ? 0 : Math.abs(Math.sin(step)) * s * 0.03;
+  ctx.translate(0, -bob);
+  ctx.fillStyle = look.body;
   ctx.beginPath();
-  ctx.ellipse(0, -s * 0.35, s * 0.5, s * 0.32, 0, 0, Math.PI * 2);
+  ctx.ellipse(-s * 0.08, -s * 0.42, s * 0.56, s * 0.42, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.save();
+  ctx.clip();
+  ctx.fillStyle = look.spot;
+  for (const [x, y, r] of [[-0.42, -0.5, 0.11], [-0.12, -0.66, 0.09], [0.1, -0.36, 0.1], [-0.3, -0.24, 0.08]]) {
+    ctx.beginPath();
+    ctx.arc(x * s, y * s, r * s, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // A highlight on top, like the pets' fur catching the light.
+  ctx.fillStyle = "rgba(255, 255, 255, 0.45)";
+  ctx.beginPath();
+  ctx.ellipse(-s * 0.26, -s * 0.66, s * 0.2, s * 0.08, -0.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = BUG_LINE;
+  ctx.lineWidth = lw;
+  ctx.beginPath();
+  ctx.ellipse(-s * 0.08, -s * 0.42, s * 0.56, s * 0.42, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(s * 0.06, -s * 0.82);
+  ctx.quadraticCurveTo(-s * 0.06, -s * 0.45, s * 0.02, -s * 0.04);
+  ctx.stroke();
+
+  // The head, a little round one in front.
+  const hx = s * 0.5, hy = -s * 0.36, hr = s * 0.25;
+  ctx.fillStyle = look.head;
+  ctx.beginPath();
+  ctx.arc(hx, hy, hr, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
+  // Antennae with round tips.
+  for (const [ax, ay] of [[0.62, -0.86], [0.86, -0.74]]) {
+    const tx = ax * s + Math.sin(step * 0.5) * s * 0.03;
+    ctx.beginPath();
+    ctx.moveTo(hx + hr * 0.2, hy - hr * 0.8);
+    ctx.quadraticCurveTo(hx + hr * 0.4, ay * s + s * 0.1, tx, ay * s);
+    ctx.stroke();
+    ctx.fillStyle = BUG_LINE;
+    ctx.beginPath();
+    ctx.arc(tx, ay * s, lw * 1.1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // The eye, a highlight, a blush.
+  ctx.fillStyle = BUG_EYE;
   ctx.beginPath();
-  ctx.moveTo(0, -s * 0.66);
-  ctx.lineTo(0, -s * 0.05);
-  ctx.stroke();
-  ctx.fillStyle = "#2b1d16";
-  ctx.beginPath();
-  ctx.arc(s * 0.5, -s * 0.38, s * 0.18, 0, Math.PI * 2);
+  ctx.arc(hx + hr * 0.3, hy - hr * 0.12, Math.max(1.4, s * 0.075), 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = "#fff";
-  ctx.fillRect(s * 0.52, -s * 0.46, 2, 2);
-  // Antennae.
   ctx.beginPath();
-  ctx.moveTo(s * 0.6, -s * 0.5);
-  ctx.lineTo(s * 0.8, -s * 0.72);
-  ctx.stroke();
-  ctx.restore();
+  ctx.arc(hx + hr * 0.36, hy - hr * 0.22, Math.max(0.6, s * 0.028), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "rgba(240, 140, 150, 0.5)";
+  ctx.beginPath();
+  ctx.ellipse(hx + hr * 0.35, hy + hr * 0.42, hr * 0.28, hr * 0.15, 0, 0, Math.PI * 2);
+  ctx.fill();
   if (c.bug.boss) {
-    // HP bar.
-    const w = BOSS * 1.4;
-    ctx.fillStyle = "rgba(0,0,0,0.5)";
-    ctx.fillRect(c.x - w / 2, c.y - BOSS - 10, w, 5);
-    ctx.fillStyle = "#e63946";
-    ctx.fillRect(c.x - w / 2, c.y - BOSS - 10, (w * c.bug.hp) / c.bug.max_hp, 5);
-    ctx.fillStyle = frozen ? "rgba(43,29,22,0.5)" : "#2b1d16";
-    ctx.font = "bold 11px system-ui, sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("BOSS", c.x, c.y - BOSS - 14);
+    // A Boss frowns.
+    ctx.strokeStyle = BUG_EYE;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(hx + hr * 0.05, hy - hr * 0.5);
+    ctx.lineTo(hx + hr * 0.6, hy - hr * 0.32);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  if (c.bug.boss) {
+    // Its strength: a small pill above it, in its own colour.
+    const w = BOSS * 1.5, h = 7, x = c.x - w / 2, y = c.y - BOSS - 14;
+    ctx.save();
+    if (frozen) ctx.globalAlpha = 0.45;
+    ctx.fillStyle = "rgba(255, 250, 242, 0.95)";
+    ctx.strokeStyle = "#d9cbc8";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, h / 2);
+    ctx.fill();
+    ctx.stroke();
+    const f = Math.max(0, c.bug.hp / c.bug.max_hp);
+    if (f > 0) {
+      ctx.fillStyle = BOSS_SHELL.spot;
+      ctx.beginPath();
+      ctx.roundRect(x + 1.5, y + 1.5, Math.max(h - 3, (w - 3) * f), h - 3, (h - 3) / 2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 }
 
@@ -269,489 +509,6 @@ function drawPopups(now: number) {
   ctx.globalAlpha = 1;
 }
 
-/** Badminton / ping-pong between two pets: the overlay draws the flight. */
-interface Rally { game: string; a: string; t0: number; each: number; hits: number; ms: number; pa: Box; pb: Box; lastHit: number; ended: boolean }
-interface Box { x: number; y: number; bottom: number; h: number; top: number }
-let rally: Rally | null = null;
-
-async function petBox(pet: string): Promise<Box | null> {
-  if (!inTauri) return null;
-  const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
-  const w = await WebviewWindow.getByLabel(`pet-${pet}`);
-  if (!w) return null;
-  const sc = await w.scaleFactor();
-  const p = (await w.outerPosition()).toLogical(sc);
-  const s = (await w.outerSize()).toLogical(sc);
-  return { x: p.x + s.width / 2 - MON.x, y: p.y + s.height * 0.55 - MON.y, bottom: p.y + s.height - MON.y - 2, h: s.height, top: p.y - MON.y };
-}
-
-async function startRally(d: Record<string, unknown>) {
-  const walk = Number(d.walk) || 1300;
-  const recv = performance.now();
-  await new Promise((r) => setTimeout(r, walk - 60));
-  const [pa, pb] = [await petBox(String(d.anchor)), await petBox(String(d.mover))];
-  if (!pa || !pb || pa.x < 0 || pa.x > MON.w) return;
-  rally = { game: String(d.game), a: String(d.anchor), t0: recv + walk, each: Number(d.each), hits: Number(d.hits), ms: Number(d.ms), pa, pb, lastHit: -1, ended: false };
-  sfx("whistle");
-  // A hidden window gets no animation frames: show it first.
-  void setShown(allowed);
-}
-
-/** Arm wrestling is drawn by the pet windows; the overlay only keeps the sounds in one place. */
-function armSounds(d: Record<string, unknown>) {
-  const walk = Number(d.walk) || 1300;
-  const ms = Number(d.ms) || 5200;
-  setTimeout(() => sfx("whistle"), walk);
-  setTimeout(() => sfx("slam"), walk + ms - 260);
-  setTimeout(() => sfx("win"), walk + ms + 150);
-}
-
-function drawRally(now: number): boolean {
-  const r = rally;
-  if (!r) return false;
-  const t = now - r.t0;
-  if (t > r.ms + 300) {
-    rally = null;
-    return false;
-  }
-  if (t >= 0) {
-    // One "pock" per racket touch; the jingle when the last shot lands.
-    const i = Math.min(r.hits - 1, Math.floor(t / r.each));
-    if (i !== r.lastHit) {
-      r.lastHit = i;
-      sfx("pock");
-    }
-    if (!r.ended && t >= r.ms) {
-      r.ended = true;
-      sfx("win");
-    }
-  }
-  const ground = Math.max(r.pa.bottom, r.pb.bottom);
-  const [L, R] = r.pa.x < r.pb.x ? [r.pa, r.pb] : [r.pb, r.pa];
-  const mid = (L.x + R.x) / 2;
-  ctx.save();
-  if (r.game === "badminton") {
-    // Net: a pole and a mesh band at chest height.
-    ctx.fillStyle = "#5b3a29";
-    ctx.fillRect(mid - 1.5, ground - 64, 3, 64);
-    ctx.strokeStyle = "rgba(60,60,60,0.55)";
-    ctx.lineWidth = 1;
-    for (let y = ground - 62; y <= ground - 34; y += 5) {
-      ctx.beginPath();
-      ctx.moveTo(mid - 7, y);
-      ctx.lineTo(mid + 7, y);
-      ctx.stroke();
-    }
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(mid - 8, ground - 65, 16, 3);
-  } else {
-    // Table between the pets with a net in the middle.
-    const tl = L.x + 34, tr = R.x - 34, ty = ground - 26;
-    ctx.fillStyle = "#1d6b4f";
-    ctx.fillRect(tl, ty, tr - tl, 6);
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(tl, ty, tr - tl, 1.5);
-    ctx.fillStyle = "#3b3b3b";
-    ctx.fillRect(tl + 6, ty + 6, 3, 20);
-    ctx.fillRect(tr - 9, ty + 6, 3, 20);
-    ctx.fillStyle = "rgba(240,240,240,0.9)";
-    ctx.fillRect(mid - 1, ty - 9, 2, 9);
-  }
-  if (t >= 0) {
-    const i = Math.min(r.hits - 1, Math.floor(t / r.each));
-    const from = i % 2 === 0 ? r.pa : r.pb;
-    const to = i % 2 === 0 ? r.pb : r.pa;
-    const last = i === r.hits - 1;
-    let k = (t - i * r.each) / r.each;
-    if (!last) k = Math.min(1, k);
-    const dir = Math.sign(to.x - from.x);
-    const fx = from.x + dir * 34, tx = to.x - dir * 30;
-    let x: number, y: number;
-    if (r.game === "badminton") {
-      const fy = from.y - from.h * 0.12, ty2 = to.y - to.h * 0.12;
-      x = fx + (tx - fx) * k;
-      y = fy + (ty2 - fy) * k - Math.sin(Math.min(1, k) * Math.PI) * 110;
-      if (last && k > 1) {
-        // Past the racket and down to the floor.
-        x = tx + dir * (k - 1) * 60;
-        y = Math.min(ground - 4, ty2 + (k - 1) * (k - 1) * 900);
-      }
-      const ang = Math.atan2(y - (fy + (ty2 - fy) * Math.max(0, k - 0.02)), dir);
-      ctx.translate(x, y);
-      ctx.rotate(k < 0.5 ? (dir > 0 ? 0 : Math.PI) - 0.6 * dir : ang);
-      ctx.fillStyle = "#fff";
-      ctx.strokeStyle = "#999";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(-11, -5);
-      ctx.lineTo(-11, 5);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = "#d62828";
-      ctx.beginPath();
-      ctx.arc(1, 0, 3, 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      const table = ground - 27;
-      const fy = from.y, ty2 = to.y;
-      // One bounce on the receiver's half.
-      const b = 0.62;
-      x = fx + (tx - fx) * Math.min(k, 1.6);
-      if (k < b) y = fy + (table - fy) * (k / b) ** 2;
-      else if (k <= 1 || !last) y = table - Math.sin(((Math.min(k, 1) - b) / (1 - b)) * Math.PI * 0.5) * (table - ty2);
-      else y = Math.min(ground - 3, ty2 + (k - 1) * (k - 1) * 1200);
-      ctx.fillStyle = "#ff9f1c";
-      ctx.strokeStyle = "#b36b00";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(x, y, 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    }
-  }
-  ctx.restore();
-  return true;
-}
-
-// ---------------------------------------------------------------- 小皮鞭
-/**
- * One crack of the whip. `from` is the pet holding it (null: the user, whose
- * fist comes in from above). The pets' lines ride on `pet.script`; the lash,
- * the impact and the three sounds (crack, yelp, the master's hmph) live in
- * whip.ts, one source for every window.
- */
-const lashes: Whip[] = [];
-
-async function startWhip(d: Record<string, unknown>) {
-  const delay = Number(d.delay) || 0;
-  const hit = Number(d.hit) || 760;
-  const recv = performance.now();
-  // Read the windows just before the stroke: the whipper may still be walking over.
-  await new Promise((r) => setTimeout(r, Math.max(0, delay - 40)));
-  const to = await petBox(String(d.to));
-  if (!to || to.x < 0 || to.x > MON.w) return;
-  const from = d.from ? await petBox(String(d.from)) : null;
-  lashes.push(new Whip({ from, to, t0: recv + delay, hit, screenW: MON.w, floor: to.bottom, text: tr("啪！", "CRACK!"), sfx }));
-  void setShown(allowed);
-}
-
-function drawLashes(now: number): boolean {
-  for (let i = lashes.length - 1; i >= 0; i--) {
-    if (!lashes[i].step(now)) lashes.splice(i, 1);
-    else lashes[i].draw(ctx, now);
-  }
-  return lashes.length > 0;
-}
-
-// ---------------------------------------------------------------- 相声
-
-/** A crosstalk show: the table between the pets, big bubbles, the audience. */
-interface XsLine { who: string; text: string; at: number; ms: number; fx: string; act?: string | null }
-interface Xs { a: string; b: string; title: string; t0: number; ms: number; lines: XsLine[]; pa: Box; pb: Box; fired: Set<number>; spoken: Set<number>; voice: boolean; en: boolean }
-interface Laugh { x: number; y: number; text: string; color: string; t0: number; dx: number }
-let xs: Xs | null = null;
-const laughs: Laugh[] = [];
-const FONT = "14px 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', system-ui, sans-serif";
-
-async function startXs(d: Record<string, unknown>) {
-  const walk = Number(d.walk) || 1300;
-  const recv = performance.now();
-  await new Promise((r) => setTimeout(r, walk - 60));
-  const [pa, pb] = [await petBox(String(d.a)), await petBox(String(d.b))];
-  if (!pa || !pb || pa.x < 0 || pa.x > MON.w) return;
-  xs = { a: String(d.a), b: String(d.b), title: String(d.title ?? ""), t0: recv + walk, ms: Number(d.ms), lines: (d.lines as XsLine[]) ?? [], pa, pb, fired: new Set(), spoken: new Set(), voice: d.voice !== false, en: d.lang === "en" };
-  if (xs.voice) sfx("xingmu");
-  void setShown(allowed);
-}
-
-// The two performers' voices: the Windows voices that come with the system
-// (offline). 逗哏 gets a male voice, 捧哏 a female one when there is one.
-function pickVoices(en: boolean): [SpeechSynthesisVoice | null, SpeechSynthesisVoice | null, boolean] {
-  const all = typeof speechSynthesis === "undefined" ? [] : speechSynthesis.getVoices();
-  const mine = all.filter((v) => (en ? /^en/i.test(v.lang) : /^zh/i.test(v.lang) && !/HK|TW/i.test(v.lang)));
-  const pool = mine.length ? mine : all.filter((v) => (en ? /^en/i : /^zh/i).test(v.lang));
-  const male = en ? /David|Mark|Guy|George|James|Richard/i : /Kangkang|Yunxi|Yunjian|Yunyang|Kang/i;
-  const female = en ? /Zira|Aria|Jenny|Hazel|Susan|Eva/i : /Yaoyao|Huihui|Xiaoxiao|Xiaoyi|Yao|Hui/i;
-  const a = pool.find((v) => male.test(v.name)) ?? pool[0] ?? null;
-  const b = pool.find((v) => female.test(v.name) && v !== a) ?? pool.find((v) => v !== a) ?? a;
-  return [a, b, a === b];
-}
-
-/** Say a line (cutting off the previous one so the voices stay on the bubbles). */
-function speak(text: string, who: string, en: boolean) {
-  if (typeof speechSynthesis === "undefined" || !allowed) return;
-  const [va, vb, same] = pickVoices(en);
-  if (!va) return;
-  const clean = text.replace(/[“”"《》「」『』]/g, "").replace(/[—…]+/g, "，").replace(/\/\//g, "").trim();
-  if (!clean) return;
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(clean);
-  const b = who === "b";
-  u.voice = b ? vb : va;
-  u.lang = en ? "en-US" : "zh-CN";
-  u.rate = en ? 1.12 : 1.3;
-  // One voice for both: tell them apart by pitch.
-  u.pitch = same ? (b ? 1.35 : 0.85) : b ? 1.08 : 1;
-  u.volume = 1;
-  speechSynthesis.speak(u);
-}
-
-function stopXs() {
-  xs = null;
-  if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
-}
-
-/** Break text into lines that fit `maxW` (CJK by character, Latin by word). */
-function wrap(text: string, maxW: number): string[] {
-  ctx.font = FONT;
-  const out: string[] = [];
-  let line = "";
-  const tokens = text.match(/[\u2E80-\uFFFF]|[^\s\u2E80-\uFFFF]+|\s+/g) ?? [];
-  for (const tk of tokens) {
-    const next = line + tk;
-    if (ctx.measureText(next).width > maxW && line.trim()) {
-      out.push(line.trimEnd());
-      line = tk.trimStart();
-    } else line = next;
-  }
-  if (line.trim()) out.push(line.trimEnd());
-  return out.slice(0, 5);
-}
-
-/** A speech bubble above a pet; `side` pushes it outward (-1 left, 1 right). */
-function bubble(text: string, box: Box, side: number, color: string, k: number) {
-  const maxW = 220;
-  const rows = wrap(text, maxW - 26);
-  ctx.font = FONT;
-  const w = Math.min(maxW, Math.max(...rows.map((r) => ctx.measureText(r).width)) + 26);
-  const lh = 20, h = rows.length * lh + 18;
-  const tipX = box.x + side * 14, tipY = box.top + 42;
-  let x = tipX - w / 2 + side * (w / 2 - 30);
-  x = Math.max(6, Math.min(MON.w - w - 6, x));
-  const y = Math.max(6, tipY - 12 - h);
-  // Pop in from the tail.
-  const sc = 0.85 + 0.15 * Math.min(1, k * 6);
-  ctx.save();
-  ctx.globalAlpha = Math.min(1, k * 8);
-  ctx.translate(tipX, tipY);
-  ctx.scale(sc, sc);
-  ctx.translate(-tipX, -tipY);
-  ctx.shadowColor = "rgba(31,34,69,0.22)";
-  ctx.shadowBlur = 14;
-  ctx.shadowOffsetY = 4;
-  ctx.fillStyle = "#ffffff";
-  ctx.beginPath();
-  ctx.roundRect(x, y, w, h, 14);
-  ctx.fill();
-  ctx.shadowColor = "transparent";
-  const tx = Math.max(x + 18, Math.min(x + w - 18, tipX));
-  ctx.beginPath();
-  ctx.moveTo(tx - 7, y + h - 1);
-  ctx.lineTo(tipX, tipY);
-  ctx.lineTo(tx + 7, y + h - 1);
-  ctx.closePath();
-  ctx.fill();
-  // Speaker colour: a short bar on top.
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.roundRect(x + 13, y + 6, 20, 3, 1.5);
-  ctx.fill();
-  ctx.fillStyle = "#1f2245";
-  ctx.font = FONT;
-  ctx.textAlign = "left";
-  ctx.textBaseline = "top";
-  rows.forEach((r, i) => ctx.fillText(r, x + 13, y + 13 + i * lh));
-  ctx.restore();
-}
-
-/** The little 相声 table: red cloth with a gold trim, a fan and a 醒木 on top. */
-function drawTable(cx: number, ground: number) {
-  const w = 54, top = ground - 40;
-  ctx.save();
-  ctx.fillStyle = "#6b3f2a";
-  ctx.fillRect(cx - w / 2 + 4, top + 6, 4, 34);
-  ctx.fillRect(cx + w / 2 - 8, top + 6, 4, 34);
-  ctx.fillStyle = "#8a5236";
-  ctx.fillRect(cx - w / 2 - 3, top, w + 6, 6);
-  ctx.fillStyle = "#d6372c";
-  ctx.beginPath();
-  ctx.moveTo(cx - w / 2 - 2, top + 6);
-  ctx.lineTo(cx + w / 2 + 2, top + 6);
-  ctx.lineTo(cx + w / 2 + 5, top + 30);
-  ctx.lineTo(cx - w / 2 - 5, top + 30);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = "#f4b63f";
-  ctx.fillRect(cx - w / 2 - 5, top + 27, w + 10, 3);
-  ctx.font = "bold 11px 'Microsoft YaHei UI', 'Segoe UI', sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(tr("相声", "COMEDY"), cx, top + 17);
-  ctx.fillStyle = "#f6f1e7";
-  ctx.save();
-  ctx.translate(cx - 10, top - 2);
-  ctx.rotate(-0.25);
-  ctx.fillRect(-10, -2, 20, 4);
-  ctx.restore();
-  ctx.fillStyle = "#4a2a1c";
-  ctx.fillRect(cx + 6, top - 5, 10, 5);
-  ctx.restore();
-}
-
-function drawBanner(text: string, cx: number, y: number, k: number) {
-  ctx.save();
-  ctx.globalAlpha = Math.max(0, k);
-  ctx.font = "bold 15px 'Microsoft YaHei UI', 'Segoe UI', sans-serif";
-  const w = ctx.measureText(text).width + 54;
-  const x = Math.max(6, Math.min(MON.w - w - 6, cx - w / 2));
-  ctx.fillStyle = "#2b3275";
-  ctx.beginPath();
-  ctx.roundRect(x, y - 15, w, 30, 15);
-  ctx.fill();
-  ctx.fillStyle = "#ee5b3c";
-  ctx.beginPath();
-  ctx.arc(x + 14, y, 4, 0, Math.PI * 2);
-  ctx.arc(x + w - 14, y, 4, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#fff";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(text, x + w / 2, y + 1);
-  ctx.restore();
-}
-
-function addLaughs(cx: number, ground: number, clap: boolean, now: number) {
-  const words = clap
-    ? [tr("好！", "Yes!"), "👏", tr("再来一段！", "Again!"), "👏", tr("好！", "Ha!"), "👏"]
-    : [tr("哈哈哈", "haha"), tr("哈哈", "LOL"), "😂", tr("哈哈哈哈", "hahaha")];
-  const colors = ["#ee5b3c", "#2b3275", "#2f9a8a", "#e0794f", "#ad98e6"];
-  // Spread across the stage in slots, leaving the table in the middle clear.
-  const n = clap ? 6 : 4;
-  const slots = clap ? [-150, -95, -50, 50, 95, 150] : [-120, -60, 60, 120];
-  const order = slots.map((v) => ({ v, r: Math.random() })).sort((p, q) => p.r - q.r).map((o) => o.v);
-  for (let i = 0; i < n; i++) {
-    laughs.push({ x: cx + order[i] + (Math.random() - 0.5) * 14, y: ground - 46 - (i % 2) * 22, text: words[i % words.length], color: colors[i % colors.length], t0: now + i * 170, dx: (Math.random() - 0.5) * 16 });
-  }
-}
-
-function drawXs(now: number): boolean {
-  if (xs && now - xs.t0 > xs.ms + 400) xs = null; // the last voice line ends by itself
-  const x = xs;
-  if (x) {
-    const t = now - x.t0;
-    const ground = Math.max(x.pa.bottom, x.pb.bottom);
-    const mid = (x.pa.x + x.pb.x) / 2;
-    drawTable(mid, ground);
-    // The title hangs above them through the opening.
-    const opening = x.lines.length > 3 ? x.lines[3].at : 6000;
-    if (x.title && t < opening + 1500 && t > 0) {
-      drawBanner(tr(`相声《${x.title}》`, `“${x.title}”`), mid, Math.max(24, Math.min(x.pa.top, x.pb.top) - 30), Math.min(1, t / 300, (opening + 1500 - t) / 500));
-    }
-    const side = (b: Box, o: Box) => (b.x < o.x ? -1 : 1);
-    x.lines.forEach((l, i) => {
-      if (t >= l.at && t < l.at + l.ms) {
-        const k = (t - l.at) / l.ms;
-        if (x.voice && !x.spoken.has(i)) {
-          x.spoken.add(i);
-          speak(l.text, l.who, x.en);
-        }
-        if (l.who !== "b") bubble(l.text, x.pa, side(x.pa, x.pb), "#ee5b3c", k);
-        if (l.who !== "a") bubble(l.text, x.pb, side(x.pb, x.pa), "#2b3275", k);
-      }
-      // Laughs right after the punchline; applause with the bow.
-      const at = l.fx === "clap" ? l.at + 200 : l.at + l.ms;
-      if ((l.fx === "laugh" || l.fx === "clap") && t >= at && !x.fired.has(i)) {
-        x.fired.add(i);
-        addLaughs(mid, ground, l.fx === "clap", now);
-        if (x.voice) sfx(l.fx === "clap" ? "applause" : "applause-short");
-      }
-    });
-  }
-  for (let i = laughs.length - 1; i >= 0; i--) {
-    const p = laughs[i];
-    const k = (now - p.t0) / 1500;
-    if (k < 0) continue;
-    if (k >= 1) {
-      laughs.splice(i, 1);
-      continue;
-    }
-    ctx.save();
-    ctx.globalAlpha = Math.min(1, (1 - k) * 2);
-    ctx.font = "bold 16px 'Microsoft YaHei UI', 'Segoe UI', 'Segoe UI Emoji', sans-serif";
-    ctx.textAlign = "center";
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = "rgba(255,255,255,0.9)";
-    const px = p.x + p.dx * k, py = p.y - k * 46;
-    ctx.strokeText(p.text, px, py);
-    ctx.fillStyle = p.color;
-    ctx.fillText(p.text, px, py);
-    ctx.restore();
-  }
-  return !!xs || laughs.length > 0;
-}
-
-async function petHead(pet: string): Promise<{ x: number; y: number } | null> {
-  if (!inTauri) return null;
-  const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
-  const w = await WebviewWindow.getByLabel(`pet-${pet}`);
-  if (!w) return null;
-  const sc = await w.scaleFactor();
-  const p = (await w.outerPosition()).toLogical(sc);
-  const s = (await w.outerSize()).toLogical(sc);
-  return { x: p.x + s.width / 2 - MON.x, y: p.y + s.height * 0.5 - MON.y };
-}
-
-function drawToss(now: number) {
-  if (!toss || toss.caught) {
-    tossBall = null;
-    return false;
-  }
-  const t = now - toss.t0;
-  const i = Math.floor(t / toss.each);
-  if (i >= toss.throws) {
-    tossBall = null;
-    return false;
-  }
-  const from = tossPos.get(i % 2 === 0 ? toss.a : toss.b);
-  const to = tossPos.get(i % 2 === 0 ? toss.b : toss.a);
-  if (!from || !to) return true;
-  const k = Math.min(1, (t - i * toss.each) / (toss.each * 0.8));
-  const x = from.x + (to.x - from.x) * k;
-  const y = from.y + (to.y - from.y) * k - Math.sin(Math.PI * k) * 90;
-  tossBall = { x, y };
-  ctx.save();
-  ctx.fillStyle = "rgba(0,0,0,0.15)";
-  ctx.beginPath();
-  ctx.ellipse(x, Math.max(from.y, to.y) + 40, 8 * (1 - Math.sin(Math.PI * k) * 0.5), 3, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.translate(x, y);
-  ctx.rotate(t / 120);
-  ctx.fillStyle = "#e63946";
-  ctx.beginPath();
-  ctx.arc(0, 0, 9, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = "#fff";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(0, 0, 9, -0.6, 0.6);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(0, 0, 9, Math.PI - 0.6, Math.PI + 0.6);
-  ctx.stroke();
-  ctx.restore();
-  return true;
-}
-
-async function startToss(d: { a: string; b: string; throws: number; each: number }) {
-  toss = { ...d, t0: performance.now(), caught: false };
-  for (const p of [d.a, d.b]) tossPos.set(p, await petHead(p));
-  // Only the overlay that holds the first pet draws the ball.
-  if (!tossPos.get(d.a) || tossPos.get(d.a)!.x < 0 || tossPos.get(d.a)!.x > MON.w) toss = null;
-  else void setShown(allowed);
-}
-
 async function setShown(on: boolean) {
   if (on === shown || !inTauri) return;
   shown = on;
@@ -761,21 +518,23 @@ async function setShown(on: boolean) {
 }
 
 async function reportHits() {
-  const ball = tossBall ? [{ x: tossBall.x - 16, y: tossBall.y - 16, w: 32, h: 32 }] : [];
   const rects = world?.frozen
     ? []
-    : [...ball, ...[...crawlers.values()]
+    : [...crawlers.values()]
         .filter((c) => !c.deadAt)
         .map((c) => {
           const s = (c.bug.boss ? BOSS : BUG) + 10;
           return { x: c.x - s / 2, y: c.y - s, w: s, h: s + 4 };
-        })];
+        });
   const key = JSON.stringify(rects.map((r) => [Math.round(r.x / 4), Math.round(r.y / 4)]));
   if (key === lastHits || !inTauri) return;
   lastHits = key;
   const { invoke } = await import("@tauri-apps/api/core");
   await invoke("set_hit_rects", { rects }).catch(() => {});
 }
+
+let conn: Conn | null = null;
+let lastHunt = 0;
 
 function step(now: number) {
   const dt = Math.min(0.05, (now - (lastT || now)) / 1000);
@@ -793,6 +552,9 @@ function step(now: number) {
       if (c.y >= floorY()) {
         c.y = floorY();
         c.falling = false;
+        c.landedAt = now;
+        // A boss lands on its pet: it says so.
+        if (c.bug.boss) void petSays(c.bug.pet, "bug.pinned", 0);
       }
     } else if (!frozen) {
       c.x += c.vx * dt;
@@ -809,24 +571,29 @@ function step(now: number) {
 
   ctx.clearRect(0, 0, MON.w, MON.h);
   for (const c of crawlers.values()) drawBug(c, now);
-  const xsOn = drawXs(now);
-  const lashing = drawLashes(now);
-  const tossing = drawToss(now) || drawRally(now) || xsOn || lashing;
   drawPopups(now);
-  void setShown(allowed && (crawlers.size > 0 || popups.length > 0 || tossing));
+  void setShown(allowed && (crawlers.size > 0 || popups.length > 0));
   void reportHits();
+  if (conn && now - lastHunt > 250) {
+    lastHunt = now;
+    void hunt(conn);
+  }
   requestAnimationFrame(step);
 }
 
 async function main() {
   size();
-  // The voice list loads lazily; ask early so the first show has it.
-  if (typeof speechSynthesis !== "undefined") speechSynthesis.getVoices();
-  const conn = await connect();
-  await initLang(conn);
-  onWorld(await getJson<WorldState>(conn, "/v1/world"));
-  subscribe(conn, (type, data) => {
-    if (type === "world.state") onWorld(data as WorldState);
+  const c = await connect();
+  conn = c;
+  await initLang(c);
+  onWorld(await getJson<WorldState>(c, "/v1/world"));
+  const list = await getJson<{ pets: { id: string; skin?: string; state: string }[] }>(c, "/v1/pets").catch(() => ({ pets: [] }));
+  for (const p of list.pets) pets.set(p.id, { skin: p.skin ?? "zimeng", state: p.state });
+  subscribe(c, (type, data) => {
+    if (type === "pet.state") {
+      const p = data as { id: string; skin?: string; state: string };
+      if (p?.id) pets.set(p.id, { skin: p.skin ?? "zimeng", state: p.state });
+    } else if (type === "world.state") onWorld(data as WorldState);
     else if (type === "model_download") {
       const d = data as { done?: number; total?: number; ready?: boolean; error?: string };
       if (d.error) {
@@ -838,46 +605,15 @@ async function main() {
         showModelToast(tr(`在下载模型… ${pct}%`, `Downloading the model… ${pct}%`), "progress");
       }
     } else if (type === "bug.spawn") void spawn(data as Bug);
-    else if (type === "xs") void startXs(data as Record<string, unknown>);
-    else if (type === "pet.cancel") {
-      const d = data as { pet: string };
-      if (xs && (d.pet === xs.a || d.pet === xs.b)) stopXs();
-    } else if (type === "duo") {
-      const d = data as Record<string, unknown>;
-      if (d.game === "badminton" || d.game === "pingpong") void startRally(d);
-      else if (PRIMARY) armSounds(d);
-    } else if (type === "whip") {
-      void startWhip(data as Record<string, unknown>);
-    } else if (type === "duel" || type === "race") {
-      // Sounds only (the pet windows show the chips); one overlay plays them.
-      const d = data as { state?: string; winner?: string };
-      if (PRIMARY && d.state === "start") sfx("whistle");
-      if (PRIMARY && d.state === "done" && d.winner && d.winner !== "tie") sfx("win");
-    } else if (type === "toss") {
-      const d = data as { state: string; a: string; b: string; throws: number; each: number; coins?: number };
-      if (d.state === "start") void startToss(d);
-      else if (toss) {
-        if (d.state === "caught" && tossBall) {
-          popups.push({ x: tossBall.x, y: tossBall.y - 16, text: tr(`截胡！+${d.coins ?? 0}`, `Stolen! +${d.coins ?? 0}`), color: "#e63946", t0: performance.now() });
-          sfx("coin");
-        }
-        toss = null;
-      }
-    }
   });
 
   canvas.addEventListener("mousedown", (e) => {
-    // The ball in the air first: catching it steals it.
-    if (tossBall && Math.hypot(e.offsetX - tossBall.x, e.offsetY - tossBall.y) < 18) {
-      void postJson(conn, "/v1/world/catch", {});
-      return;
-    }
     // The topmost live bug under the cursor.
     const hit = [...crawlers.values()].reverse().find((c) => {
       const s = (c.bug.boss ? BOSS : BUG) + 10;
       return !c.deadAt && Math.abs(e.offsetX - c.x) <= s / 2 && e.offsetY <= c.y + 4 && e.offsetY >= c.y - s;
     });
-    if (hit) void squash(conn, hit);
+    if (hit) void squash(c, hit);
   });
 
   if (inTauri) {
@@ -885,17 +621,11 @@ async function main() {
     const w = getCurrentWebviewWindow();
     await w.listen<boolean>("overlay:visible", (e) => {
       allowed = e.payload;
-      if (!allowed) {
-        void setShown(false);
-        if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
-      }
+      if (!allowed) void setShown(false);
     });
     await w.listen<boolean>("boss", (e) => {
       allowed = !e.payload;
-      if (!allowed) {
-        void setShown(false);
-        if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
-      }
+      if (!allowed) void setShown(false);
     });
     const { invoke } = await import("@tauri-apps/api/core");
     allowed = !(await invoke<boolean>("quiet").catch(() => false));

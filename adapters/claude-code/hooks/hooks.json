@@ -1,12 +1,12 @@
 {
-  "description": "Familiar: forward agent events to the local pet daemon",
+  "description": "Rill: forward agent events to the local pet daemon",
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/familiar-emit\" --source claude-code",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/rillbuddy-emit\" --source claude-code",
             "timeout": 5
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/familiar-emit\" --source claude-code",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/rillbuddy-emit\" --source claude-code",
             "timeout": 5
           }
         ]
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/familiar-emit\" --source claude-code",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/rillbuddy-emit\" --source claude-code",
             "timeout": 5
           }
         ]
@@ -41,7 +41,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/familiar-emit\" --source claude-code",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/rillbuddy-emit\" --source claude-code",
             "timeout": 5
           }
         ]
@@ -53,7 +53,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/familiar-emit\" --source claude-code",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/rillbuddy-emit\" --source claude-code",
             "timeout": 5
           }
         ]
@@ -65,8 +65,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/familiar-emit\" --source claude-code",
-            "timeout": 5
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/rillbuddy-emit\" --source claude-code",
+            "timeout": 150
           }
         ]
       }
@@ -76,7 +76,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/familiar-emit\" --source claude-code",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/rillbuddy-emit\" --source claude-code",
             "timeout": 5
           }
         ]
@@ -87,7 +87,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/familiar-emit\" --source claude-code",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/rillbuddy-emit\" --source claude-code",
             "timeout": 5
           }
         ]
@@ -98,7 +98,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/familiar-emit\" --source claude-code",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/rillbuddy-emit\" --source claude-code",
             "timeout": 5
           }
         ]
@@ -109,7 +109,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/familiar-emit\" --source claude-code",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/rillbuddy-emit\" --source claude-code",
             "timeout": 5
           }
         ]

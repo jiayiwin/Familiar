@@ -1,8 +1,8 @@
-//! Local SQLite store (~/.familiar/familiar.db): turns, wallet log, fish
-//! basket, bug kills, pet mood, interaction log. Nothing leaves the machine.
+//! Local SQLite store (~/.rillbuddy/rillbuddy.db): turns, fish basket, bug
+//! kills, interaction log, day events, the bond. Nothing leaves the machine.
 //!
-//! The wallet balance is the sum of wallet_log (no balance column), so it can
-//! always be audited and rolled back (design §8).
+//! A database from an earlier build also holds tables this one no longer
+//! reads (wallet, shop, games); they are left alone.
 
 use chrono::{Local, TimeZone, Timelike};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -28,22 +28,14 @@ CREATE TABLE IF NOT EXISTS daily (
   day TEXT NOT NULL, source TEXT NOT NULL, turns INTEGER NOT NULL, clean INTEGER NOT NULL,
   errors INTEGER NOT NULL, ms INTEGER NOT NULL, PRIMARY KEY (day, source)
 );
-CREATE TABLE IF NOT EXISTS wallet_log (
-  id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, day TEXT NOT NULL,
-  delta INTEGER NOT NULL, reason TEXT NOT NULL, ref TEXT NOT NULL DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS wallet_day ON wallet_log(day);
 CREATE TABLE IF NOT EXISTS catches (
   id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, day TEXT NOT NULL, outcome TEXT NOT NULL,
-  fish_id TEXT NOT NULL DEFAULT '', rarity TEXT NOT NULL DEFAULT '', coins INTEGER NOT NULL DEFAULT 0,
+  fish_id TEXT NOT NULL DEFAULT '', rarity TEXT NOT NULL DEFAULT '',
   source TEXT NOT NULL, session TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS catches_day ON catches(day);
 CREATE TABLE IF NOT EXISTS bug_kills (
-  id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, day TEXT NOT NULL, boss INTEGER NOT NULL, coins INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS pet_stats (
-  pack TEXT PRIMARY KEY, mood INTEGER NOT NULL DEFAULT 0, petted INTEGER NOT NULL DEFAULT 0
+  id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, day TEXT NOT NULL, boss INTEGER NOT NULL, coins INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS interactions_log (
   id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, actor TEXT NOT NULL, rule TEXT NOT NULL,
@@ -55,20 +47,27 @@ CREATE TABLE IF NOT EXISTS events (
   what TEXT NOT NULL DEFAULT '', n INTEGER NOT NULL DEFAULT 1
 );
 CREATE INDEX IF NOT EXISTS events_day ON events(day, kind);
+CREATE TABLE IF NOT EXISTS bond_moments (
+  id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, kind TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS bond_moments_ts ON bond_moments(ts);
+CREATE TABLE IF NOT EXISTS bond_fragments (
+  id INTEGER PRIMARY KEY,
+  created_at INTEGER NOT NULL,
+  fire_at INTEGER NOT NULL,
+  moment_kind TEXT NOT NULL,
+  delivered INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS bond_fragments_fire ON bond_fragments(fire_at) WHERE delivered = 0;
 "#;
 
 /// Local calendar day of a ms timestamp, "YYYY-MM-DD".
 pub fn day_of(ts: u64) -> String {
-    Local.timestamp_millis_opt(ts as i64).single().map(|d| d.format("%Y-%m-%d").to_string()).unwrap_or_default()
-}
-
-/// Milliseconds since local midnight.
-pub fn ms_of_day(ts: u64) -> u64 {
     Local
         .timestamp_millis_opt(ts as i64)
         .single()
-        .map(|d| (d.num_seconds_from_midnight() as u64) * 1000 + (ts % 1000))
-        .unwrap_or(0)
+        .map(|d| d.format("%Y-%m-%d").to_string())
+        .unwrap_or_default()
 }
 
 #[derive(Debug, Clone, Default, Serialize, PartialEq)]
@@ -84,19 +83,15 @@ pub struct CatchRow {
     pub outcome: String,
     pub fish_id: String,
     pub rarity: String,
-    pub coins: i64,
     pub source: String,
 }
 
-/// Who stood for a camp on a day: the pack that was on duty, and what it got through.
-#[derive(Debug, Clone, Serialize, PartialEq)]
-pub struct Duty {
-    pub camp: String,
-    pub pack: String,
-    /// Display name; the server fills it from the pack library (defaults to the id).
-    pub name: String,
-    pub turns: u32,
-    pub work_ms: u64,
+/// A notable moment in the user's work session, stored for letter context.
+#[derive(Debug, Clone, Serialize)]
+pub struct BondMoment {
+    pub ts: u64,
+    pub kind: String,
+    pub detail: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -110,14 +105,6 @@ pub struct Report {
     pub catches: Vec<CatchRow>,
     pub bugs: u32,
     pub bosses: u32,
-    pub coins_earned: i64,
-    pub balance: i64,
-    /// Lashes taken that day, and by whom (pet id -> count).
-    pub whips: u32,
-    pub whipped: std::collections::BTreeMap<String, u32>,
-    /// Games played (tug, duo games, races, duels, rock-paper-scissors), by game.
-    pub games: u32,
-    pub games_by: std::collections::BTreeMap<String, u32>,
     /// Seconds of radio: stations played in the radio window + crosstalk pieces.
     pub radio_s: u64,
     pub kegel_sets: u32,
@@ -125,8 +112,6 @@ pub struct Report {
     pub letters: u32,
     /// Most agent sessions online at once that day.
     pub peak_agents: u32,
-    /// The pets on duty (one per camp that worked or was online).
-    pub duty: Vec<Duty>,
 }
 
 impl Db {
@@ -135,22 +120,25 @@ impl Db {
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.execute_batch(SCHEMA)?;
-        conn.execute_batch(crate::progress::SCHEMA)?;
-        conn.execute_batch(crate::games_db::SCHEMA)?;
-        Ok(Db { conn: Mutex::new(conn) })
+        Ok(Db {
+            conn: Mutex::new(conn),
+        })
     }
 
     /// Run a query on the connection (for modules with their own tables).
-    pub fn with<T>(&self, f: impl FnOnce(&Connection) -> rusqlite::Result<T>) -> rusqlite::Result<T> {
+    pub fn with<T>(
+        &self,
+        f: impl FnOnce(&Connection) -> rusqlite::Result<T>,
+    ) -> rusqlite::Result<T> {
         f(&self.conn.lock().unwrap())
     }
 
     pub fn in_memory() -> Db {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(SCHEMA).unwrap();
-        conn.execute_batch(crate::progress::SCHEMA).unwrap();
-        conn.execute_batch(crate::games_db::SCHEMA).unwrap();
-        Db { conn: Mutex::new(conn) }
+        Db {
+            conn: Mutex::new(conn),
+        }
     }
 
     pub fn record_turn(&self, source: &str, session: &str, project: &str, t: &FinishedTurn) {
@@ -174,81 +162,59 @@ impl Db {
         );
     }
 
-    pub fn balance(&self) -> i64 {
-        let c = self.conn.lock().unwrap();
-        c.query_row("SELECT COALESCE(SUM(delta), 0) FROM wallet_log", [], |r| r.get(0)).unwrap_or(0)
-    }
-
-    pub fn income_on(&self, day: &str) -> i64 {
-        let c = self.conn.lock().unwrap();
-        c.query_row("SELECT COALESCE(SUM(delta), 0) FROM wallet_log WHERE day = ?1 AND delta > 0", [day], |r| r.get(0))
-            .unwrap_or(0)
-    }
-
-    /// Add coins. Income is capped per day; the part over the cap is not
-    /// paid. Returns what was actually granted.
-    pub fn earn(&self, amount: i64, reason: &str, reference: &str, now: u64, daily_cap: i64) -> i64 {
-        if amount <= 0 {
-            return 0;
-        }
-        let day = day_of(now);
-        let room = (daily_cap - self.income_on(&day)).max(0);
-        let grant = amount.min(room);
-        if grant > 0 {
-            let c = self.conn.lock().unwrap();
-            let _ = c.execute(
-                "INSERT INTO wallet_log (ts, day, delta, reason, ref) VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![now as i64, day, grant, reason, reference],
-            );
-        }
-        grant
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub fn add_catch(&self, now: u64, outcome: &str, fish_id: &str, rarity: &str, coins: i64, source: &str, session: &str) {
+    pub fn add_catch(
+        &self,
+        now: u64,
+        outcome: &str,
+        fish_id: &str,
+        rarity: &str,
+        source: &str,
+        session: &str,
+    ) {
         let c = self.conn.lock().unwrap();
         let _ = c.execute(
-            "INSERT INTO catches (ts, day, outcome, fish_id, rarity, coins, source, session) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            params![now as i64, day_of(now), outcome, fish_id, rarity, coins, source, session],
+            "INSERT INTO catches (ts, day, outcome, fish_id, rarity, source, session) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![now as i64, day_of(now), outcome, fish_id, rarity, source, session],
         );
     }
 
-    /// Fish (not boots or escapes) caught in the hour before `now`.
-    pub fn fish_last_hour(&self, now: u64) -> u32 {
-        let c = self.conn.lock().unwrap();
-        c.query_row(
-            "SELECT COUNT(*) FROM catches WHERE outcome = 'fish' AND ts > ?1",
-            [now.saturating_sub(3_600_000) as i64],
-            |r| r.get(0),
-        )
+    /// Take the newest fish out of the basket (it was fed to the pet). False when the basket is empty.
+    pub fn eat_fish(&self) -> bool {
+        self.eat_one().is_some()
+    }
+
+    /// Take the newest sweet out of the jar: which kind it was, or None when the jar is empty.
+    pub fn eat_one(&self) -> Option<String> {
+        self.with(|c| {
+            let row: Option<(i64, String)> =
+                c.query_row("SELECT id, fish_id FROM catches WHERE outcome = 'fish' ORDER BY id DESC LIMIT 1", [], |r| Ok((r.get(0)?, r.get(1)?))).optional()?;
+            if let Some((id, _)) = &row {
+                c.execute("UPDATE catches SET outcome = 'eaten' WHERE id = ?1", [id])?;
+            }
+            Ok(row.map(|(_, kind)| kind))
+        })
+        .unwrap_or(None)
+    }
+
+    /// Fish still in the basket: caught and not yet fed.
+    pub fn fish_left(&self) -> i64 {
+        self.with(|c| {
+            c.query_row(
+                "SELECT COUNT(*) FROM catches WHERE outcome = 'fish'",
+                [],
+                |r| r.get(0),
+            )
+        })
         .unwrap_or(0)
     }
 
-    pub fn record_bug_kill(&self, now: u64, boss: bool, coins: i64) {
+    pub fn record_bug_kill(&self, now: u64, boss: bool) {
         let c = self.conn.lock().unwrap();
+        // `coins` is spelled out because a database from an earlier build has the column without a default.
         let _ = c.execute(
-            "INSERT INTO bug_kills (ts, day, boss, coins) VALUES (?1, ?2, ?3, ?4)",
-            params![now as i64, day_of(now), boss as i64, coins],
+            "INSERT INTO bug_kills (ts, day, boss, coins) VALUES (?1, ?2, ?3, 0)",
+            params![now as i64, day_of(now), boss as i64],
         );
-    }
-
-    pub fn normal_kills_total(&self) -> u64 {
-        let c = self.conn.lock().unwrap();
-        c.query_row("SELECT COUNT(*) FROM bug_kills WHERE boss = 0", [], |r| r.get::<_, i64>(0)).unwrap_or(0) as u64
-    }
-
-    pub fn add_mood(&self, pack: &str, delta: i64) {
-        let c = self.conn.lock().unwrap();
-        let _ = c.execute(
-            "INSERT INTO pet_stats (pack, mood, petted) VALUES (?1, ?2, 1)
-             ON CONFLICT(pack) DO UPDATE SET mood = mood + ?2, petted = petted + 1",
-            params![pack, delta],
-        );
-    }
-
-    pub fn mood(&self, pack: &str) -> i64 {
-        let c = self.conn.lock().unwrap();
-        c.query_row("SELECT mood FROM pet_stats WHERE pack = ?1", [pack], |r| r.get(0)).optional().ok().flatten().unwrap_or(0)
     }
 
     pub fn log_interaction(&self, now: u64, actor: &str, rule: &str, attention_active: bool) {
@@ -259,7 +225,7 @@ impl Db {
         );
     }
 
-    /// Per-camp (turns, clean, errors) for one day; subagents never get here.
+    /// Per-agent (turns, clean, errors) for one day; subagents never get here.
     pub fn camp_day(&self, day: &str) -> std::collections::BTreeMap<String, CampDay> {
         let c = self.conn.lock().unwrap();
         let mut out = std::collections::BTreeMap::new();
@@ -273,7 +239,14 @@ impl Db {
             Err(_) => return out,
         };
         let rows = st.query_map([day], |r| {
-            Ok((r.get::<_, String>(0)?, CampDay { turns: r.get(1)?, clean: r.get(2)?, errors: r.get(3)? }))
+            Ok((
+                r.get::<_, String>(0)?,
+                CampDay {
+                    turns: r.get(1)?,
+                    clean: r.get(2)?,
+                    errors: r.get(3)?,
+                },
+            ))
         });
         if let Ok(rows) = rows {
             for (k, v) in rows.flatten() {
@@ -281,43 +254,6 @@ impl Db {
             }
         }
         out
-    }
-
-    /// (turns, clean, errors) of one session on one day (same-camp tug).
-    pub fn session_day(&self, day: &str, session: &str) -> CampDay {
-        let c = self.conn.lock().unwrap();
-        c.query_row(
-            "SELECT COUNT(*),
-                    COALESCE(SUM(CASE WHEN result = 'ok' AND tool_errors = 0 THEN 1 ELSE 0 END), 0),
-                    COALESCE(SUM(CASE WHEN result = 'error' THEN 1 ELSE 0 END), 0)
-             FROM turns WHERE day = ?1 AND session = ?2 AND result != 'aborted'",
-            [day, session],
-            |r| Ok(CampDay { turns: r.get(0)?, clean: r.get(1)?, errors: r.get(2)? }),
-        )
-        .unwrap_or_default()
-    }
-
-    /// Times of day (ms since midnight) of every finished turn on `day`, sorted.
-    pub fn turn_times(&self, day: &str) -> Vec<u64> {
-        let c = self.conn.lock().unwrap();
-        let mut st = match c.prepare("SELECT ended_at FROM turns WHERE day = ?1 AND result != 'aborted' ORDER BY ended_at") {
-            Ok(s) => s,
-            Err(_) => return vec![],
-        };
-        st.query_map([day], |r| r.get::<_, i64>(0)).map(|rows| rows.flatten().map(|t| ms_of_day(t as u64)).collect()).unwrap_or_default()
-    }
-
-    /// The day (other than `today`) with the most finished turns.
-    pub fn best_day(&self, today: &str) -> Option<(String, u32)> {
-        let c = self.conn.lock().unwrap();
-        c.query_row(
-            "SELECT day, COUNT(*) AS n FROM turns WHERE day != ?1 AND result != 'aborted' GROUP BY day ORDER BY n DESC, day DESC LIMIT 1",
-            [today],
-            |r| Ok((r.get(0)?, r.get(1)?)),
-        )
-        .optional()
-        .ok()
-        .flatten()
     }
 
     /// How many of each fish were ever caught: fish_id -> (count, first ts).
@@ -338,20 +274,23 @@ impl Db {
         let by_camp = self.camp_day(day);
         let c = self.conn.lock().unwrap();
         let work_ms: i64 = c
-            .query_row("SELECT COALESCE(SUM(ms), 0) FROM turns WHERE day = ?1", [day], |r| r.get(0))
+            .query_row(
+                "SELECT COALESCE(SUM(ms), 0) FROM turns WHERE day = ?1",
+                [day],
+                |r| r.get(0),
+            )
             .unwrap_or(0);
         let mut catches = vec![];
-        if let Ok(mut st) =
-            c.prepare("SELECT ts, outcome, fish_id, rarity, coins, source FROM catches WHERE day = ?1 ORDER BY ts")
-        {
+        if let Ok(mut st) = c.prepare(
+            "SELECT ts, outcome, fish_id, rarity, source FROM catches WHERE day = ?1 ORDER BY ts",
+        ) {
             if let Ok(rows) = st.query_map([day], |r| {
                 Ok(CatchRow {
                     ts: r.get::<_, i64>(0)? as u64,
                     outcome: r.get(1)?,
                     fish_id: r.get(2)?,
                     rarity: r.get(3)?,
-                    coins: r.get(4)?,
-                    source: r.get(5)?,
+                    source: r.get(4)?,
                 })
             }) {
                 catches = rows.flatten().collect();
@@ -364,10 +303,6 @@ impl Db {
                 |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .unwrap_or((0, 0));
-        let coins_earned: i64 = c
-            .query_row("SELECT COALESCE(SUM(delta), 0) FROM wallet_log WHERE day = ?1 AND delta > 0", [day], |r| r.get(0))
-            .unwrap_or(0);
-        let balance: i64 = c.query_row("SELECT COALESCE(SUM(delta), 0) FROM wallet_log", [], |r| r.get(0)).unwrap_or(0);
         // Day events: (kind, what) -> (count, sum n).
         let mut ev: std::collections::BTreeMap<(String, String), (u32, i64)> = Default::default();
         if let Ok(mut st) = c.prepare("SELECT kind, what, COUNT(*), COALESCE(SUM(n), 0) FROM events WHERE day = ?1 GROUP BY kind, what") {
@@ -375,34 +310,34 @@ impl Db {
                 ev = rows.flatten().collect();
             }
         }
-        let kind = |k: &str| ev.iter().filter(|((kk, _), _)| kk == k).map(|((_, w), v)| (w.clone(), *v)).collect::<Vec<_>>();
-        let whipped: std::collections::BTreeMap<String, u32> = kind("whip").into_iter().map(|(w, (n, _))| (w, n)).collect();
-        let games_by: std::collections::BTreeMap<String, u32> = kind("game").into_iter().map(|(w, (n, _))| (w, n)).collect();
-        let radio_s = kind("radio").iter().map(|(_, (_, s))| *s).sum::<i64>().max(0) as u64;
-        let (kegel_sets, kegel_reps) = kind("kegel").iter().fold((0u32, 0i64), |(a, b), (_, (n, s))| (a + n, b + s));
+        let kind = |k: &str| {
+            ev.iter()
+                .filter(|((kk, _), _)| kk == k)
+                .map(|((_, w), v)| (w.clone(), *v))
+                .collect::<Vec<_>>()
+        };
+        let radio_s = kind("radio")
+            .iter()
+            .map(|(_, (_, s))| *s)
+            .sum::<i64>()
+            .max(0) as u64;
+        let (kegel_sets, kegel_reps) = kind("kegel")
+            .iter()
+            .fold((0u32, 0i64), |(a, b), (_, (n, s))| (a + n, b + s));
         let letters = kind("letter").iter().map(|(_, (n, _))| *n).sum();
         let peak_agents: u32 = c
-            .query_row("SELECT value FROM kv WHERE key = ?1", [format!("peak:{day}")], |r| r.get::<_, String>(0))
+            .query_row(
+                "SELECT value FROM kv WHERE key = ?1",
+                [format!("peak:{day}")],
+                |r| r.get::<_, String>(0),
+            )
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(0);
-        let mut duty = vec![];
-        for camp in ["claude-code", "codex"] {
-            let pack: Option<String> =
-                c.query_row("SELECT value FROM kv WHERE key = ?1", [format!("duty:{day}:{camp}")], |r| r.get(0)).optional().ok().flatten();
-            let d = by_camp.get(camp).cloned().unwrap_or_default();
-            if pack.is_none() && d.turns == 0 {
-                continue;
-            }
-            let ms: i64 = c
-                .query_row("SELECT COALESCE(SUM(ms), 0) FROM turns WHERE day = ?1 AND source = ?2", params![day, camp], |r| r.get(0))
-                .unwrap_or(0);
-            let pack = pack.unwrap_or_default();
-            duty.push(Duty { camp: camp.into(), name: pack.clone(), pack, turns: d.turns, work_ms: ms as u64 });
-        }
         drop(c);
-        let (turns, clean, errors) =
-            by_camp.values().fold((0, 0, 0), |(a, b, e), d| (a + d.turns, b + d.clean, e + d.errors));
+        let (turns, clean, errors) = by_camp.values().fold((0, 0, 0), |(a, b, e), d| {
+            (a + d.turns, b + d.clean, e + d.errors)
+        });
         Report {
             day: day.to_string(),
             work_ms: work_ms as u64,
@@ -413,30 +348,81 @@ impl Db {
             catches,
             bugs,
             bosses,
-            coins_earned,
-            balance,
-            whips: whipped.values().sum(),
-            whipped,
-            games: games_by.values().sum(),
-            games_by,
             radio_s,
             kegel_sets,
             kegel_reps: kegel_reps.max(0) as u32,
             letters,
             peak_agents,
-            duty,
         }
     }
 
-    /// One thing that happened: a lash taken (`what` = the pet), a game played
-    /// (`what` = the game), radio time (`n` = seconds), a kegel set (`n` =
-    /// reps), a letter written. The daily report adds them up.
+    /// One thing that happened: radio time (`n` = seconds), a kegel set (`n` =
+    /// reps), a letter written, a line for the diary (`what`). The daily
+    /// report adds them up.
+    /// Whether an event of `kind` was logged since `since` (ms).
+    pub fn event_since(&self, kind: &str, since: u64) -> bool {
+        let c = self.conn.lock().unwrap();
+        c.query_row(
+            "SELECT 1 FROM events WHERE kind = ?1 AND ts >= ?2 LIMIT 1",
+            params![kind, since as i64],
+            |_| Ok(()),
+        )
+        .optional()
+        .ok()
+        .flatten()
+        .is_some()
+    }
+
     pub fn log_event(&self, now: u64, kind: &str, what: &str, n: i64) {
         let c = self.conn.lock().unwrap();
         let _ = c.execute(
             "INSERT INTO events (ts, day, kind, what, n) VALUES (?1, ?2, ?3, ?4, ?5)",
             params![now as i64, day_of(now), kind, what, n],
         );
+    }
+
+    /// (time at the desk in ms, breaks taken) on `day`, as the think loop counts them.
+    pub fn desk_day(&self, day: &str) -> (u64, u32) {
+        let v = self.kv_get(&format!("desk:{day}")).unwrap_or_default();
+        let mut it = v.split(',');
+        (
+            it.next().and_then(|s| s.parse().ok()).unwrap_or(0),
+            it.next().and_then(|s| s.parse().ok()).unwrap_or(0),
+        )
+    }
+
+    pub fn set_desk_day(&self, day: &str, ms: u64, breaks: u32) {
+        self.kv_set(&format!("desk:{day}"), &format!("{ms},{breaks}"));
+    }
+
+    /// What the pet noticed on `day`, newest first: (when, the line).
+    pub fn noticed(&self, day: &str) -> Vec<(u64, String)> {
+        let c = self.conn.lock().unwrap();
+        let mut st = match c.prepare("SELECT ts, what FROM events WHERE day = ?1 AND kind = 'noticed' ORDER BY ts DESC LIMIT 40") {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        st.query_map([day], |r| {
+            Ok((r.get::<_, i64>(0)? as u64, r.get::<_, String>(1)?))
+        })
+        .map(|rows| rows.flatten().collect())
+        .unwrap_or_default()
+    }
+
+    /// The newest lines of the diary, across days: (when, the line).
+    pub fn noticed_recent(&self, limit: i64) -> Vec<(u64, String)> {
+        let c = self.conn.lock().unwrap();
+        let mut st = match c
+            .prepare("SELECT ts, what FROM events WHERE kind = 'noticed' ORDER BY ts DESC LIMIT ?1")
+        {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        st.query_map([limit], |r| {
+            Ok((r.get::<_, i64>(0)? as u64, r.get::<_, String>(1)?))
+        })
+        .map(|rows| rows.flatten().collect())
+        .unwrap_or_default()
     }
 
     /// Keep the day's high-water mark of agent sessions online at once.
@@ -448,17 +434,46 @@ impl Db {
         }
     }
 
-    /// Remember which pack stood for `camp` today (the report's "on duty").
-    pub fn note_duty(&self, now: u64, camp: &str, pack: &str) {
-        let key = format!("duty:{}:{camp}", day_of(now));
-        if self.kv_get(&key).as_deref() != Some(pack) {
-            self.kv_set(&key, pack);
-        }
+    /// A day's turns, oldest first (for 收工曲).
+    pub fn day_turns(&self, day: &str) -> Vec<crate::song::Turn> {
+        let c = self.conn.lock().unwrap();
+        let Ok(mut st) = c.prepare(
+            "SELECT source, started_at, ended_at, result, tool_calls, tool_errors FROM turns WHERE day = ?1 ORDER BY started_at",
+        ) else {
+            return Vec::new();
+        };
+        st.query_map([day], |r| {
+            Ok(crate::song::Turn {
+                source: r.get(0)?,
+                started_at: r.get::<_, i64>(1)?.max(0) as u64,
+                ended_at: r.get::<_, i64>(2)?.max(0) as u64,
+                result: r.get(3)?,
+                tool_calls: r.get::<_, i64>(4)?.max(0) as u32,
+                tool_errors: r.get::<_, i64>(5)?.max(0) as u32,
+            })
+        })
+        .map(|rows| rows.flatten().collect())
+        .unwrap_or_default()
+    }
+
+    #[cfg(test)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_turn_for_test(&self, day: &str, source: &str, start: u64, end: u64, result: &str, calls: u32, errors: u32) {
+        let c = self.conn.lock().unwrap();
+        c.execute(
+            "INSERT INTO turns (day, source, session, project, started_at, ended_at, ms, result, tool_calls, tool_errors, attentions)
+             VALUES (?1, ?2, 's', 'p', ?3, ?4, ?5, ?6, ?7, ?8, 0)",
+            params![day, source, start as i64, end as i64, (end - start) as i64, result, calls, errors],
+        )
+        .unwrap();
     }
 
     pub fn kv_get(&self, key: &str) -> Option<String> {
         let c = self.conn.lock().unwrap();
-        c.query_row("SELECT value FROM kv WHERE key = ?1", [key], |r| r.get(0)).optional().ok().flatten()
+        c.query_row("SELECT value FROM kv WHERE key = ?1", [key], |r| r.get(0))
+            .optional()
+            .ok()
+            .flatten()
     }
 
     pub fn kv_set(&self, key: &str, value: &str) {
@@ -467,6 +482,121 @@ impl Db {
             "INSERT INTO kv (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = ?2",
             params![key, value],
         );
+    }
+
+    pub fn log_bond_moment(&self, ts: u64, kind: &str, detail: &str) {
+        let c = self.conn.lock().unwrap();
+        let _ = c.execute(
+            "INSERT INTO bond_moments (ts, kind, detail) VALUES (?1, ?2, ?3)",
+            params![ts as i64, kind, detail],
+        );
+    }
+
+    pub fn recent_bond_moments(&self, limit: i64) -> Vec<BondMoment> {
+        let c = self.conn.lock().unwrap();
+        let mut st = match c
+            .prepare("SELECT ts, kind, detail FROM bond_moments ORDER BY ts DESC LIMIT ?1")
+        {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        st.query_map([limit], |r| {
+            Ok(BondMoment {
+                ts: r.get::<_, i64>(0)? as u64,
+                kind: r.get(1)?,
+                detail: r.get(2)?,
+            })
+        })
+        .map(|rows| rows.flatten().collect())
+        .unwrap_or_default()
+    }
+
+    pub fn bond_scores(&self) -> (f64, f64, f64) {
+        self.with(|c| {
+            let get = |key: &str, default: f64| -> f64 {
+                c.query_row("SELECT value FROM kv WHERE key = ?1", [key], |r| {
+                    r.get::<_, String>(0)
+                })
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(default)
+            };
+            let fam_raw = get("bond:familiarity", 0.0);
+            let trust = get("bond:trust", 50.0);
+            let vit = get("bond:vitality", 60.0);
+            let last_ms = get("bond:last_active_ms", 0.0) as u64;
+            let idle_days = if last_ms > 0 {
+                (crate::now_ms().saturating_sub(last_ms) / 86_400_000).min(20) as f64
+            } else {
+                0.0
+            };
+            Ok(((fam_raw - idle_days).clamp(0.0, 100.0), trust, vit))
+        })
+        .unwrap_or((0.0, 50.0, 60.0))
+    }
+
+    pub fn queue_fragment(&self, created_at: u64, fire_at: u64, moment_kind: &str) {
+        let c = self.conn.lock().unwrap();
+        let _ = c.execute(
+            "INSERT INTO bond_fragments (created_at, fire_at, moment_kind) VALUES (?1, ?2, ?3)",
+            params![created_at as i64, fire_at as i64, moment_kind],
+        );
+    }
+
+    pub fn due_fragments(&self, now: u64) -> Vec<(i64, String)> {
+        let c = self.conn.lock().unwrap();
+        let mut st = match c.prepare(
+            "SELECT id, moment_kind FROM bond_fragments WHERE delivered = 0 AND fire_at <= ?1 LIMIT 3"
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        st.query_map([now as i64], |r| {
+            Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
+        })
+        .map(|rows| rows.flatten().collect())
+        .unwrap_or_default()
+    }
+
+    pub fn mark_fragment_delivered(&self, id: i64) {
+        let c = self.conn.lock().unwrap();
+        let _ = c.execute(
+            "UPDATE bond_fragments SET delivered = 1 WHERE id = ?1",
+            [id],
+        );
+    }
+
+    pub fn bond_update(&self, fam_delta: f64, trust_delta: f64, vit_delta: f64, now: u64) {
+        let _ = self.with(|c| {
+            let get = |key: &str, default: f64| -> f64 {
+                c.query_row("SELECT value FROM kv WHERE key = ?1", [key], |r| {
+                    r.get::<_, String>(0)
+                })
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(default)
+            };
+            let fam = (get("bond:familiarity", 0.0) + fam_delta).clamp(0.0, 100.0);
+            let trust = (get("bond:trust", 50.0) + trust_delta).clamp(0.0, 100.0);
+            let vit = (get("bond:vitality", 60.0) + vit_delta).clamp(0.0, 100.0);
+            c.execute(
+                "INSERT OR REPLACE INTO kv VALUES ('bond:familiarity', ?1)",
+                [&fam.to_string()],
+            )?;
+            c.execute(
+                "INSERT OR REPLACE INTO kv VALUES ('bond:trust', ?1)",
+                [&trust.to_string()],
+            )?;
+            c.execute(
+                "INSERT OR REPLACE INTO kv VALUES ('bond:vitality', ?1)",
+                [&vit.to_string()],
+            )?;
+            c.execute(
+                "INSERT OR REPLACE INTO kv VALUES ('bond:last_active_ms', ?1)",
+                [&now.to_string()],
+            )?;
+            Ok(())
+        });
     }
 
     /// Fold turns older than 90 days into `daily`, then delete them.
@@ -495,12 +625,20 @@ fn result_str(r: crate::protocol::TurnResult) -> &'static str {
 /// Local weekday of a timestamp, 0 = Monday.
 pub fn weekday(ts: u64) -> u32 {
     use chrono::Datelike;
-    Local.timestamp_millis_opt(ts as i64).single().map(|d| d.weekday().num_days_from_monday()).unwrap_or(0)
+    Local
+        .timestamp_millis_opt(ts as i64)
+        .single()
+        .map(|d| d.weekday().num_days_from_monday())
+        .unwrap_or(0)
 }
 
 /// Local hour and minute now (for the off-work report).
 pub fn local_hm(ts: u64) -> (u32, u32) {
-    Local.timestamp_millis_opt(ts as i64).single().map(|d| (d.hour(), d.minute())).unwrap_or((0, 0))
+    Local
+        .timestamp_millis_opt(ts as i64)
+        .single()
+        .map(|d| (d.hour(), d.minute()))
+        .unwrap_or((0, 0))
 }
 
 #[cfg(test)]
@@ -509,38 +647,88 @@ mod tests {
     use crate::protocol::TurnResult;
 
     fn turn(start: u64, end: u64, result: TurnResult, errors: u32) -> FinishedTurn {
-        FinishedTurn { started_at: start, ended_at: end, result, tool_calls: 3, tool_errors: errors, attentions: 0 }
-    }
-
-    #[test]
-    fn wallet_is_capped_per_day() {
-        let db = Db::in_memory();
-        let now = 1_793_600_000_000;
-        assert_eq!(db.earn(250, "fish", "", now, 300), 250);
-        assert_eq!(db.earn(80, "fish", "", now, 300), 50, "only 50 left under the cap");
-        assert_eq!(db.earn(10, "fish", "", now, 300), 0);
-        assert_eq!(db.balance(), 300);
-        assert_eq!(db.earn(10, "fish", "", now + 86_400_000, 300), 10, "new day, new cap");
+        FinishedTurn {
+            started_at: start,
+            ended_at: end,
+            result,
+            tool_calls: 3,
+            tool_errors: errors,
+            attentions: 0,
+        }
     }
 
     #[test]
     fn camp_scores_and_report() {
         let db = Db::in_memory();
         let t0 = 1_793_600_000_000;
-        db.record_turn("claude-code", "a", "/p", &turn(t0, t0 + 60_000, TurnResult::Ok, 0));
-        db.record_turn("claude-code", "a", "/p", &turn(t0, t0 + 120_000, TurnResult::Ok, 2));
-        db.record_turn("claude-code", "a", "/p", &turn(t0, t0 + 10_000, TurnResult::Error, 1));
-        db.record_turn("codex", "b", "/p", &turn(t0, t0 + 5_000, TurnResult::Aborted, 0));
+        db.record_turn(
+            "claude-code",
+            "a",
+            "/p",
+            &turn(t0, t0 + 60_000, TurnResult::Ok, 0),
+        );
+        db.record_turn(
+            "claude-code",
+            "a",
+            "/p",
+            &turn(t0, t0 + 120_000, TurnResult::Ok, 2),
+        );
+        db.record_turn(
+            "claude-code",
+            "a",
+            "/p",
+            &turn(t0, t0 + 10_000, TurnResult::Error, 1),
+        );
+        db.record_turn(
+            "codex",
+            "b",
+            "/p",
+            &turn(t0, t0 + 5_000, TurnResult::Aborted, 0),
+        );
         let d = db.camp_day(&day_of(t0 + 60_000));
-        assert_eq!(d["claude-code"], CampDay { turns: 3, clean: 1, errors: 1 });
+        assert_eq!(
+            d["claude-code"],
+            CampDay {
+                turns: 3,
+                clean: 1,
+                errors: 1
+            }
+        );
         assert!(!d.contains_key("codex"), "aborted turns don't count");
-        db.add_catch(t0, "fish", "todo", "common", 2, "claude-code", "a");
-        db.record_bug_kill(t0, false, 0);
-        db.record_bug_kill(t0, true, 5);
+        db.add_catch(t0, "fish", "todo", "common", "claude-code", "a");
+        db.record_bug_kill(t0, false);
+        db.record_bug_kill(t0, true);
         let r = db.report(&day_of(t0));
         assert_eq!((r.turns, r.clean, r.errors), (3, 1, 1));
         assert_eq!(r.work_ms, 60_000 + 120_000 + 10_000 + 5_000);
         assert_eq!((r.bugs, r.bosses), (1, 1));
         assert_eq!(r.catches.len(), 1);
+    }
+
+    #[test]
+    fn the_basket_empties_one_fish_at_a_time() {
+        let db = Db::in_memory();
+        let t0 = 1_793_600_000_000;
+        db.add_catch(t0, "fish", "todo", "common", "claude-code", "a");
+        db.add_catch(t0 + 1, "boot", "", "", "claude-code", "a");
+        db.add_catch(t0 + 2, "fish", "regex", "rare", "codex", "c");
+        assert_eq!(db.fish_left(), 2, "a boot is not a fish");
+        assert!(db.eat_fish() && db.eat_fish());
+        assert!(!db.eat_fish(), "empty");
+        assert_eq!(db.fish_left(), 0);
+        assert_eq!(
+            db.fish_counts().len(),
+            2,
+            "eaten fish stay in the collection"
+        );
+    }
+
+    #[test]
+    fn a_database_from_before_still_takes_bug_kills() {
+        let db = Db::in_memory();
+        db.with(|c| c.execute_batch("DROP TABLE bug_kills; CREATE TABLE bug_kills (id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, day TEXT NOT NULL, boss INTEGER NOT NULL, coins INTEGER NOT NULL);")).unwrap();
+        let t0 = 1_793_600_000_000;
+        db.record_bug_kill(t0, true);
+        assert_eq!(db.report(&day_of(t0)).bosses, 1);
     }
 }

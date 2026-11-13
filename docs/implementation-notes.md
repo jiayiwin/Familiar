@@ -1,136 +1,72 @@
 # 实现说明
 
-这份文档记录 Familiar 的实现细节、与最初设计稿的差异、测试方法和按里程碑整理的功能明细。面向用户的说明见 [README.md](../README.md) / [README.zh-CN.md](../README.zh-CN.md)。
+这份文档记录睿洱的实现细节和测试方法。面向用户的说明见 [README.md](../README.md) / [README.zh-CN.md](../README.zh-CN.md)。
 
-代码注释里的"设计稿 §x"指最初的内部设计文档（未公开）。
-
-## 与设计稿的差异和实现说明
+## hook 映射
 
 - **pid**：hook 经 shell 启动，emitter 的直接父进程马上就会退出。所以 emitter 沿进程树往上，找第一个 `claude`、`codex`、`node` 或 `bun` 进程作为 agent pid。
-- **Claude Code hook 映射**：
-  - 比设计稿多接了 `PostToolUseFailure`（工具失败）和 `PermissionRequest`（等待批准）。
-  - `Notification` 只有 `permission_prompt` 和 `elicitation_dialog` 算 attention。`idle_prompt` 在回合结束约 60 秒后触发，不算 attention，否则每轮结束都会变成"等你"。
-- **Codex hook 映射**：按官方文档核对，并实测了 codex-cli 0.162.1。映射表在 `adapters/codex/mapping.yaml`。
+- **Claude Code**：
+  - 接了 `PostToolUseFailure`（工具失败）和 `PermissionRequest`（等待批准）。
+  - `Notification` 只有 `permission_prompt` 和 `elicitation_dialog` 算 attention。`idle_prompt` 在回合结束约 60 秒后触发，不算 attention，否则每轮结束都会变成「等你」。
+- **Codex**：按官方文档核对，并实测了 codex-cli 0.162.1。映射表在 `adapters/codex/mapping.yaml`。
   - Codex 在 Windows 上读文件、搜索也走 `Bash` 工具（PowerShell）。emitter 只看命令的第一个词（如 `Get-Content`、`rg`、`git status`）来判断是不是读取类操作，判断结果作为 `detail.read` 发出，命令原文不离开 emitter。
   - `apply_patch` 的文件名从补丁头里取 basename。
   - `PostToolUse` 没有成功或失败标记，按成功处理。
   - `Interrupt` 映射为 aborted。
-  - Codex 没有"等待输入"的 hook，只有 `PermissionRequest` 算 attention。
-- **僵尸检测**：设计稿是每 30 秒检查一次，这里改成 5 秒，保证"30 秒内分身消失"有余量。
-- **宠物移动**：设计稿要求移动时交给覆盖层画、到达后再交回宠物窗口。这里直接以 60 fps 移动宠物自己的小窗口，效果一样，也不存在交接跳帧的问题。覆盖层只画虫子、绳子、赛跑条和金币飘字。
-- **"催你"**：这条规则本身就是提醒的一部分，是唯一允许在有会话等你时触发的互动（规则里标了 `during_attention: true`）。其余互动在等待期间全部冻结。
-- **钓鱼的出鱼条件**：短于 5 秒的回合不出鱼，否则每条简单回复都会钓上一条，金币和图鉴就没意义了。
-- **影子赛跑**：比的是"截至此刻的完成轮数"，与历史最佳那天同一时刻的进度比较，没做设计稿里的曲线图。
-- **每日报告**：只在下班时间触发，没做"首次锁屏时弹出"。
+  - Codex 没有「等待输入」的 hook，只有 `PermissionRequest` 算 attention。
+
+## 几个决定
+
+- **每个 agent 一只宠物**：同一个 agent 的所有会话聚合成一只的状态，等你的会话优先。会话多于一个时角上显示数量。
+- **僵尸检测**：每 5 秒检查一次 agent 进程，关掉终端后那个会话几秒内就会消失。
+- **宠物移动**：直接以 60 fps 移动宠物自己的小窗口。覆盖层只画虫子。
+- **「催你」**：这条规则本身就是提醒的一部分，是唯一允许在有会话等你时触发的互动（规则里标了 `during_attention: true`）。其余互动在等待期间全部冻结。
+- **糖果的出法**（`world.rs` 的 `catch`，目录在 `assets/treats.yaml`）：短于 5 秒的回合不给，否则每条简单回复都会得一颗。先按回合时长掷稀有度，再从「此刻对得上」的种类里挑：`from`（agent / kegel / break）、`hours`、`months` 都对得上才进候选，带条件的权重是日常款的三倍；你自己挣的固定是话梅和薄荷叶。代码和数据库里还叫 `fish`（表 `catches` 的 outcome、`fish_id`），前十二种沿用了原来十二条鱼的 id，所以以前攒的还在。
+- **它自己会做的事**（`crates/petd/src/think.rs`）：每 20 秒看一次「距离上次键鼠输入多久」和各 agent 的状态，认出久坐、深夜、连续卡住、长活做完、离开后回来这几种情况，每种只回应一个动作。两次之间至少隔 10 分钟；专注模式和「安静」时不动。每次动作都往 `events` 表记一条 `noticed`，小屋和图鉴的日记读的就是它。同一个循环累计「你在桌前」的时间和起身次数（kv 里的 `desk:<日期>`）。
+- **两只的联动**（同在 `think.rs`）：`Plan` 里除了主角的动作，还有「谁走过去」（`walk`）和「另一只做什么」（`with`）。两只一起待过的天数记在 kv 的 `duo:days` / `duo:last`，不到 2 天只旁听，之后合奏、共舞。每只宠物在自己的窗口里出声，靠 `pet.act` 消息里的同一个墙上时刻 `at` 对拍（走过去的留 2.8 秒，原地的留 0.9 秒）；走过去的那只曲终回原位，后一场表演会作废前一场的回家定时器。菜单里手动点的表演走同一条路（`think::asked` → `think::stage`）。台词按宠物分，在 `voice.rs`（守护进程主动说的）和 `app/src/voice.ts`（窗口里的状态句）。
+- **发布版才有的坑：内容安全策略**。Tone.js 用 blob 生成的 Worker 给节拍计时；`tauri.conf.json` 的 CSP 不放行 `worker-src blob:` 时，Worker 悄悄失败（不抛异常），画面照动、音符一个不响，而开发模式没有 CSP，看不出来。`app/src-tauri/tests/csp.rs` 守着这一条。
+- **所有页面开在一个窗口里**（`app/shell.html`、`app/src/shell.ts`，窗口标签 `home`）：无系统边框、透明，标签栏和阴影自己画；每个页面是一个 iframe 标签，后台标签不销毁（电台接着放）。页面是窗口的子框架，没有自己的宿主通道，`public/embed.js` 在页面脚本之前把父窗口的 `__TAURI_INTERNALS__` 借给它；宿主发给页面的事件由外壳用 `postMessage` 转交（`api.ts` 的 `onHost`），页面要关自己就发 `close-tab`（`closeSelf`）。宿主侧只有一个入口 `windows::open_tab`。
+- **糖是挣来的**：agent 做完一轮得一颗之外，`ops::earn_fish` 给两种自己挣的：跟完一组提肛（宠物窗口在整组做完时 `POST /v1/earn`，守护进程核对确实开始过一组、时长对得上）和久坐后起身（`think.rs` 记下离开前坐了多久，回来时满 30 分钟就给）。每天上限 6 颗，记在 kv 的 `earned:<日期>`。
+- **没有 agent 时只留一只**：`hub.rs` 的 `groups()` 永远保留 `claude-code` 这一只，其余 agent 的宠物在它最后一个会话离线后消失。拖动主宠时，其余宠物由 `physics::drag` 带着保持相对位置一起走，松手后各自按同样的速度落地。
+- **宠物追着拍虫子**（`overlay.ts` 的 `hunt`）：每块屏幕的 overlay 每 0.25 秒看一次，落地超过 1.1 秒的小虫由它自己的宠物去追（`pet_chase` 命令让宿主沿地面跑到某个 x，`physics::chase`），够得着就发 `swat` 给宠物窗口做扑的动作，再调 `/v1/world/squash`。Boss 把自己的宠物压住（状态 stone），同屏其他空闲的宠物都来帮，每 0.9 秒拍一下。被压住的宠物和帮忙的宠物不参与防重叠（`spawn_separator`），否则会被弹开。只有用户亲手甩出去的才会挂到屏幕边上，防重叠和生气跳开的那种弹开不会。
+- **挂在屏幕边上**（`physics.rs` 的 `fly`）：飞行中以够快的速度撞上所有显示器合起来的左右边或顶边，就停在那儿（每次飞行一次），发 `phys` 事件 `cling`；之后计时、或收到 `let_go`（喂糖、被点、agent 在等你）时发 `slip`，继续按重力落地，再滑步回到起飞前的位置。中间隔着另一块显示器的边不算边。
+- **打开的页面跟着换肤**：`skin.ts` 的 `followSkin` 订阅 `pet.state`，页面所属的那个 agent 换了宠物就重载（电台只换座位，不停播）。
+- **每只宠物是一整套皮肤**（`crates/petd/src/cast.rs`、`app/src/skin.ts`）：`PetView.skin` 说这个 agent 由谁陪；窗口按它取颜色、图层、乐器和口吻。新增一只：切层放进 `design/pet-art/<id>/rig`，在 `sync_app.py` 的 `PETS` 里加上，`cast.rs` 里把 `here` 改成 true，采样放进 `app/public/audio/<乐器>/`（带 LICENSE.txt），`perform.js` 里加它的谱子。
+- **身体是拆层绑定**（`app/src/rig/`）：一张原画切成身体、耳朵、眼、嘴、配件和背面，由 `rig.js` 驱动姿态、表情和舞步，`perform.js` 负责五种乐器（Tone.js 采样器）和跳舞的节拍。身体分两类：紫梦的长耳兔（`kind: lop`），和其余四只共用的直立身体（头绕脖子转，图层按 `rig.json` 的 `order` 从后往前画；头顶的卷须、菌盖是带弹簧的部件）。乐器是引擎画出来的矢量图（和紫梦的琴键、麻薯的大提琴一样）：泡泡的长笛跟着头走，音从笛尾变成泡泡；菇菇的木琴浮在身前，两根琴槌各管一半琴条，菌盖上的斑点（`spots`）跟着亮；茸茸的竖琴立在身侧。`pet.play` 是给外部驱动用的姿态入口（站位、离地、倾斜、转身、看向哪里、表情），小屋里的互动（`app/src/play.ts`）和挂在屏幕边上的姿态都走它。背面没有尾巴的两只（菇菇、泡泡）由 `design/pet-art/tools/back_tail.py` 按身体的颜色补一个小尾巴。切层脚本和预览页在 `design/pet-art/`，改完运行 `python design/pet-art/tools/sync_app.py` 再跑 `node design/pet-art/preview/rig.test.mjs`。
 - **位置**：保存在 `windows.json`，没放进 `config.yaml`，避免拖一下宠物就改写你的配置。
-- **石化**：M4 之前还没有 Boss 虫，石化会在下一轮开始时，或静默 10 分钟后解除。
+- **旧数据**：早先版本的配置项（路由模式、宠物包等）加载时忽略；旧数据库里多出来的表不再读写，也不删除。
 - **Rust 版本**：工作区设了 `rust-version = 1.88` 并启用 resolver 3，Cargo 会自动选兼容的 Tauri 版本（目前是 2.11）。
 
 ## 已知限制
 
-- **共享屏幕检测**：靠会议软件"正在共享"工具条的窗口标题 / 类名识别，内置名单覆盖常见软件，不保证每个版本都认得出；认不出时在 `config.yaml` 里加 `meeting: { share_windows: [...] }`。
-- **投球**：内置宠物没有专门的接球、扔球帧，用挥手和欢呼代替。
-- **Codex 宠物包导入器**：需要先拿到真实的源格式样本，并确认授权。
-- **工程**：还不支持 macOS；安装包没有代码签名，第一次运行时 Windows SmartScreen 可能会拦一下，点"更多信息 → 仍要运行"。
+- **共享屏幕检测**：靠会议软件「正在共享」工具条的窗口标题 / 类名识别，内置名单覆盖常见软件，不保证每个版本都认得出；认不出时在 `config.yaml` 里加 `meeting: { share_windows: [...] }`。
+- **只有紫梦**：另外四只宠物只有原画，还没有切层。两个 agent 的宠物现在都是紫梦。
+- **工程**：还不支持 macOS；安装包没有代码签名，第一次运行时 Windows SmartScreen 可能会拦一下，点「更多信息 → 仍要运行」。
 - **双击跳转**：从 agent 进程沿进程树往上找第一个有窗口的进程；Windows Terminal 只能切到窗口，切不到具体标签页。
 
 ## 测试
 
 ```bash
-cargo test --workspace                 # 全部 Rust 测试
-cargo test -p familiar-emit -p familiar-petd   # 只跑 emitter 和守护进程核心
+cargo test --workspace                 # 全部 Rust 测试，含一个把守护进程真跑起来的端到端测试（crates/petd/tests/api.rs）
+cargo test -p rillbuddy-emit -p rillbuddy-petd   # 只跑 emitter 和守护进程核心
 cd app && npx tsc --noEmit -p .        # 前端类型检查
+node design/pet-art/preview/rig.test.mjs       # 绑定的姿态测试
 ```
 
 手动喂事件（不需要 agent）：
 
 ```bash
-familiar-emit --source claude-code < payload.json
-FAMILIAR_DEBUG=1 familiar-emit --source codex < payload.json   # 把处理过程打到 stderr
+rillbuddy-emit --source claude-code < payload.json
+RILLBUDDY_DEBUG=1 rillbuddy-emit --source codex < payload.json   # 把处理过程打到 stderr
 ```
 
-在浏览器里调试页面：先 `cd app && npx vite`，然后打开 `http://localhost:1420/index.html?pet=claude-code&port=47321&token=<~/.familiar/token 的内容>`。`gallery.html`、`welcome.html` 的用法相同。
+在浏览器里调试页面：先 `cd app && npx vite`，然后打开 `http://localhost:1420/index.html?pet=claude-code&port=47321&token=<~/.rillbuddy/token 的内容>`。`gallery.html`、`report.html` 的用法相同；`room.html?demo=1`、`menu.html`、`tray.html`、`letter.html` 不连后台也能看（用示例数据）；`index.html?act=dance|piano|kegel|speak&text=…` 直接看一段表演。
 
-调试用的 `/pet` 命令：`/pet fling [宠物] [vx] [vy]` 甩出宠物测试物理；`/pet demo rps|feed|bet|card [宠物]` 重放右键菜单的特效（猜拳、投喂、下注、重置卡）。
+调试用的 `/pet` 命令：`/pet fling [宠物] [vx] [vy]` 甩出宠物测试物理；`/pet demo feed|card [宠物]` 重放喂食和重置卡的特效。
 
 ## 架构要点
 
-- **`familiar-emit`**：hook 发射器。总耗时 ≤ 300 ms，退出码恒为 0，不写 stdout。petd 不在时先把事件写入 spool，再以脱离进程组的方式拉起 petd。
-- **`petd`**：会话状态机与聚合优先级；spool 补读、单实例锁；宠物包加载与 fallback 解析；本地 HTTP + WebSocket（接口列表见 `crates/petd/src/server.rs` 顶部注释，每个请求都要带 `X-Familiar-Token` 头或 `?token=`）。
+- **`rillbuddy-emit`**：hook 发射器。总耗时 ≤ 300 ms，退出码恒为 0，不写 stdout。petd 不在时先把事件写入 spool，再以脱离进程组的方式拉起 petd。
+- **`petd`**：会话状态机与聚合优先级；spool 补读、单实例锁；本地 HTTP + WebSocket（接口列表见 `crates/petd/src/server.rs` 顶部注释，每个请求都要带 `X-RillBuddy-Token` 头或 `?token=`）。
 - **世界层**：每 500 ms 评估一次互动规则（`crates/petd/assets/interactions.yaml`）。
-- **钱包**：金币按全局计算，余额由流水求和得出，不单独存余额字段。
 - **数据保留**：每轮的明细保留 90 天，更早的汇总成每日数据。
-
-## 功能明细（按里程碑）
-
-以下是开发过程中按里程碑记录的功能清单，数值以代码和 `crates/petd/assets/` 为准。
-
-### M1 状态显示
-
-- `familiar-emit`：见上面的架构要点。
-- `petd`：会话状态机，聚合优先级；spool 补读，单实例锁；宠物包加载，fallback 解析；本地 HTTP + WebSocket。
-- 宠物窗口：透明、置顶、不进任务栏、不抢焦点；单击捏一下，按住可以拖动。
-
-### M2
-
-- **Codex 适配**：映射表在 `adapters/codex/mapping.yaml`，用 `familiar-emit --install codex` 安装。
-- **四种路由模式**：`per-camp`（默认，每个阵营一只主宠物，每个会话一个小分身；等待中的分身排在最靠近主宠物的位置，头上冒感叹号，脚下显示项目名）、`single`、`per-rule`、`per-session`。
-- **僵尸会话检测**：每 5 秒检查一次 agent 进程。
-- **宠物包**：放进 `~/.familiar/pets/` 即可热加载；校验失败的包在图鉴里列出原因，托盘也会提示；内置 `pixel-cat` 和 `pixel-bot`。
-- **宠物图鉴**：预览、按标签筛选、收藏；给 Claude Code、Codex 或某个项目选宠物；切换路由模式。
-- **切换宠物**：挥手 → 一团烟 → 新宠物原地出现；attention 状态时立即替换。
-- **阵营标签**：橙色"Claude"、青色"Codex"；同包时 Codex 那只色相旋转 180°。
-- **右键宠物**：圆形按钮菜单（游戏、投喂、换装、设置、图鉴、报告、隐藏；Codex 的宠物多一个"重置卡"），贴边时改成半圈或四分之一圈。
-- **悬停 1 秒**：会话卡片；悬停在分身上只显示那一个会话。
-- **点击穿透**、**首次启动选择**、**位置记忆**（`windows.json`，显示器拔掉后回到主屏右下角）、**配置热加载**。
-
-### M3 交互与办公室保护
-
-- **不会重叠**：拖着一只撞到另一只，被撞的那只会被弹走；静止时叠在一起，右边那只往右跳开（右边没地方就让左边那只往左）。
-- **拖动与甩飞**：松手后按最后 80 ms 的速度飞出去。物理参数：重力 2400 px/s²，反弹系数 0.45，地面摩擦 0.85/帧。撞墙速度超过 1500 px/s 会晕 2 秒。宠物会落在屏幕底边或普通窗口的标题栏上，脚下的窗口被移走或关掉时会掉下来。
-- **捏、撸毛、惹毛**：单击捏一下（随机三种音效）；在头上来回摸 3 次撸毛，心情值 +1，每分钟最多 +3；5 秒内单击超过 12 次生气跳开，之后 60 秒内再点只会委屈。
-- **覆盖层**：每个显示器一个全屏透明窗口，平时点击穿透，只有虫子能点；没东西要画时自动隐藏。
-- **老板键** `Ctrl+Alt+H`、**全屏隐身**（退出全屏 3 秒后恢复）、**共享屏幕隐身**。
-- **专注模式** `Ctrl+Alt+F`。
-- **双击宠物**跳到终端或 IDE。
-- **大小** S / M / L = 0.75 / 1 / 1.35 倍（`features.size`）。
-- **收藏快速切换** `Ctrl+Alt+P`；**每日轮换** `selection.rotation: daily-random | weekday`。
-- 快捷键在 `config.yaml` 的 `hotkeys` 里修改，重启后生效。
-
-### M4 首批玩法
-
-- **钓鱼**：会话干活 5 秒后开始钓鱼；按本轮时长抽鱼；出错钓到破靴子，被打断鱼跑了；金币普通 1、稀有 3、史诗 8、传说 20，本轮没有工具失败时 ×1.5；同一小时第 10 条鱼起金币减半，几轮同时结束合并成一次收竿；12 种鱼。
-- **抓 Bug**：工具失败掉 1 只，回合出错掉 3 只；每拍死 5 只得 1 金币；同一轮连续 3 次失败掉出 Boss（2 倍大，点 10 下，宠物石化，打死得 5 金币）；最多 20 只，10 分钟没拍的虫钻进地缝。
-- **拔河**：两只主宠物本体来演，不另外生成宠物。两边刚同时在线时先来一局；之后比分有变化、或者距离上一局超过 20 分钟就再演，冷却 10 分钟，计入每小时互动上限。手动开演（右键或 `/pet tug`）不受冷却和上限限制；正在演的时候点，会等这一局演完再来。效率分 = 一次通过率 − 出错率；每边完成 3 轮以上才有分。有会话等你、专注模式时不触发；`features.arena: false` 关闭。**同门内卷**：同阵营两只宠物比两个会话今天的效率分，台词换成"师兄让让～""同门相煎何太急……"。
-- **影子赛跑**：不在屏幕上常驻显示，超过历史最佳那天同一时刻时欢呼。
-- **吐槽**：每 90–180 秒一句，同一句 30 分钟内不重复。
-- **互动规则**：内置嘲讽、安慰、鼓掌、催你四条；每只宠物每小时最多 6 次主动互动；有会话等你时除"催你"外全部冻结，虫子也暂停。
-- **钱包**：每日收入上限 300；图鉴"钱包与战绩"分页和托盘可看余额。
-- **每日报告**：下班时间（默认 18:00，`balance.yaml` 的 `work.off_time`）自动弹出。
-- **数据**：本机 `~/.familiar/familiar.db`（SQLite），不上传。
-
-### M5 对抗与养成
-
-- **成就** 20 个，解锁奖励 10–100 金币（计入每日上限）。
-- **商店**：全身 7 个槽位（hat / face / neck / back / feet / hand / aura，`progress::WEAR_SLOTS`），每个宠物包各穿各的，存在 `equipped (pack, slot, item)`；46 件商品定义在 `progress::CATALOG`，绘制全在 `app/src/decor.ts`（`drawWearBehind` 画翅膀、披风、书包和大光效，`drawWearFront` 画脚、脖子、脸、手里和小光效，帽子仍走 `drawHat`），位置来自 `Sprites.body()` 对每一帧的扫描（头、脖子最窄行、脚）。另有 2 种拔河绳（全局）、2 个吐槽台词包；花钱不算收入。
-- **报告统计**：`events (ts, day, kind, what, n)` 表记录 whip（what = 挨打的宠物）、game（what = 游戏名）、radio（n = 秒，电台窗口每 10 秒 POST `/v1/stat`，相声按段子时长）、kegel（n = 组数）、letter；`kv` 里 `peak:<day>` 记当天最多同时在线会话数、`duty:<day>:<camp>` 记各阵营在岗的宠物包。`/v1/report` 汇总成 whips / games / radio_s / kegel_reps / letters / peak_agents / duty。
-- **周赛季**：每周一结算上周每天拔河效率分的总和；冠军戴皇冠，输家戴"输"字纸帽；赛季帽会盖过装备的帽子。
-- **夜猫子提醒**：23 点以后完成任务提醒一句，每晚一次。
-- **赛跑下注**：两边 2 分钟内先后开始新一轮就开跑；20 秒内下注 10 / 50 / 100，单注不超过余额的一半；赔率 = 0.9 ÷ 最近 20 场胜率，限制在 1.2–5.0，不足 5 场时 1.8；赢了拿回本金加奖金，只有奖金计入每日上限。
-- **庄家局**：只有一边在线时，每轮开始后 20 秒内可押"不到 1 分钟 / 1–5 分钟 / 超过 5 分钟 / 会出错 / 要你确认"。
-- **擂台**：两边各挑一个会话（同一项目优先），下一轮先一次通过的赢，相差不到 5 秒平局，胜方 +15。开打后宠物头上挂"⚔ 擂台"牌子，显示等下一轮 / 比赛中 / 做完了几秒；右键"⚔ 擂台进行中"能看进度、取消。
-- **打脸**：被嘲讽的一方 10 分钟内完成一轮就回敬"打脸了吧！"。
-- **抢活**：一边新开会话时，另一边闲着的宠物有一半概率委屈"我也可以的"。
-- **偷吃**：一只闲了 2 分钟以上、另一只在干活且今天钓到过鱼时，闲着的可能溜过去偷一条鱼（冷却 30 分钟）；被偷的一方 15 秒内完成任务能追回。
-- **猜拳**：两只都闲了 3 分钟以上自己玩三局两胜，胜方 +2；右键"猜拳"和宠物对战，头上弹出"你 vs 我"小牌子。
-- **投喂**：消耗鱼篓里最新的一条，心情 +3。
-- **好感度**（0–100）：20 解锁拔河后击掌，50 解锁两只都睡着时并排睡，80 解锁每日报告上的合照。
-- **进化**：100 / 500 / 2000 轮升 1 / 2 / 3 阶，蓝 / 紫 / 金色光环；可用 `evolutions` 自定义。
-- **双人小游戏**：两只都闲了 2 分钟以上偶尔自己玩，冷却 20 分钟，计入每小时互动上限。羽毛球（一只走到另一只 300 px 外，中间立网，最后一拍没接住的输）、乒乓球（隔着球台，球在对方半台弹一下）、掰手腕（隔着小桌子，拉锯几秒后赢家把对方按下去）。赢家欢呼、输家垂头，好感度 +1。
-- **Codex 重置卡**：只读 `$CODEX_HOME/sessions` 和 `~/.codex/sessions`；额度用到 90% 以上提醒一次（2 小时内不重复）；到期前突然清空时播放金色重置卡动画（翻面、发光、额度条清零，欢呼"满血复活"），按时刷新时只说一句。
-- **投球**：拖到另一只身上，来回扔 5 次；空中点球截下 +1 金币，两只抗议；冷却 2 分钟。
-- **互动动画**：猜拳摇三下再亮手势，赢了撒彩纸、飘金币；投喂时鱼飞进嘴里，吃完冒爱心；下注时头上弹出筹码，开奖时赢家欢呼、输家垂头。
-- **作息动作**：下班前 30 分钟收拾书包；周五 17 点后跳舞；周一早上第一次上线抱怨一句。
-- **喝水 / 深呼吸提醒**（默认关闭）：每 60 分钟提醒喝水；10 分钟内被叫去确认超过 6 次时带你做 30 秒 4-7-8 呼吸（身体跟着吸气、屏住、呼气缩放），点一下跳过。
-- **拖到宠物身上安装**宠物包，宠物会说结果。
-- **对手缺席 / 上线**：对方 3 天没来时问"它今天没来上班？"，7 天后贴寻人启事；对方隔了一天以上再上线，说"你终于来了"，对方从下面探头出来。

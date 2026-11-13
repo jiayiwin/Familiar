@@ -1,16 +1,16 @@
 [package]
-name = "familiar"
+name = "rillbuddy"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Familiar desktop app: hosts petd, the pet windows and the tray."
+description = "Rill desktop app: hosts petd, the pet windows and the tray."
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-familiar-petd = { path = "../../crates/petd" }
+rillbuddy-petd = { path = "../../crates/petd" }
 tauri = { version = "2", features = ["tray-icon"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -18,7 +18,6 @@ tokio = { version = "1", features = ["sync"] }
 serde_yaml = "0.9"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-dialog = "2"
-chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
@@ -28,6 +27,17 @@ windows-sys = { version = "0.59", features = [
   "Win32_System_Diagnostics_ToolHelp",
   "Win32_UI_WindowsAndMessaging",
   "Win32_UI_Input_KeyboardAndMouse",
+] }
+# The desktop's own icon view (IFolderView), for the pets' sweep. The same version Tauri already uses.
+windows = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_System_Com",
+  "Win32_System_Ole",
+  "Win32_System_SystemServices",
+  "Win32_System_Variant",
+  "Win32_UI_Accessibility",
+  "Win32_UI_Shell",
+  "Win32_UI_Shell_Common",
 ] }
 
 [features]

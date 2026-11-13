@@ -1,7 +1,10 @@
 //! Hook payload -> unified event (protocol v1).
 //!
 //! Only the tool name and a file basename survive into `detail`; prompts,
-//! commands, file contents and outputs are dropped here and never leave.
+//! commands, file contents and outputs are dropped here and never leave. The
+//! one exception: at the end of a turn, the single line where the agent names
+//! its "next step" (下一步：… / Next step: …), which the pet may keep for you
+//! (手上的事). Nothing else of its reply leaves.
 
 use serde_json::{json, Map, Value};
 
@@ -64,6 +67,12 @@ pub fn claude_code(input: &Value, pid: u32, ts: u64) -> Option<Value> {
         }
         "Stop" => {
             detail.insert("result".into(), "ok".into());
+            let said = input.get("last_assistant_message").and_then(Value::as_str).map(String::from).or_else(|| {
+                input.get("transcript_path").and_then(Value::as_str).filter(|p| !p.is_empty()).and_then(|p| last_reply(std::path::Path::new(p)))
+            });
+            if let Some(n) = said.as_deref().and_then(next_step) {
+                detail.insert("next".into(), n.into());
+            }
             "turn.done"
         }
         "StopFailure" => {
@@ -94,8 +103,13 @@ pub fn claude_code(input: &Value, pid: u32, ts: u64) -> Option<Value> {
     Some(ev)
 }
 
-/// Table-driven mapping (adapters/<agent>/mapping.yaml). Used for Codex so
-/// hook names and payload fields can change without touching code.
+/// Table-driven mapping (adapters/<agent>/mapping.yaml). Used for Codex,
+/// Gemini CLI and Cursor so hook names and payload fields can change without
+/// touching code.
+///
+/// `session` and `project` name where to find the value in the payload:
+/// alternatives separated by `|` (the first that holds text wins), each a
+/// dotted path where a number picks an array item (`workspace_roots.0`).
 #[derive(Debug, serde::Deserialize)]
 pub struct Table {
     pub source: String,
@@ -103,6 +117,10 @@ pub struct Table {
     pub session: String,
     #[serde(default = "d_project")]
     pub project: String,
+    /// Printed on stdout after the event is sent, for agents that insist on
+    /// JSON from every hook (Gemini CLI: `{}`).
+    #[serde(default)]
+    pub stdout: Option<String>,
     #[serde(default)]
     pub sub_when: Option<String>,
     #[serde(default)]
@@ -129,6 +147,24 @@ pub struct Rule {
     pub result: Option<String>,
     #[serde(default)]
     pub sub: bool,
+    /// The rule only applies when these payload fields hold these values.
+    #[serde(default)]
+    pub when: std::collections::HashMap<String, String>,
+    /// `ok` is this, whatever the payload says (a hook that only fires on failure).
+    #[serde(default)]
+    pub ok_value: Option<bool>,
+    /// A boolean payload field that means the user interrupted the tool.
+    #[serde(default)]
+    pub interrupt_key: Option<String>,
+    /// A payload field whose value picks the turn result through `results`
+    /// (`result` is the fallback).
+    #[serde(default)]
+    pub result_key: Option<String>,
+    #[serde(default)]
+    pub results: std::collections::HashMap<String, String>,
+    /// Look in `last_assistant_message` for the agent's "next step" line.
+    #[serde(default)]
+    pub next: bool,
 }
 
 fn d_session() -> String {
@@ -139,11 +175,31 @@ fn d_project() -> String {
 }
 
 pub const CODEX_TABLE: &str = include_str!("../../../adapters/codex/mapping.yaml");
+pub const GEMINI_TABLE: &str = include_str!("../../../adapters/gemini/mapping.yaml");
+pub const CURSOR_TABLE: &str = include_str!("../../../adapters/cursor/mapping.yaml");
+pub const OPENCODE_TABLE: &str = include_str!("../../../adapters/opencode/mapping.yaml");
+
+/// Text at `spec` in the payload (see `Table`).
+fn lookup<'a>(input: &'a Value, spec: &str) -> &'a str {
+    spec.split('|')
+        .filter_map(|path| {
+            path.trim().split('.').try_fold(input, |v, key| match key.parse::<usize>() {
+                Ok(i) if v.is_array() => v.get(i),
+                _ => v.get(key),
+            })
+        })
+        .filter_map(Value::as_str)
+        .find(|s| !s.is_empty())
+        .unwrap_or("")
+}
 
 pub fn table(input: &Value, t: &Table, pid: u32, ts: u64) -> Option<Value> {
     let hook = input.get("hook_event_name")?.as_str()?;
     let rule = t.events.get(hook)?;
-    let session = input.get(&t.session).and_then(Value::as_str).unwrap_or("");
+    if !rule.when.iter().all(|(k, want)| input.get(k).and_then(Value::as_str) == Some(want.as_str())) {
+        return None;
+    }
+    let session = lookup(input, &t.session);
     if session.is_empty() {
         return None;
     }
@@ -153,20 +209,31 @@ pub fn table(input: &Value, t: &Table, pid: u32, ts: u64) -> Option<Value> {
     if rule.tool {
         put_tool_table(input, t, &mut detail);
     }
-    if rule.ok {
+    if let Some(ok) = rule.ok_value {
+        detail.insert("ok".into(), Value::Bool(ok));
+    } else if rule.ok {
         detail.insert("ok".into(), Value::Bool(!response_failed(input.get("tool_response"))));
+    }
+    if rule.interrupt_key.as_ref().is_some_and(|k| input.get(k).and_then(Value::as_bool) == Some(true)) {
+        detail.insert("interrupt".into(), Value::Bool(true));
     }
     if let Some(k) = &rule.kind {
         detail.insert("kind".into(), k.as_str().into());
     }
-    if let Some(r) = &rule.result {
+    let picked = rule.result_key.as_ref().and_then(|k| input.get(k)).and_then(Value::as_str).and_then(|v| rule.results.get(v));
+    if let Some(r) = picked.or(rule.result.as_ref()) {
         detail.insert("result".into(), r.as_str().into());
+    }
+    if rule.next {
+        if let Some(n) = input.get("last_assistant_message").and_then(Value::as_str).and_then(next_step) {
+            detail.insert("next".into(), n.into());
+        }
     }
     let mut ev = json!({
         "v": 1,
         "source": t.source,
         "session": session,
-        "project": input.get(&t.project).and_then(Value::as_str).unwrap_or(""),
+        "project": lookup(input, &t.project),
         "event": rule.event,
         "sub": sub,
         "pid": pid,
@@ -255,6 +322,81 @@ fn first_word(cmd: &Value) -> Option<String> {
     Some(w)
 }
 
+/// The line where a reply names its next step: 「下一步：补上超时的测试」,
+/// "**Next steps:**" followed by a list item, "后续：…". Only a step stated as a
+/// thing to do: an offer ("要我继续吗？", "Want me to…?") is not one. The last
+/// such line wins; at most 80 characters of it.
+pub fn next_step(text: &str) -> Option<String> {
+    const HEADS: [&str; 7] = ["下一步", "后续", "接下来", "next steps", "next step", "follow-ups", "follow-up"];
+    let clean = |s: &str| -> String {
+        let s = s.replace("**", "").replace('`', "");
+        let s = s.trim().trim_start_matches(['#', '*', '-', '>', '•', ' ', '\t']);
+        // A numbered item: "1. ", "2) ".
+        let s = match s.split_once(['.', ')', '、']) {
+            Some((n, rest)) if !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()) => rest,
+            _ => s,
+        };
+        s.trim().to_string()
+    };
+    let lines: Vec<&str> = text.lines().collect();
+    let mut found = None;
+    for (i, raw) in lines.iter().enumerate() {
+        let line = clean(raw);
+        let low = line.to_lowercase();
+        let Some(head) = HEADS.iter().find(|h| low.starts_with(*h)) else { continue };
+        // The heading is followed by a colon close by ("下一步建议：", "Next steps:").
+        let after: String = line.chars().skip(head.chars().count()).collect();
+        let Some(colon) = after.char_indices().find(|(_, c)| *c == ':' || *c == '：').map(|(i, _)| i) else { continue };
+        if after[..colon].chars().count() > 4 {
+            continue;
+        }
+        let mut what = after[colon..].trim_start_matches([':', '：']).trim().to_string();
+        if what.is_empty() {
+            what = lines[i + 1..].iter().map(|l| clean(l)).find(|l| !l.is_empty()).unwrap_or_default();
+        }
+        let wl = what.to_lowercase();
+        let offer = what.ends_with(['?', '？'])
+            || ["要我", "需要我", "是否", "要不要", "want me", "should i", "shall i", "let me know"].iter().any(|w| wl.contains(w));
+        if what.is_empty() || offer {
+            continue;
+        }
+        let what = what.trim_end_matches(['。', '.', '；', ';']).to_string();
+        let mut short: String = what.chars().take(80).collect();
+        if what.chars().count() > 80 {
+            short.push('…');
+        }
+        found = Some(short);
+    }
+    found
+}
+
+/// The text of the last assistant reply in a Claude Code transcript (its tail only).
+fn last_reply(path: &std::path::Path) -> Option<String> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = std::fs::File::open(path).ok()?;
+    let len = f.metadata().ok()?.len();
+    let from = len.saturating_sub(512 * 1024);
+    f.seek(SeekFrom::Start(from)).ok()?;
+    let mut buf = Vec::new();
+    f.take(512 * 1024).read_to_end(&mut buf).ok()?;
+    let text = String::from_utf8_lossy(&buf);
+    for line in text.lines().rev() {
+        let Ok(v) = serde_json::from_str::<Value>(line) else { continue };
+        if v.get("type").and_then(Value::as_str) != Some("assistant") {
+            continue;
+        }
+        let said: Vec<&str> = v
+            .pointer("/message/content")
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter(|c| c.get("type").and_then(Value::as_str) == Some("text")).filter_map(|c| c.get("text").and_then(Value::as_str)).collect())
+            .unwrap_or_default();
+        if !said.is_empty() {
+            return Some(said.join("\n"));
+        }
+    }
+    None
+}
+
 fn put_tool(input: &Value, detail: &mut Map<String, Value>) {
     if let Some(t) = input.get("tool_name").and_then(Value::as_str) {
         detail.insert("tool".into(), t.into());
@@ -276,6 +418,8 @@ fn response_failed(resp: Option<&Value>) -> bool {
     r.get("is_error").and_then(Value::as_bool) == Some(true)
         || r.get("success").and_then(Value::as_bool) == Some(false)
         || r.get("interrupted").and_then(Value::as_bool) == Some(true)
+        // Gemini CLI: a failed tool's response carries `error`.
+        || r.get("error").is_some_and(|e| !e.is_null())
 }
 
 #[cfg(test)]
@@ -327,6 +471,86 @@ mod tests {
         assert_eq!(t["sub"], true);
     }
 
+    #[test]
+    fn gemini_cli_payloads() {
+        let t: Table = serde_yaml::from_str(GEMINI_TABLE).unwrap();
+        assert_eq!(t.stdout.as_deref(), Some("{}"), "Gemini CLI wants JSON back from every hook");
+        let g = |v: Value| table(&v, &t, 7, 1);
+        let base = json!({ "session_id": "g1", "cwd": "D:/work/app", "transcript_path": "", "timestamp": "2026-11-10T00:00:00Z" });
+        let with = |extra: Value| {
+            let mut b = base.clone();
+            b.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            b
+        };
+        let start = g(with(json!({ "hook_event_name": "BeforeAgent", "prompt": "secret prompt" }))).unwrap();
+        assert_eq!((start["source"].as_str(), start["event"].as_str(), start["project"].as_str()), (Some("gemini"), Some("turn.start"), Some("D:/work/app")));
+        assert!(!start.to_string().contains("secret"));
+        let tool = g(with(json!({ "hook_event_name": "BeforeTool", "tool_name": "replace", "tool_input": { "file_path": "/w/src/main.rs", "old_string": "a" } }))).unwrap();
+        assert_eq!(tool["detail"], json!({ "tool": "replace", "file": "main.rs" }));
+        let sh = g(with(json!({ "hook_event_name": "BeforeTool", "tool_name": "run_shell_command", "tool_input": { "command": "rg TODO src" } }))).unwrap();
+        assert_eq!(sh["detail"]["read"], true);
+        let ok = g(with(json!({ "hook_event_name": "AfterTool", "tool_name": "read_file", "tool_response": { "llmContent": "x", "returnDisplay": "x" } }))).unwrap();
+        assert_eq!(ok["detail"]["ok"], true);
+        let bad = g(with(json!({ "hook_event_name": "AfterTool", "tool_name": "run_shell_command", "tool_response": { "llmContent": "", "error": { "type": "x", "message": "boom" } } }))).unwrap();
+        assert_eq!(bad["detail"]["ok"], false);
+        let ask = g(with(json!({ "hook_event_name": "Notification", "notification_type": "ToolPermission", "message": "Tool x requires execution", "details": { "command": "rm -rf /" } }))).unwrap();
+        assert_eq!((ask["event"].as_str(), ask["detail"]["kind"].as_str()), (Some("attention"), Some("permission")));
+        assert!(!ask.to_string().contains("rm -rf"));
+        assert!(g(with(json!({ "hook_event_name": "Notification", "notification_type": "SomethingElse" }))).is_none());
+        assert_eq!(g(with(json!({ "hook_event_name": "AfterAgent", "prompt_response": "done" }))).unwrap()["detail"]["result"], "ok");
+        assert!(g(with(json!({ "hook_event_name": "AfterModel" }))).is_none(), "fires for every chunk: not hooked");
+    }
+
+    #[test]
+    fn opencode_plugin_payloads() {
+        let t: Table = serde_yaml::from_str(OPENCODE_TABLE).unwrap();
+        let o = |v: Value| table(&v, &t, 7, 1);
+        let start = o(json!({ "hook_event_name": "TurnStart", "session_id": "ses_1", "cwd": "D:/work/api" })).unwrap();
+        assert_eq!((start["source"].as_str(), start["event"].as_str(), start["sub"].as_bool()), (Some("opencode"), Some("turn.start"), Some(false)));
+        let tool = o(json!({ "hook_event_name": "ToolStart", "session_id": "ses_1", "cwd": "D:/work/api", "tool_name": "edit", "tool_input": { "file_path": "D:/work/api/src/app.ts" } })).unwrap();
+        assert_eq!(tool["detail"], json!({ "tool": "edit", "file": "app.ts" }));
+        let sh = o(json!({ "hook_event_name": "ToolStart", "session_id": "ses_1", "tool_name": "shell", "tool_input": { "command": "rg" } })).unwrap();
+        assert_eq!(sh["detail"]["read"], true);
+        let bad = o(json!({ "hook_event_name": "ToolEnd", "session_id": "ses_1", "tool_name": "bash", "tool_response": { "success": false } })).unwrap();
+        assert_eq!(bad["detail"]["ok"], false);
+        // A subagent's session reports on its parent.
+        let child = o(json!({ "hook_event_name": "ToolStart", "session_id": "ses_1", "agent_id": "ses_2", "tool_name": "read" })).unwrap();
+        assert_eq!((child["session"].as_str(), child["sub"].as_bool()), (Some("ses_1"), Some(true)));
+        assert_eq!(o(json!({ "hook_event_name": "Permission", "session_id": "ses_1" })).unwrap()["detail"]["kind"], "permission");
+        for (hook, result) in [("TurnDone", "ok"), ("TurnFailed", "error"), ("TurnAborted", "aborted")] {
+            assert_eq!(o(json!({ "hook_event_name": hook, "session_id": "ses_1" })).unwrap()["detail"]["result"], result);
+        }
+    }
+
+    #[test]
+    fn cursor_payloads() {
+        let t: Table = serde_yaml::from_str(CURSOR_TABLE).unwrap();
+        assert!(t.stdout.is_none());
+        let c = |v: Value| table(&v, &t, 7, 1);
+        let base = json!({ "conversation_id": "c1", "generation_id": "g", "workspace_roots": ["D:/work/site"], "cursor_version": "2.0" });
+        let with = |extra: Value| {
+            let mut b = base.clone();
+            b.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            b
+        };
+        let start = c(with(json!({ "hook_event_name": "beforeSubmitPrompt", "prompt": "secret" }))).unwrap();
+        assert_eq!((start["source"].as_str(), start["session"].as_str(), start["project"].as_str(), start["event"].as_str()), (Some("cursor"), Some("c1"), Some("D:/work/site"), Some("turn.start")));
+        let tool = c(with(json!({ "hook_event_name": "preToolUse", "tool_name": "Write", "tool_input": { "file_path": "D:\\work\\site\\index.html" }, "cwd": "D:/work/site" }))).unwrap();
+        assert_eq!(tool["detail"], json!({ "tool": "Write", "file": "index.html" }));
+        assert_eq!(c(with(json!({ "hook_event_name": "postToolUse", "tool_name": "Shell", "tool_output": "{}" }))).unwrap()["detail"]["ok"], true);
+        let fail = c(with(json!({ "hook_event_name": "postToolUseFailure", "tool_name": "Shell", "failure_type": "error", "is_interrupt": false }))).unwrap();
+        assert_eq!(fail["detail"], json!({ "tool": "Shell", "ok": false }));
+        let cut = c(with(json!({ "hook_event_name": "postToolUseFailure", "tool_name": "Shell", "is_interrupt": true }))).unwrap();
+        assert_eq!(cut["detail"]["interrupt"], true);
+        for (status, result) in [("completed", "ok"), ("aborted", "aborted"), ("error", "error"), ("something-new", "ok")] {
+            assert_eq!(c(with(json!({ "hook_event_name": "stop", "status": status }))).unwrap()["detail"]["result"], result, "{status}");
+        }
+        // No workspace open: the tool's own cwd names the project.
+        let lone = c(json!({ "hook_event_name": "preToolUse", "session_id": "s9", "workspace_roots": [], "cwd": "D:/tmp", "tool_name": "Read" })).unwrap();
+        assert_eq!((lone["session"].as_str(), lone["project"].as_str()), (Some("s9"), Some("D:/tmp")));
+        assert!(c(with(json!({ "hook_event_name": "afterAgentThought" }))).is_none());
+    }
+
     fn codex(v: Value) -> Option<Value> {
         let t: Table = serde_yaml::from_str(CODEX_TABLE).unwrap();
         table(&v, &t, 7, 1)
@@ -352,6 +576,10 @@ mod tests {
         .unwrap();
         assert_eq!(post["detail"], json!({ "tool": "Bash", "ok": true }));
 
+        // The next step it names is kept, and nothing else of the reply.
+        let named = codex(json!({ "session_id": "01a1", "hook_event_name": "Stop", "last_assistant_message": "改好了，测试都过了。\n\n下一步：给登录补上超时的测试。\n要我现在做吗？" })).unwrap();
+        assert_eq!(named["detail"]["next"], "给登录补上超时的测试");
+        assert!(!named.to_string().contains("改好了"));
         let stop = codex(json!({ "session_id": "01a1", "hook_event_name": "Stop", "last_assistant_message": "secret" })).unwrap();
         assert_eq!(stop["event"], "turn.done");
         assert_eq!(stop["detail"]["result"], "ok");
@@ -385,5 +613,23 @@ mod tests {
     fn unknown_or_sessionless_is_dropped() {
         assert!(map(json!({ "hook_event_name": "PreCompact", "session_id": "s" })).is_none());
         assert!(map(json!({ "hook_event_name": "Stop" })).is_none());
+    }
+}
+
+
+#[cfg(test)]
+mod next_tests {
+    use super::next_step;
+
+    #[test]
+    fn the_next_step_is_the_line_that_names_one() {
+        assert_eq!(next_step("做完了。\n\n**下一步：** 把 `api-server` 的 PR 合进去。").as_deref(), Some("把 api-server 的 PR 合进去"));
+        assert_eq!(next_step("Done.\n\n## Next steps:\n1. Add a timeout test for login\n2. Update the docs").as_deref(), Some("Add a timeout test for login"));
+        assert_eq!(next_step("后续建议：清理旧的迁移脚本").as_deref(), Some("清理旧的迁移脚本"));
+        // Offers and narration are not things to do.
+        assert_eq!(next_step("下一步：要我继续把文档也改了吗？"), None);
+        assert_eq!(next_step("Next step: want me to run the full suite?"), None);
+        assert_eq!(next_step("下一步我会先看日志，再决定怎么修。"), None);
+        assert_eq!(next_step("全部改完了，没有别的。"), None);
     }
 }

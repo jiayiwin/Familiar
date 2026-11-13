@@ -1,8 +1,8 @@
-//! The right-click menu: a ring of buttons around the pet (menu.html), with
-//! a card for each group. This file builds the menu as data; ids are the
-//! same strings the tray uses, so picks go through `on_menu`.
+//! The right-click menu: a short card beside the pet (menu.html) whose groups
+//! open a second card. This file builds the menu as data; ids are the same
+//! strings the tray uses, so picks go through `on_menu`.
 
-use crate::{current_language, target_name, App, LANGS, MODES};
+use crate::App;
 use petd::i18n::t;
 use petd::tr;
 use serde::Serialize;
@@ -13,31 +13,35 @@ pub struct Node {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     pub label: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub icon: Option<String>,
     pub enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub checked: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hint: Option<String>,
+    /// Line icon for a row of the first card: music | sweet | mail | home | moon | more.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub glyph: Option<String>,
+    /// A red dot: something is waiting behind this row.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub dot: bool,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<Node>,
 }
 
-fn item(id: impl Into<String>, icon: &str, label: impl Into<String>) -> Node {
-    Node { id: Some(id.into()), icon: (!icon.is_empty()).then(|| icon.to_string()), label: label.into(), enabled: true, ..Default::default() }
+fn item(id: impl Into<String>, label: impl Into<String>) -> Node {
+    Node { id: Some(id.into()), label: label.into(), enabled: true, ..Default::default() }
 }
 
 fn check(id: impl Into<String>, label: impl Into<String>, on: bool) -> Node {
-    Node { checked: Some(on), ..item(id, "", label) }
+    Node { checked: Some(on), ..item(id, label) }
 }
 
 fn info(label: impl Into<String>) -> Node {
     Node { label: label.into(), enabled: false, ..Default::default() }
 }
 
-fn group(icon: &str, label: &str, children: Vec<Node>) -> Node {
-    Node { icon: Some(icon.into()), label: label.into(), enabled: true, children, ..Default::default() }
+fn group(label: &str, children: Vec<Node>) -> Node {
+    Node { label: label.into(), enabled: true, children, ..Default::default() }
 }
 
 fn with_hint(mut n: Node, hint: impl Into<String>) -> Node {
@@ -45,165 +49,98 @@ fn with_hint(mut n: Node, hint: impl Into<String>) -> Node {
     n
 }
 
+fn with_glyph(mut n: Node, glyph: &str) -> Node {
+    n.glyph = Some(glyph.into());
+    n
+}
+
+/// "2 小时 14 分" / "14 分".
+fn span_text(ms: u64) -> String {
+    let m = ms / 60_000;
+    match (m / 60, m % 60) {
+        (0, m) => tr!("{m} 分", "{m}m"),
+        (h, 0) => tr!("{h} 小时", "{h}h"),
+        (h, m) => tr!("{h} 小时 {m} 分", "{h}h {m}m"),
+    }
+}
+
 #[derive(Serialize)]
 pub struct Model {
     pub pet: String,
     pub title: String,
+    /// Which of the five pets this is: the menu wears its skin.
+    pub skin: String,
+    /// What it is watching and how long the agents worked today.
+    pub sub: String,
     pub camp: Option<String>,
     pub items: Vec<Node>,
 }
 
-/// 说相声: a random piece, any piece by name, and the folder for your own scripts.
-fn xs_group(app: &App, pet: &str) -> Node {
-    let pieces: Vec<(String, String, bool)> = {
-        let mut w = app.petd.shared.world.lock().unwrap();
-        w.reload_xs(&app.petd.paths.home);
-        w.t.xs.iter().map(|p| (p.id.clone(), p.title.clone(), p.lang.is_some())).collect()
-    };
-    let mut kids = vec![with_hint(item(format!("xs|{pet}"), "🎲", t("随便来一段", "Surprise me")), t("两只宠物一起说", "Both pets perform"))];
-    for (id, title, mine) in pieces.iter().take(24) {
-        let n = item(format!("xs|{pet}|{id}"), if *mine { "📜" } else { "" }, title.as_str());
-        kids.push(if *mine { with_hint(n, t("我的本子", "My script")) } else { n });
-    }
-    kids.push(with_hint(item("xsdir", "📂", t("放自己的本子…", "Add your own scripts…")), t("甲：乙：格式的 txt", "txt with 甲：/乙： lines")));
-    group("🎙️", t("说相声", "Comedy duo"), kids)
-}
-
 pub fn build(app: &App, pet: &str, has_letter: bool) -> Option<Model> {
-    let (view, packs, favs, mode, focus, size, kegel) = {
+    let (view, focus) = {
         let hub = app.petd.hub.lock().unwrap();
         let view = hub.pets().into_iter().find(|v| v.id == pet)?;
-        let mut packs: Vec<(String, String)> = hub.lib.packs.values().map(|p| (p.id.clone(), p.name.clone())).collect();
-        packs.sort();
-        (view, packs, hub.cfg.selection.favorites.clone(), hub.cfg.mode, hub.cfg.features.focus_mode, hub.cfg.features.size.to_lowercase(), hub.cfg.features.kegel.clone())
+        (view, hub.cfg.features.focus_mode)
     };
-    let lang = current_language(app);
-    let pack_name = |id: &str| packs.iter().find(|p| p.0 == id).map(|p| p.1.clone()).unwrap_or_else(|| id.into());
-    let offers = {
-        let w = app.petd.shared.world.lock().unwrap();
-        w.offers(petd::now_ms(), &app.petd.shared.db)
+    let db = &app.petd.shared.db;
+
+    // ---- keep me company: what the pet does for you
+    // Its piece, on whatever it plays.
+    let played = match petd::cast::by_id(&view.skin).map(|f| f.instrument).unwrap_or("piano") {
+        "cello" => t("拉首曲子", "Play the cello"),
+        "flute" => t("吹首曲子", "Play the flute"),
+        "xylophone" => t("敲首曲子", "Play the xylophone"),
+        "harp" => t("拨首曲子", "Play the harp"),
+        _ => t("弹首曲子", "Play the piano"),
     };
-
-    // ---- games
-    let mut games = vec![
-        with_hint(item("spring", "🧧", t("春节倒计时", "Spring Festival")), t("抢红包小游戏", "Red-envelope game")),
-        with_hint(item("radio", "📻", t("电台", "Radio")), t("全世界的电台，还有相声台", "Stations from around the world")),
-        xs_group(app, pet),
-        with_hint(item("tug", "🤼", t("拔河", "Tug-of-war")), t("比今天的效率分", "Today's productivity score")),
-        item(format!("duo|{pet}|badminton"), "🏸", t("羽毛球", "Badminton")),
-        item(format!("duo|{pet}|pingpong"), "🏓", t("乒乓球", "Ping-pong")),
-        item(format!("duo|{pet}|armwrestle"), "💪", t("掰手腕", "Arm wrestling")),
-        group(
-            "✊",
-            t("猜拳", "Rock-paper-scissors"),
-            [t("✊ 石头", "✊ Rock"), t("✌️ 剪刀", "✌️ Scissors"), t("✋ 布", "✋ Paper")]
-                .iter()
-                .enumerate()
-                .map(|(i, n)| item(format!("rps|{pet}|{i}"), "", *n))
-                .collect(),
-        ),
+    let company = vec![
+        item(format!("act|{pet}|dance"), t("跳支舞", "Dance")),
+        item(format!("act|{pet}|play"), played),
+        item(format!("radio|{pet}"), t("放电台", "Radio")),
+        item(format!("kegel|{pet}"), t("做一组提肛", "A kegel set")),
+        item(format!("note|{pet}"), t("记一件事", "Write something down")),
     ];
-    games.push(match &offers.duel_status {
-        Some(status) => group(
-            "⚔️",
-            t("擂台进行中", "Duel on"),
-            vec![
-                info(status.clone()),
-                info(t("下一轮不出错、先做完的赢，赢家 +15", "First to finish the next turn without errors wins, +15 for the winner")),
-                item(format!("duelcancel|{pet}"), "✖️", t("取消擂台", "Cancel duel")),
-            ],
-        ),
-        None => with_hint(item(format!("duel|{pet}"), "⚔️", t("发起擂台", "Start a duel")), t("比下一轮谁先做完", "Who finishes the next turn first")),
-    });
-    let stakes: Vec<i64> = [10, 50, 100].into_iter().filter(|s| s * 2 <= offers.wallet).collect();
-    if let Some((occ, ocx, left)) = offers.race {
-        let mut sides = vec![];
-        for (camp, name, odds) in [("claude-code", "Claude Code", occ), ("codex", "Codex", ocx)] {
-            let kids = stakes.iter().map(|s| item(format!("bet|{pet}|race|{camp}|{s}"), "🪙", tr!("{s} 金币", "{s} coins"))).collect();
-            sides.push(with_hint(group("🏁", &tr!("押 {name}", "Bet on {name}"), kids), format!("×{odds:.1}")));
-        }
-        if stakes.is_empty() {
-            sides = vec![info(t("金币不够下注", "Not enough coins to bet"))];
-        }
-        games.push(with_hint(group("🏁", t("赛跑下注", "Race bets"), sides), tr!("剩 {left} 秒", "{left}s left")));
+
+    // ---- what else there is about this pet (the pages are in its room; the switches in the tray)
+    let mut more = vec![
+        group(t("多喂几颗", "Feed more"), vec![item(format!("feed|{pet}|5"), "×5"), item(format!("feed|{pet}|10"), "×10")]),
+    ];
+    match view.camp.as_deref() {
+        Some("codex") => more.push(group(t("重置卡", "Reset card"), reset_card(pet))),
+        Some("claude-code") => more.push(group(t("用量", "Usage"), claude_usage())),
+        _ => {}
     }
-    if let Some(left) = offers.book {
-        let mut picks = vec![];
-        for (id, _, odds) in petd::games::BOOK_PICKS {
-            let kids = stakes.iter().take(2).map(|s| item(format!("bet|{pet}|book|{id}|{s}"), "🪙", tr!("{s} 金币", "{s} coins"))).collect();
-            picks.push(with_hint(group("🎫", petd::games::book_pick_name(id), kids), format!("×{odds}")));
-        }
-        if stakes.is_empty() {
-            picks = vec![info(t("金币不够下注", "Not enough coins to bet"))];
-        }
-        games.push(with_hint(group("🎲", t("庄家局", "Bookmaker"), picks), tr!("剩 {left} 秒", "{left}s left")));
-    }
+    more.push(item(format!("hide|{pet}"), t("隐藏", "Hide")));
 
-    // ---- switch
-    let mut ordered: Vec<&(String, String)> = packs.iter().filter(|p| favs.contains(&p.0)).collect();
-    let fav_count = ordered.len();
-    ordered.extend(packs.iter().filter(|p| !favs.contains(&p.0)));
-    let switch: Vec<Node> = ordered
-        .iter()
-        .enumerate()
-        .map(|(i, (id, name))| {
-            let label = if i < fav_count { format!("★ {name}") } else { name.clone() };
-            check(format!("switch|{}|{id}", view.target), label, *id == view.pack)
-        })
-        .collect();
-
-    // ---- settings
-    let mut settings = vec![
-        group(
-            "🧭",
-            t("路由模式", "Routing mode"),
-            MODES.iter().map(|(id, zh, en)| check(format!("mode|{id}"), t(zh, en), mode.as_str() == *id)).collect(),
-        ),
-        group(
-            "📏",
-            t("大小", "Size"),
-            [("s", t("小 S", "Small S")), ("m", t("中 M", "Medium M")), ("l", t("大 L", "Large L"))]
-                .iter()
-                .map(|(id, n)| check(format!("size|{id}"), *n, size == *id))
-                .collect(),
-        ),
-        Node { checked: Some(focus), ..item("focus", "🎯", t("专注模式", "Focus mode")) },
-        group("🌐", t("语言", "Language"), LANGS.iter().map(|(id, zh, en)| check(format!("lang|{id}"), t(zh, en), lang == *id)).collect()),
-    ];
-    if let Some(pat) = view.target.strip_prefix("project:") {
-        settings.push(item(format!("unproj|{pat}"), "↩️", t("恢复用阵营宠物", "Back to the team pet")));
-    }
-    settings.push(item("config", "📝", t("编辑配置…", "Edit config…")));
-
-    // ---- health
-    let health = vec![
-        with_hint(item(format!("kegel|{pet}"), "🍑", t("提肛一组", "Kegel set")), t("收三秒，松三秒", "Three on, three off")),
-        with_hint(
-            item("reminders", "⏰", t("提醒设置…", "Reminder settings…")),
-            if kegel.is_empty() { t("还没设提肛时间", "No kegel times yet").to_string() } else { kegel.join(" ") },
-        ),
-    ];
-
-    let feed_items = vec![
-        item(format!("feed|{pet}|1"), "🐟", t("×1", "×1")),
-        item(format!("feed|{pet}|5"), "🐟", t("×5", "×5")),
-        item(format!("feed|{pet}|10"), "🐟", t("×10", "×10")),
-    ];
-    let whip = with_hint(item(format!("whip|{pet}"), "🪢", t("小皮鞭", "Little whip")), t("干活慢了，抽一下", "Slow? Give it a crack"));
-    let mut items = vec![group("🎮", t("游戏", "Games"), games), group("🐟", t("投喂", "Feed"), feed_items), whip, group("🎨", t("换装", "Outfits"), switch), group("🍑", t("健康", "Health"), health)];
+    // ---- the first card
+    let fish = db.fish_left();
+    let feed = with_hint(item(format!("feed|{pet}|1"), t("喂它", "Feed it")), if fish > 0 { tr!("罐里 {fish} 颗", "{fish} in the jar") } else { t("罐空了 · 问它怎么挣", "Empty · ask it how to earn").to_string() });
+    let mut items = vec![with_glyph(group(t("陪我一下", "Keep me company"), company), "music"), with_glyph(feed, "sweet")];
     if has_letter {
-        items.insert(0, with_hint(item("read_letter", "✉", t("读信", "Open letter")), t("有一封信在等你", "A letter is waiting")));
-    }
-    if view.camp.as_deref() == Some("codex") {
-        items.push(group("🎫", t("重置卡", "Reset card"), reset_card(pet)));
+        let mut letter = with_glyph(item("read_letter", t("有一封信", "A letter")), "mail");
+        letter.dot = true;
+        items.push(letter);
     }
     items.extend([
-        group("⚙️", t("设置", "Settings"), settings),
-        item("gallery", "📖", t("图鉴", "Gallery")),
-        item("report", "📊", t("报告", "Report")),
-        item(format!("hide|{pet}"), "🙈", t("隐藏", "Hide")),
+        with_glyph(with_hint(item(format!("room|{pet}"), t("小屋", "Room")), t("今天、图鉴、设置", "Today, gallery, settings")), "home"),
+        with_glyph(check("focus", t("安静一会儿", "Quiet for a while"), focus), "moon"),
+        with_glyph(group(t("更多", "More"), more), "more"),
     ]);
-    Some(Model { pet: pet.into(), title: format!("{} · {}", target_name(&view.target), pack_name(&view.pack)), camp: view.camp.clone(), items })
+
+    // Under the name: the project it watches, and today's agent time.
+    let watching = view.sessions.iter().max_by_key(|c| c.updated_at).map(|c| c.project.clone()).filter(|p| !p.is_empty());
+    let today = db.report(&petd::db::day_of(petd::now_ms())).work_ms;
+    let mut sub = match watching {
+        Some(p) => tr!("在看 {p}", "Watching {p}"),
+        None => t("现在没活", "Nothing running").to_string(),
+    };
+    if today >= 60_000 {
+        let span = span_text(today);
+        sub.push_str(&tr!(" · 今天 {span}", " · {span} today"));
+    }
+    let skin = view.skin.clone();
+    let title = petd::cast::by_id(&skin).map(|f| f.name()).unwrap_or("").to_string();
+    Some(Model { pet: pet.into(), title, skin, sub, camp: view.camp.clone(), items })
 }
 
 /// Codex pet: current quota and how to spend a banked reset.
@@ -227,16 +164,39 @@ fn reset_card(pet: &str) -> Vec<Node> {
             "No quota info in the last 8 days of Codex logs yet. Run Codex once and it shows up",
         ))),
     }
-    out.push(with_hint(item(format!("codexcard|{pet}"), "🎫", t("使用重置卡…", "Use reset card…")), t("打开 Codex", "Opens Codex")));
-    out.push(item(format!("codexdemo|{pet}"), "✨", t("看看重置动画", "Preview the reset animation")));
+    out.push(with_hint(item(format!("codexcard|{pet}"), t("使用重置卡…", "Use reset card…")), t("打开 Codex", "Opens Codex")));
     out
+}
+
+/// Claude Code's 5-hour and weekly windows, once its status line has reported them.
+fn claude_usage() -> Vec<Node> {
+    let now_s = petd::now_ms() / 1000;
+    match petd::usage::current(now_s) {
+        Some(l) => [&l.primary, &l.secondary]
+            .into_iter()
+            .flatten()
+            .map(|w| {
+                info(tr!(
+                    "{}额度 已用 {:.0}% · {}重置",
+                    "{} quota {:.0}% used · resets {}",
+                    petd::codex::window_name(w.window_minutes),
+                    w.used_percent,
+                    petd::codex::until_text(w.resets_at, now_s)
+                ))
+            })
+            .collect(),
+        None => vec![
+            info(t("还没有用量数据", "No usage numbers yet").to_string()),
+            with_hint(item("connect|usage", t("接上用量显示…", "Hook up the usage display…")), t("通过 Claude Code 的状态栏读取", "Read from Claude Code's status line")),
+        ],
+    }
 }
 
 // ---------------------------------------------------------------- window
 
 pub fn create(h: &AppHandle) -> tauri::Result<()> {
     WebviewWindowBuilder::new(h, "menu", WebviewUrl::App("menu.html".into()))
-        .title("Familiar")
+        .title("Rill")
         .transparent(true)
         .decorations(false)
         .shadow(false)
@@ -250,9 +210,19 @@ pub fn create(h: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Cover the pet's monitor and show the ring centred on the pet.
+/// Cover the pet's monitor and tell the page where the pet stands.
 pub fn open(h: &AppHandle, pet_win: &WebviewWindow, model: Model) -> Result<(), String> {
     let menu = h.get_webview_window("menu").ok_or("no menu window")?;
+    open_at(h, &menu, pet_win, serde_json::json!({ "model": model }))
+}
+
+/// 记一件事 without the menu first: the line to write in, over `pet_win`'s head (`text`: what to start from).
+pub fn open_note(h: &AppHandle, pet_win: &WebviewWindow, model: Model, text: Option<String>) -> Result<(), String> {
+    let menu = h.get_webview_window("menu").ok_or("no menu window")?;
+    open_at(h, &menu, pet_win, serde_json::json!({ "model": model, "note": { "text": text } }))
+}
+
+fn open_at(h: &AppHandle, menu: &WebviewWindow, pet_win: &WebviewWindow, mut payload: serde_json::Value) -> Result<(), String> {
     let sc = pet_win.scale_factor().map_err(|e| e.to_string())?;
     let pos = pet_win.outer_position().map_err(|e| e.to_string())?;
     let size = pet_win.outer_size().map_err(|e| e.to_string())?;
@@ -271,14 +241,17 @@ pub fn open(h: &AppHandle, pet_win: &WebviewWindow, model: Model) -> Result<(), 
     let msc = monitor.scale_factor();
     let _ = menu.set_position(tauri::PhysicalPosition::new(area.position.x, area.position.y));
     let _ = menu.set_size(tauri::PhysicalSize::new(area.size.width, area.size.height));
-    let payload = serde_json::json!({
-        "model": model,
+    let place = serde_json::json!({
+        "top": (pos.y as f64 - area.position.y as f64) / msc,
         "cx": (pcx - area.position.x as f64) / msc,
         "cy": (pcy - area.position.y as f64) / msc,
         "petH": size.height as f64 / sc,
         "w": area.size.width as f64 / msc,
         "h": area.size.height as f64 / msc,
     });
+    if let (Some(p), Some(o)) = (payload.as_object_mut(), place.as_object()) {
+        p.extend(o.clone());
+    }
     let _ = h.emit_to("menu", "menu-open", payload);
     let _ = menu.show();
     let _ = menu.set_focus();

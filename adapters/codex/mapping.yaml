@@ -1,8 +1,8 @@
-# Codex hook -> Familiar 统一事件（协议 v1）。
+# Codex hook -> 睿洱统一事件（协议 v1）。
 #
 # 核对依据：Codex 官方 hooks 文档 + 实测 codex-cli 0.162.1（2026-11-02）。
-# 这份文件在构建时编进 familiar-emit；把修改后的副本放到
-# ~/.familiar/adapters/codex.yaml 可以不重新编译直接覆盖。
+# 这份文件在构建时编进 rillbuddy-emit；把修改后的副本放到
+# ~/.rillbuddy/adapters/codex.yaml 可以不重新编译直接覆盖。
 #
 # 隐私：detail 里只会出现工具名、文件 basename 和"是否读取类命令"的判断结果，
 # 命令原文、提示词、输出都不会离开 emitter。
@@ -50,7 +50,7 @@ events:
   PreToolUse:        { event: tool.start, tool: true }
   PostToolUse:       { event: tool.end, tool: true, ok: true }
   PermissionRequest: { event: attention, tool: true, kind: permission }
-  Stop:              { event: turn.done, result: ok }
+  Stop:              { event: turn.done, result: ok, next: true }
   Interrupt:         { event: turn.done, result: aborted }
   SubagentStart:     { event: turn.start, sub: true }
   SubagentStop:      { event: turn.done, result: ok, sub: true }

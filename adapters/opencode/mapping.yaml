@@ -1,0 +1,28 @@
+# OpenCode -> 睿洱统一事件（协议 v1）。
+#
+# OpenCode 没有命令式的 hook，事件由同目录的插件 rillbuddy.js 转成下面这些
+# 名字后交给 rillbuddy-emit（`rillbuddy-emit --install opencode` 会把插件装进
+# ~/.config/opencode/plugins/）。插件只交出会话 id、目录、工具名、文件路径和
+# 命令的第一个词。
+#
+# 依据：OpenCode 两代插件接口的公开文档和类型定义（2026-11），尚未实机验证。
+# 把修改后的副本放到 ~/.rillbuddy/adapters/opencode.yaml 可以直接覆盖。
+
+source: opencode
+session: session_id
+project: cwd
+sub_when: agent_id           # 子 agent 的会话：记在父会话上
+file_keys: [file_path]
+
+read_commands: [cat, type, get-content, gc, head, tail, less, more, rg, grep, select-string, sls, findstr, ls, dir, get-childitem, gci, tree, find, fd, wc, git-log, git-show, git-diff, git-status]
+
+events:
+  SessionStart: { event: session.start }
+  SessionEnd:   { event: session.end }
+  TurnStart:    { event: turn.start }
+  ToolStart:    { event: tool.start, tool: true }
+  ToolEnd:      { event: tool.end, tool: true, ok: true }
+  Permission:   { event: attention, kind: permission }
+  TurnDone:     { event: turn.done, result: ok }
+  TurnFailed:   { event: turn.done, result: error }
+  TurnAborted:  { event: turn.done, result: aborted }
