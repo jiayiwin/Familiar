@@ -3801,7 +3801,7 @@ dependencies = [
 
 [[package]]
 name = "rillbuddy"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "rillbuddy-petd",
  "serde",
@@ -3818,7 +3818,7 @@ dependencies = [
 
 [[package]]
 name = "rillbuddy-emit"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "serde",
  "serde_json",
@@ -3828,7 +3828,7 @@ dependencies = [
 
 [[package]]
 name = "rillbuddy-petd"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "axum",
  "candle-core",

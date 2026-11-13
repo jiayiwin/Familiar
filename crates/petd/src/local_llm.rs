@@ -171,20 +171,12 @@ fn last_logits(logits: Tensor, seq_len: usize) -> Option<Tensor> {
     }
 }
 
-/// Generate a letter for a feed milestone. Blocking — wrap in spawn_blocking.
-pub fn generate_local(
-    home: &Path,
-    feed_count: i64,
-    pet_name: &str,
-    en: bool,
-    moments: &[crate::db::BondMoment],
-) -> Option<String> {
+/// Write a letter from these prompts (see letters::prompts). Blocking — wrap in spawn_blocking.
+pub fn generate_local(home: &Path, system: &str, user: &str) -> Option<String> {
     if !is_ready(home) {
         return None;
     }
     load_model(home).ok()?;
-
-    let (system, user) = crate::bond::letter_prompts(feed_count, pet_name, en, moments);
-    let prompt = build_prompt(&system, &user);
+    let prompt = build_prompt(system, user);
     infer(&prompt, 400)
 }

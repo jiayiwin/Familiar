@@ -591,9 +591,6 @@ async function listenHost(pet: PetRenderer) {
   });
   // A "yes" on its offer to sweep the desktop.
   await win.listen<{ stow?: boolean } | null>("sweep", (e) => startSweep?.(!!e.payload?.stow));
-  await win.listen("letter-notify", () => {
-    pet.say(tr("我写了封信。在右键菜单里。", "I wrote you a letter. It's in the right-click menu."), 0);
-  });
   if (await invoke<boolean>("quiet")) {
     pet.setMuted(true);
     bossMuted = true;
@@ -614,12 +611,10 @@ function playFx(pet: PetRenderer, p: Record<string, unknown>) {
         // The fish flies in; when it lands: a bite, a shimmer, and whatever the pet has to say.
         const bond = String(p.bond ?? "");
         pet.fx.fish(() => {
-          const baseText = String(p.text ?? tr("……嗯。", "…mm."));
-          const hint = bond === "letter" ? tr("（有封信给你。在右键菜单里。）", " (There's a letter for you. In the right-click menu.)") : "";
-          pet.act("cheer", baseText + hint, 4000);
+          pet.act("cheer", String(p.text ?? tr("……嗯。", "…mm.")), 4000);
           pet.fx.burst("bite");
           pet.fx.burst("hearts", 350);
-          if (bond === "letter" || bond === "secret") pet.fx.burst("glow", 500);
+          if (bond === "secret") pet.fx.burst("glow", 500);
         }, p.treat as { shape?: string; colors?: string[] } | null);
       } else {
         pet.say(String(p.text), 3000);

@@ -10,6 +10,7 @@ pub mod db;
 pub mod drawer;
 pub mod hub;
 pub mod i18n;
+pub mod letters;
 pub mod night;
 pub mod local_llm;
 pub mod ops;

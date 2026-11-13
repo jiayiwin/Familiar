@@ -141,7 +141,7 @@ function applyState(m: Mood) {
   // Falling asleep does not change the room, only the face.
   if (rigPet) rigPet.expr = faceFor(m, prevState);
   pill.className = `pill ${m}`;
-  $("ptxt").textContent = pillText(m);
+  $("ptxt").textContent = pill.title = pillText(m);
   if (Date.now() > saidUntil) say(restingLine(m));
   const sign = prevState === "sleeping" ? "zzz" : m === "worry" ? "sweat" : "";
   for (const id of ["zzz", "sweat"]) $(`ex-${id}`).classList.toggle("on", id === sign);

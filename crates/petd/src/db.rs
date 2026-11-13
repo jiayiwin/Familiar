@@ -86,6 +86,18 @@ pub struct CatchRow {
     pub source: String,
 }
 
+/// A turn as a letter reads it.
+#[derive(Debug, Clone)]
+pub struct TurnRow {
+    pub day: String,
+    pub source: String,
+    pub project: String,
+    pub started_at: u64,
+    pub ended_at: u64,
+    pub result: String,
+    pub tool_errors: u32,
+}
+
 /// A notable moment in the user's work session, stored for letter context.
 #[derive(Debug, Clone, Serialize)]
 pub struct BondMoment {
@@ -454,6 +466,54 @@ impl Db {
         })
         .map(|rows| rows.flatten().collect())
         .unwrap_or_default()
+    }
+
+    /// Every turn that started since `since` (ms), oldest first, with its project (for letters).
+    pub fn turns_since(&self, since: u64) -> Vec<TurnRow> {
+        let c = self.conn.lock().unwrap();
+        let Ok(mut st) = c.prepare(
+            "SELECT day, source, project, started_at, ended_at, result, tool_errors FROM turns WHERE started_at >= ?1 ORDER BY started_at",
+        ) else {
+            return Vec::new();
+        };
+        st.query_map([since as i64], |r| {
+            Ok(TurnRow {
+                day: r.get(0)?,
+                source: r.get(1)?,
+                project: r.get(2)?,
+                started_at: r.get::<_, i64>(3)?.max(0) as u64,
+                ended_at: r.get::<_, i64>(4)?.max(0) as u64,
+                result: r.get(5)?,
+                tool_errors: r.get::<_, i64>(6)?.max(0) as u32,
+            })
+        })
+        .map(|rows| rows.flatten().collect())
+        .unwrap_or_default()
+    }
+
+    /// Every day anything was seen (a turn, folded or not, or time at the desk), oldest first.
+    pub fn days_seen(&self) -> Vec<String> {
+        let c = self.conn.lock().unwrap();
+        let Ok(mut st) = c.prepare(
+            "SELECT day FROM turns UNION SELECT day FROM daily
+             UNION SELECT substr(key, 6) FROM kv WHERE key LIKE 'desk:%' AND CAST(value AS INTEGER) > 0
+             ORDER BY 1",
+        ) else {
+            return Vec::new();
+        };
+        st.query_map([], |r| r.get::<_, String>(0)).map(|rows| rows.flatten().collect()).unwrap_or_default()
+    }
+
+    #[cfg(test)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_turn_in(&self, source: &str, project: &str, start: u64, end: u64, result: &str, errors: u32) {
+        let c = self.conn.lock().unwrap();
+        c.execute(
+            "INSERT INTO turns (day, source, session, project, started_at, ended_at, ms, result, tool_calls, tool_errors, attentions)
+             VALUES (?1, ?2, 's', ?3, ?4, ?5, ?6, ?7, 3, ?8, 0)",
+            params![day_of(end), source, project, start as i64, end as i64, (end - start) as i64, result, errors],
+        )
+        .unwrap();
     }
 
     #[cfg(test)]

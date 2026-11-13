@@ -602,13 +602,13 @@ impl World {
     }
 
     /// "喂它": the newest fish in the basket goes to the pet. What it says,
-    /// what that earned you (a whisper, a secret, a letter), and the feeds so far.
+    /// what that earned you (a whisper, a secret), and the feeds so far.
     /// `who` is which of the five eats it (`zimeng`, `mashu`, …): it answers in its own voice.
     pub fn feed(
         &mut self,
-        pet: &str,
+        _pet: &str,
         who: &str,
-        now: u64,
+        _now: u64,
         db: &Db,
     ) -> (String, crate::bond::BondReward, i64) {
         let Some(kind) = db.eat_one() else {
@@ -620,9 +620,6 @@ impl World {
         };
         self.last_fed = Some(kind);
         let (bond_text, reward, feed_count) = crate::bond::on_feed(db, crate::i18n::is_en(), who);
-        if matches!(reward, crate::bond::BondReward::Letter { .. }) {
-            db.log_event(now, "letter", pet, 1);
-        }
         let text = if bond_text.is_empty() {
             crate::voice::line(who, "mm", 0)
         } else {

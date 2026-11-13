@@ -29,6 +29,29 @@ const KEGEL_READY = 3000;
 const KEGEL_REP = 6000;
 const FONT = "'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', system-ui, sans-serif";
 
+/**
+ * A line too long for one row, broken once: at a pause (a full stop, a comma)
+ * when there is one past the middle, at a space for Latin text, else where it
+ * runs out. A row never starts with a stop or a closing bracket: the last
+ * character of the first row comes down with it.
+ */
+export function breakOnce(text: string, fits: (s: string) => boolean): [string, string] {
+  const chars = [...text];
+  let n = 0;
+  while (n < chars.length && fits(chars.slice(0, n + 1).join(""))) n++;
+  let first = chars.slice(0, n);
+  const at = (set: string) => Math.max(...[...set].map((p) => first.lastIndexOf(p)));
+  const pause = at("。，？！；：…");
+  if (pause >= first.length * 0.4 && pause < first.length - 1) first = first.slice(0, pause + 1);
+  else {
+    const sp = first.lastIndexOf(" ");
+    if (sp > first.length * 0.6) first = first.slice(0, sp);
+  }
+  let rest = chars.slice(first.length);
+  while (rest.length && /^[，。？！、：；…」』）)\],.?!:;]/.test(rest[0]) && first.length > 1) rest = [first.pop()!, ...rest];
+  return [first.join("").trimEnd(), rest.join("").trimStart()];
+}
+
 /** Something the pet asks, with a yes and a no on its bubble (and where those were drawn, for clicks). */
 interface Offer {
   text: string;
@@ -464,25 +487,11 @@ export class PetRenderer {
     // The question wraps once if it must, at a pause (a full stop or comma) when there is one near the middle.
     const room = w - 12 - 22;
     let lines = [o.text];
-    if (c.measureText(o.text).width > room) {
-      const chars = [...o.text];
-      let n = 0;
-      let first = "";
-      while (n < chars.length && c.measureText(first + chars[n]).width <= room) first += chars[n++];
-      const pause = Math.max(first.lastIndexOf("。"), first.lastIndexOf("，"), first.lastIndexOf("？"), first.lastIndexOf("……") + 1, first.lastIndexOf(". "), first.lastIndexOf(", "));
-      if (pause >= first.length * 0.4 && pause < first.length - 1) {
-        n = [...first.slice(0, pause + 1)].length;
-        first = first.slice(0, pause + 1);
-      }
-      let rest = chars.slice(n).join("").trimStart();
-      // A line never starts with a stop or a comma: the last character of the first line comes down with it.
-      if (/^[，。？！、：；…」,.?!]/.test(rest) && [...first].length > 1) {
-        const f = [...first];
-        rest = f.pop() + rest;
-        first = f.join("");
-      }
-      while (c.measureText(rest).width > room && rest.length > 2) rest = rest.slice(0, -2) + "…";
-      lines = [first.trimEnd(), rest];
+    const fits = (s: string) => c.measureText(s).width <= room;
+    if (!fits(o.text)) {
+      let [first, rest] = breakOnce(o.text, fits);
+      while (!fits(rest) && rest.length > 2) rest = rest.slice(0, -2) + "…";
+      lines = [first, rest];
     }
     const textW = Math.max(...lines.map((l) => c.measureText(l).width));
     c.font = `700 12px ${FONT}`;
@@ -549,17 +558,8 @@ export class PetRenderer {
     // pill stays one line.
     let lines = [text];
     if (!attention && !fits(text)) {
-      const chars = [...text];
-      let n = 0;
-      let first = "";
-      while (n < chars.length && fits(first + chars[n])) first += chars[n++];
-      // Latin text breaks at a space when one is close to the edge.
-      const sp = first.lastIndexOf(" ");
-      if (sp > first.length * 0.6) {
-        n -= [...first.slice(sp + 1)].length;
-        first = first.slice(0, sp);
-      }
-      lines = [first, clip(chars.slice(n).join("").trimStart())];
+      const [first, rest] = breakOnce(text, fits);
+      lines = [first, clip(rest)];
     } else {
       lines = [clip(text)];
     }

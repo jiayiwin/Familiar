@@ -1171,6 +1171,8 @@ pub async fn run(sh: crate::server::Shared) {
         crate::todo::tick(&sh, obs.hour, engine.present() && obs.idle_s.is_some_and(|s| s < 60) && !obs.focus && plan.is_none());
         // 收工曲: before off time, a pet asks to play the day back.
         crate::song::tick(&sh, engine.present() && obs.idle_s.is_some_and(|s| s < 60) && !obs.focus && obs.chatter != "quiet" && plan.is_none());
+        // 来信: when it noticed something about you worth writing about.
+        crate::letters::tick(&sh, engine.present() && obs.idle_s.is_some_and(|s| s < 60) && !obs.focus && plan.is_none());
         // The day at the desk, for the room: time present, and breaks taken.
         if engine.present() {
             let day = crate::db::day_of(now);

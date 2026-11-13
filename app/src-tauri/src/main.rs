@@ -19,7 +19,6 @@ static MODEL_DL_DONE: AtomicU64 = AtomicU64::new(0);
 static MODEL_DL_TOTAL: AtomicU64 = AtomicU64::new(0);
 
 // Letter pending delivery: generated before window is ready to receive events.
-static PENDING_LETTER: Mutex<Option<serde_json::Value>> = Mutex::new(None);
 use std::time::{Duration, Instant};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
@@ -65,9 +64,10 @@ fn petd_info(info: tauri::State<'_, Info>) -> Info {
     info.inner().clone()
 }
 
+/// The letter waiting in the box (kept by petd, so a restart does not lose it).
 #[tauri::command]
-fn take_letter() -> Option<serde_json::Value> {
-    PENDING_LETTER.lock().unwrap().take()
+fn take_letter(app: tauri::State<'_, Arc<App>>) -> Option<serde_json::Value> {
+    petd::letters::take(&app.petd.shared.db)
 }
 
 #[tauri::command]
@@ -111,7 +111,7 @@ fn set_hit_rects(window: WebviewWindow, app: tauri::State<'_, Arc<App>>, rects: 
 
 #[tauri::command]
 async fn pet_menu(window: WebviewWindow, app: tauri::State<'_, Arc<App>>, pet: String) -> Result<(), String> {
-    let has_letter = PENDING_LETTER.lock().unwrap().is_some();
+    let has_letter = petd::letters::waiting(&app.petd.shared.db);
     let model = radial::build(&app, &pet, has_letter).ok_or("no such pet")?;
     let r = radial::open(window.app_handle(), &window, model);
     if let Err(e) = &r {
@@ -519,12 +519,12 @@ fn on_menu(h: &AppHandle, id: &str) {
             let _ = h.emit_to(format!("pet-{pet}").as_str(), "fx", serde_json::json!({ "kind": "card", "from": 96.0, "used": 0.0 }));
             return;
         }
-        // 喂它: `feed|pet` one fish, `feed|pet|n` up to n. A milestone (a secret, a letter) ends the batch.
+        // 喂它: `feed|pet` one fish, `feed|pet|n` up to n. A secret ends the batch.
         ["feed", pet] | ["feed", pet, _] => {
             use petd::bond::BondReward;
             let n: usize = g.get(2).and_then(|s| s.parse().ok()).unwrap_or(1).min(50);
-            let (mut text, mut bond, mut count, mut fed, mut letter) = (String::new(), "none", 0i64, 0i64, None);
-            // Whoever is fed answers, and writes, as itself.
+            let (mut text, mut bond, mut count, mut fed) = (String::new(), "none", 0i64, 0i64);
+            // Whoever is fed answers as itself.
             let fellow = { let hub = sh.hub.lock().unwrap(); petd::cast::of(&hub.cfg, pet) };
             for _ in 0..n {
                 let (said, reward, feeds) = sh.world.lock().unwrap().feed(pet, fellow.id, petd::now_ms(), &sh.db);
@@ -537,10 +537,6 @@ fn on_menu(h: &AppHandle, id: &str) {
                     BondReward::NoFish => "none",
                     BondReward::Whisper(_) => "whisper",
                     BondReward::Secret(_) => "secret",
-                    BondReward::Letter { feed_count } => {
-                        letter = Some(feed_count);
-                        "letter"
-                    }
                 };
                 if bond != "whisper" {
                     break;
@@ -555,17 +551,6 @@ fn on_menu(h: &AppHandle, id: &str) {
             // Fed while it clings to a screen edge: heavier now, it slips off.
             if fed > 0 {
                 physics::let_go(&app, &format!("pet-{pet}"), "fed");
-            }
-            if let Some(fc) = letter {
-                // The letter is from the pet that was fed: its name, its paper.
-                let (name, skin) = (fellow.name().to_string(), fellow.id);
-                let (h2, en, home, label) = (h.clone(), petd::i18n::is_en(), app.petd.paths.home.clone(), format!("pet-{pet}"));
-                let moments = sh.db.recent_bond_moments(5);
-                tauri::async_runtime::spawn(async move {
-                    let letter = petd::bond::generate_letter(fc, &name, en, Some(home), moments).await;
-                    *PENDING_LETTER.lock().unwrap() = Some(serde_json::json!({ "text": letter, "count": fc, "pet_name": name, "skin": skin }));
-                    let _ = h2.emit_to(label.as_str(), "letter-notify", ());
-                });
             }
             return;
         }
@@ -622,7 +607,7 @@ fn on_menu(h: &AppHandle, id: &str) {
         }
         (Some("connect"), Some(which), _) => connect(h, which),
         (Some("read_letter"), _, _) => {
-            if PENDING_LETTER.lock().unwrap().is_some() {
+            if petd::letters::waiting(&app.petd.shared.db) {
                 crate::windows::open_letter(h);
             }
         }
@@ -893,7 +878,7 @@ fn main() {
                             Control::Report => windows::open_report(&h2),
                             Control::Radio => windows::open_radio(&h2, None),
                             Control::Menu { pet } => {
-                                let has_letter = PENDING_LETTER.lock().unwrap().is_some();
+                                let has_letter = petd::letters::waiting(&st.petd.shared.db);
                                 if let (Some(w), Some(model)) = (h2.get_webview_window(&format!("pet-{pet}")), radial::build(&st, &pet, has_letter)) {
                                     let _ = radial::open(&h2, &w, model);
                                 }

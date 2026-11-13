@@ -140,6 +140,10 @@ const ctx = cv.getContext("2d")!;
 const sources = [...new Set(day.turns.map((t) => t.source))].sort((a, b) => (a === "claude-code" ? -1 : b === "claude-code" ? 1 : a.localeCompare(b)));
 const peak: Record<string, number> = {};
 for (const s of sources) peak[s] = Math.max(1e-6, ...song.bars.map((b) => b.work[s] ?? 0));
+// One lane per agent: lanes get thinner when there are many, and the strip is
+// as tall as its lanes (five agents in a day must all show).
+const laneH = sources.length > 3 ? 26 : 34, laneGap = sources.length > 3 ? 6 : 8;
+cv.style.height = `${10 + Math.max(1, sources.length) * (laneH + laneGap) + 22}px`;
 const hm = (ms: number) => {
   const x = new Date(ms);
   return `${String(x.getHours()).padStart(2, "0")}:${String(x.getMinutes()).padStart(2, "0")}`;
@@ -154,14 +158,14 @@ function drawDay(sec: number) {
   }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
-  const L = 104, R = W - 12, laneH = 34, top = 10;
+  const L = 104, R = W - 12, top = 10;
   const n = song.bars.length;
   const bw = (R - L) / n;
   // Where the music is: which bar, and how far into it.
   const prog = Math.max(0, Math.min(n, (sec - song.start) / song.barSec));
   ctx.font = "700 12px 'Segoe UI', 'Microsoft YaHei UI', sans-serif";
   sources.forEach((s, k) => {
-    const y = top + k * (laneH + 8);
+    const y = top + k * (laneH + laneGap);
     ctx.fillStyle = "#776775";
     ctx.textBaseline = "middle";
     ctx.fillText(LABEL[s] ?? s, 0, y + laneH / 2);
@@ -199,7 +203,7 @@ function drawDay(sec: number) {
     });
   });
   // Hours along the bottom.
-  const yb = top + sources.length * (laneH + 8) + 4;
+  const yb = top + sources.length * (laneH + laneGap) + 4;
   ctx.fillStyle = "#a8989f";
   ctx.font = "600 11px 'Segoe UI', sans-serif";
   ctx.textBaseline = "top";

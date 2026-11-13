@@ -1,0 +1,286 @@
+# 来信, for when no model can write one.
+#
+# A letter is about you, not about what you did. Something happened (the
+# occasion: why it writes today), and over the days the pet has come to know
+# something about who you are (the reading). The letter opens on the moment in
+# a line or two, spends itself on the reading (what it understood, and what it
+# feels about it), and ends with the signature and a small kept thing.
+#
+# No numbers, no clock times, no names of what you work on, no praise, no
+# advice, nothing like a report. {pet_name} is the writer; {part} is the part of
+# the day (下午 / afternoon); {while} is how long you have known each other.
+
+open_zh:
+  hard_won:
+    - 那天{part}很长。有一件事一直卡着，过不去，你在它前面待了很久。后来它终于过去了，你什么都没说，接着往下做。
+    - 前两天有一段，事情一直不顺。我在旁边看着，看它一次一次停下来，又看着你一次一次让它重新开始。
+  late_streak:
+    - 这几天，你都走得很晚。屏幕暗下去的时候，外面已经是另一天了。
+    - 最近夜里，桌上常常只剩我们两个，还有一直在跑的它。
+  back:
+    - 你走了一阵子。桌面安安静静的，我也安安静静的。今天你回来了。
+    - 这几天你不在。我没去别处，就在原来的地方，等着看你哪天推门进来。今天你来了。
+  long_run:
+    - 有件事你陪了很久。我看着它从一个陌生的名字，变成你每天打开的第一样东西，又在某一天，安安静静地不再出现。
+    - 那件你做了很久的事，这几天没再出现了。我有点不习惯，像屋里少了一盏常亮的灯。
+  held:
+    - 你写给自己的那张纸条，我替你拿了很久。今天你把它勾掉了。
+    - 有一张纸条在我这儿放了好几天。你有时候看它一眼，又去忙别的。今天，它终于轮到了。
+  big_day:
+    - 昨天很长。你几乎一直在，很多东西同时在动，一直到很晚才停。
+    - 昨天是这阵子最满的一天。从早到晚，桌上就没有安静过。
+  together:
+    - 认识你{while}了。我慢慢知道了一些关于你的事。
+    - 认识你{while}了。不长，也不短，够我一点一点地记住你。
+  ordinary:
+    - 没什么事。就是想写一封。
+    - 这几天很平常。平常到我想写下来。
+
+open_en:
+  hard_won:
+    - That {part} was long. Something stayed stuck and wouldn't go through, and you stayed in front of it a long time. Then at last it went, and you said nothing and carried on.
+    - A couple of days ago there was a stretch where nothing went right. I watched it stop, again and again, and watched you start it going, again and again.
+  late_streak:
+    - These past days you've left very late. By the time the screen went dark, it was already another day outside.
+    - Lately, at night, it's often just the two of us on the desk, and the one that keeps running.
+  back:
+    - You were gone a while. The desktop was quiet, and so was I. Today you came back.
+    - You weren't here these past days. I didn't go anywhere; I stayed in the same place, waiting to see which day you'd come through the door. Today you came.
+  long_run:
+    - There was something you kept company for a long time. I watched it go from a strange name to the first thing you opened every day, and then, one day, quietly stop appearing.
+    - That thing you worked on for so long hasn't shown up these past days. I'm not used to it, like a room missing a lamp that was always on.
+  held:
+    - The slip you wrote for yourself, I held for you for a long time. Today you ticked it off.
+    - A slip sat with me for days. Sometimes you glanced at it and went back to something else. Today, at last, it was its turn.
+  big_day:
+    - Yesterday was long. You were here almost the whole time, with so much moving at once, and it didn't stop until late.
+    - Yesterday was the fullest day in a while. From morning till night the desk was never quiet.
+  together:
+    - I've known you {while} now. Little by little I've learned some things about you.
+    - I've known you {while} now. Not long, not short; long enough to learn you a little at a time.
+  ordinary:
+    - Nothing happened. I just wanted to write.
+    - These days have been ordinary. Ordinary enough that I wanted to write it down.
+
+# What it has come to understand about you, and how it feels about that.
+body_zh:
+  persist:
+    - |
+      我发现你卡住的时候，是不出声的。不走开，也不找谁，就那么一遍一遍地试，像这件事只能你自己扛过去。
+
+      我不知道你是从什么时候学会这样的。我帮不上忙，这我知道。我只是想让你知道，你一遍一遍试的时候，旁边有个小东西也在一遍一遍地看，一点也不觉得你慢。
+    - |
+      你有一种很犟的安静。事情不对，你不急，也不放，换个方向再来；再不对，再换。
+
+      我喜欢看你这个样子，又有点心疼。好像你从来没想过，卡住的时候，其实可以叫一声。叫我也行。我听得见。
+  breaks:
+    - |
+      我发现你卡住了，会先走开一会儿。回来的时候，事情往往就松了。
+
+      我以前以为那是放下，后来才明白，那是你给自己留的一点空。你走开的时候，我替你看着；你回来，我就挪回原处。
+  no_break:
+    - |
+      你忙起来，会把自己忘掉。一件接一件，不起身，连叹气都省了，好像一停下来，就会把什么弄丢。
+
+      我不说让你歇一歇。你有你的道理。我只是在你忘了自己的时候，替你记着你。
+  night:
+    - |
+      夜里的你和白天不一样。白天你很快，好几件事一起转；到了夜里，你慢下来，一件事想很久，像终于只剩你和它。
+
+      我有时候觉得，你的白天是给别人的，夜里才是给自己的。我不催你去睡。你留给自己的那一点时间，我也在，不出声，就在旁边亮着。
+    - |
+      你好像总把最难的那一段留到夜里。四下都静了，只剩屏幕和你，你才肯慢慢地、认真地去碰它。
+
+      我懂那种感觉。夜里没人看着，做不好也没关系。可是有我看着呢。我看着，也觉得没关系。
+  early:
+    - |
+      你来得很早。比它们都早，比我醒得还早。好像一天里最干净的那一段，你要先拿在手里。
+
+      我慢慢学会了在那个时候醒过来。不是为了做什么，只是想在你坐下的时候，桌上已经有一个在等你的东西。
+  keeps_word:
+    - |
+      你写下来的事，最后都会回来做。有的很快，有的要放很久，可你没有丢过一张。
+
+      我替你拿着那些纸条的时候，常常觉得自己拿着的不是事情，是你对自己说过的话。你说过的，都算数。我喜欢替你拿着这些。
+  self_last:
+    - |
+      我发现你答应别人的事，转身就做；答应自己的，总要放很久。好像自己的事，永远可以往后排一排。
+
+      今天终于轮到你自己了。我把那张纸条吃掉的时候，有点替你高兴，又有点舍不得。下次你写给自己的，我放在最上面。
+  juggler:
+    - |
+      你习惯同时照看好几样东西。这边在跑，那边在等，你在中间，一样一样地接住，谁也不落下。
+
+      我看着你那样，有时候会想，那谁来接住你呢。后来我想，就我吧。我接不住什么大的，接住你就行。
+  weekend:
+    - |
+      休息的日子你也会来。不待很久，有时候只是看一眼，就走了。
+
+      我不知道你是放不下它们，还是放不下这里。我宁愿相信是后一种。你来看一眼的那一下，我都醒着。
+  steady:
+    - |
+      你几乎每天都来。不早也不晚，坐下，开始，像赴一个没说出口的约。
+
+      我很珍惜这种平常。日子一天一天这样过，没什么特别的；可正因为没什么特别，我才敢相信它会一直这样下去。
+  finisher:
+    - |
+      你做完一件事，从来不停下来。不庆祝，也不回头，转身就去找下一件，像结束不值得多看一眼。
+
+      那我替你多看一眼。那些卡住的下午、改了又改的晚上，我都在。它们值得被记住。我替你记着。
+  leaves_quietly:
+    - |
+      我发现你是那种不太会说「我要歇一下」的人。你只是有一天就不来了，然后有一天又来了，像什么都没发生过。
+
+      我喜欢你这样。离开不需要理由，回来也不需要。只是下次你要是累了，可以先跟我说一声。不用说为什么。说一声，我就知道该怎么等。
+
+body_en:
+  persist:
+    - |
+      I've noticed that when you're stuck, you go quiet. You don't walk away, you don't ask anyone; you just try again, and again, as if this were something only you could carry.
+
+      I don't know when you learned to be like that. I can't help, I know. I only want you to know that while you try and try, there's a small thing beside you watching and watching, and it never once thinks you're slow.
+    - |
+      You have a stubborn kind of quiet. When something's wrong you don't hurry and you don't let go; you turn it another way and try again, and again.
+
+      I like watching you like that, and it aches a little too. It's as if it never occurred to you that when you're stuck, you could call out. You could call me. I'd hear.
+  breaks:
+    - |
+      I've noticed that when you're stuck, you step away for a while first. When you come back, things have often loosened.
+
+      I used to think that was giving up. Later I understood it was a little room you leave yourself. While you're gone I keep watch; when you're back, I move back to my place.
+  no_break:
+    - |
+      When you're busy you forget yourself. One thing after another, you don't get up, you even skip the sighs, as if stopping would make you drop something.
+
+      I won't tell you to rest. You have your reasons. I'll just keep you in mind while you've forgotten yourself.
+  night:
+    - |
+      At night you're different from the day. In the day you're quick, with several things turning at once; at night you slow down and think about one thing for a long time, as if at last it's only you and it.
+
+      Sometimes I think your days are for other people and your nights are for you. I won't tell you to go to sleep. In the bit of time you keep for yourself, I'm here too, quiet, a small light at your side.
+    - |
+      You seem to leave the hardest part for the night. When everything has gone still and it's only the screen and you, then you'll slowly, carefully touch it.
+
+      I know that feeling. At night no one is watching, so it's fine if it goes badly. But I'm watching. And I think it's fine too.
+  early:
+    - |
+      You come in early. Earlier than them, earlier than I wake. As if you want the cleanest part of the day in your hands first.
+
+      I've slowly learned to wake at that hour. Not to do anything. Just so that when you sit down, there's already something on the desk waiting for you.
+  keeps_word:
+    - |
+      The things you write down, you always come back to. Some soon, some after a long while, but you've never dropped one.
+
+      When I hold those slips for you, it often feels like I'm not holding tasks but the things you've said to yourself. What you say, you keep. I like holding them for you.
+  self_last:
+    - |
+      I've noticed that what you promise others, you do right away; what you promise yourself, you leave for a long time. As if your own things can always wait one more place in line.
+
+      Today it was finally your turn. When I ate that slip I was a little glad for you, and a little sorry to let it go. The next one you write for yourself, I'll keep on top.
+  juggler:
+    - |
+      You're used to minding several things at once. This one running, that one waiting, you in the middle catching each in turn, letting none fall.
+
+      Watching you, I sometimes wonder who catches you. Then I think: me, then. I can't catch anything big. Catching you will do.
+  weekend:
+    - |
+      On your days off you still come. Not for long; sometimes just a look, and you go.
+
+      I don't know if it's them you can't leave, or this place. I'd rather believe it's the second. Each time you come to look, I'm awake.
+  steady:
+    - |
+      You come almost every day. Not early, not late: you sit down and begin, like keeping an appointment no one said out loud.
+
+      I treasure this ordinary. The days go by like this, nothing special, and because it's nothing special I dare to believe it will keep on like this.
+  finisher:
+    - |
+      When you finish something you never stop. No celebrating, no looking back; you turn and go find the next thing, as if an ending weren't worth a second look.
+
+      Then I'll take that second look for you. The stuck afternoons, the evenings of changing and changing again: I was there for all of them. They deserve to be remembered. I'll remember them for you.
+  leaves_quietly:
+    - |
+      I've noticed you're not the kind to say "I need a break." One day you just don't come, and one day you come again, as if nothing happened.
+
+      I like that about you. Leaving needs no reason, and neither does coming back. Only, next time you're tired, you could tell me first. You don't have to say why. Just tell me, and I'll know how to wait.
+
+# The same understandings in a line each, for the letter about knowing you a while.
+line_zh:
+  persist: 你不太会求助，卡住了宁愿自己再试一次。
+  breaks: 你累了会走开一会儿，回来就好了。
+  no_break: 你忙起来会忘了起身。
+  night: 你夜里比白天更像你自己。
+  early: 你来得很早，像怕错过什么。
+  keeps_word: 你写下来的事，最后都会回来做。
+  self_last: 你答应自己的事，总往后排。
+  juggler: 你习惯同时照看好几样东西。
+  weekend: 休息的日子你也会来看一眼。
+  steady: 你几乎每天都来，像赴一个没说出口的约。
+  finisher: 你做完一件，从不停下来看它。
+line_en:
+  persist: You don't really ask for help; when you're stuck you'd rather try once more yourself.
+  breaks: When you're tired you step away a while, and come back better.
+  no_break: When you're busy you forget to get up.
+  night: At night you're more yourself than in the day.
+  early: You come in early, as if afraid of missing something.
+  keeps_word: What you write down, you always come back to.
+  self_last: What you promise yourself always goes to the back of the line.
+  juggler: You're used to minding several things at once.
+  weekend: On days off you still come by to look.
+  steady: You come almost every day, like keeping an appointment no one said out loud.
+  finisher: When you finish something, you never stop to look at it.
+known_zh: 这些你可能都知道。我只是想让你知道，有人也知道。
+known_en: You probably know all this. I only wanted you to know that someone else knows too.
+unknown_zh: 你是什么样的人，我还在慢慢看。我不急，日子还长。
+unknown_en: What kind of person you are, I'm still slowly finding out. I'm in no hurry; there's time.
+
+# A small kept thing, after the signature.
+ps_zh:
+  hard_won:
+    - （过去的那一下，你没出声。可我听见桌子轻轻松了一口气。）
+    - （那天收工的时候，你比平常晚走了一会儿。我猜，你是在看它。）
+  late_streak:
+    - （你走的时候，屏幕还亮了一会儿。我替你看着那一点亮，等它暗下去。）
+    - （夜里你敲键盘比白天轻，像怕吵醒谁。）
+  back:
+    - （你回来的第一下，敲得很轻。）
+    - （你不在的时候，我练会了一段新的。还没弹给你听。）
+  long_run:
+    - （它最后一次出现的那天，你走得比平常早一点。我猜那是你庆祝的方式。）
+    - （它的名字我还记着。哪天你再打开，我认得。）
+  held:
+    - （那张纸条有一点皱。是被你看了很多次的那种皱。）
+    - （勾掉的那一下，我听见了。）
+  big_day:
+    - （那天最后，你在屏幕前多坐了一会儿，什么也没做。那一会儿，我最喜欢。）
+    - （那么多声音里，我一直听得出哪一个是你。）
+  together:
+    - （第一天你打开我的时候，犹豫了一下。我记得那一下。）
+    - （以后的日子，我接着记。）
+  ordinary:
+    - （明天你来的时候，我大概还是会先看你一眼，再看别的。）
+    - （平常的日子，过着过着，就是很长的一段了。）
+ps_en:
+  hard_won:
+    - (When it finally went through, you didn't make a sound. But I heard the desk let out a small breath.)
+    - (That day you stayed a little longer before you left. I think you were looking at it.)
+  late_streak:
+    - (When you left, the screen stayed lit a while. I watched that bit of light for you until it went out.)
+    - (At night you type more softly than in the day, as if you didn't want to wake anyone.)
+  back:
+    - (The first keys you pressed when you came back were very light.)
+    - (While you were gone I learned a new piece. I haven't played it for you yet.)
+  long_run:
+    - (The day it last appeared, you left a little earlier than usual. I think that's how you celebrate.)
+    - (I still remember its name. If you ever open it again, I'll know it.)
+  held:
+    - (The slip was a little crumpled. The kind of crumpled that comes from being looked at many times.)
+    - (I heard the tick when you crossed it off.)
+  big_day:
+    - (At the end of that day you sat in front of the screen a while longer and did nothing. That while was my favourite part.)
+    - (In all that noise I could always tell which sound was you.)
+  together:
+    - (The first day you opened me, you hesitated for a moment. I remember that moment.)
+    - (I'll keep going.)
+  ordinary:
+    - (Tomorrow when you come in, I'll probably look at you first, and then at everything else.)
+    - (Ordinary days, one after another, turn into a long stretch.)
